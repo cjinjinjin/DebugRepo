@@ -439,7 +439,7 @@ if __name__ == "__main__":
 
     # ====== 4. 并行执行 ======
     all_results = Parallel(n_jobs=task_nums, backend='loky')(
-        delayed(process_image_by_batch)(task_list[i], i, out_dir)
+        delayed(process_image_by_batch)(task_list[i], i)
         for i in range(task_nums)
     )
 
