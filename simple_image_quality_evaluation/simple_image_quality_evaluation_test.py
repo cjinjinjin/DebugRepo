@@ -15,6 +15,8 @@ import base64
 import hashlib
 import cv2
 import numpy as np
+import os
+from joblib import Parallel, delayed
 
 class SimpleImageQuality:
     def __init__(self):
@@ -234,36 +236,55 @@ class SimpleImageQuality:
         return resized, target_h, target_w, target_bucket_id
 
 
-    def get_image_info_from_base64(self, base64_str):
+    def get_image_info_from_base64(self, base64_str, img_path):
 
         try:
-            b64_string = base64_str.strip().replace('\n', '').replace('\r', '')
-            padding = b64_string.count('=')
-            length = len(b64_string)
-            img_file_size = length * 3 // 4 - padding
-            # print('img_file_size:', img_file_size)
+            if base64_str is not None:
+                b64_string = base64_str.strip().replace('\n', '').replace('\r', '')
+                padding = b64_string.count('=')
+                length = len(b64_string)
+                img_file_size = length * 3 // 4 - padding
+                # print('base64_str img_file_size:', img_file_size)
 
-            # 解码 base64 为字节
-            img_data = base64.b64decode(base64_str)
+                # 解码 base64 为字节
+                img_data = base64.b64decode(base64_str)
+
+            elif img_path is not None:
+                img_file_size = os.path.getsize(img_path)
+                with open(img_path, "rb") as f:
+                    img_data = f.read()
+                # print('img_path img_file_size:', img_file_size)
+
+            else:
+                img_file_size = -1
+                assert img_path is not None or base64_str is not None
+
             img_quality = self.estimate_jpeg_quality(img_data)
-
             # 转换为 NumPy 数组
             np_arr = np.frombuffer(img_data, np.uint8)
 
             # 用 OpenCV 解码为图像
             img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
             return img, img_file_size, img_quality
+
         except Exception as e:
             # print(e)
             return None, -1, -1
 
     def Process(self, inputrow, outputrow):
-        img_base64 = inputrow["Base64Data"]
+
         outputrow["ImageMD5"] = inputrow["ImageMD5"]
+        if inputrow.__contains__("Base64Data") and inputrow["Base64Data"] is not None:
+            img_base64 = inputrow["Base64Data"]
+            image, img_file_size, img_quality = self.get_image_info_from_base64(base64_str = img_base64, img_path = None)
+        else:
+            img_path = inputrow["ImagePath"]
+            image, img_file_size, img_quality = self.get_image_info_from_base64(base64_str = None, img_path = img_path)
+
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 100]
         encode_param_v2 = [int(cv2.IMWRITE_JPEG_QUALITY), 85]
 
-        image, img_file_size, img_quality = self.get_image_info_from_base64(img_base64)
+
         bpp, height, width = self.estimate_jpg_compression(image, img_file_size)
         aspect_ratio = float(width)/height
 
@@ -300,12 +321,6 @@ class SimpleImageQuality:
         avg_brightness = self.calculate_avg_brightness(image)
         img_noise = self.estimate_noise(image)
 
-
-        if img_file_size < 0 or laplacian_clarity < 0:
-            outputrow["succeed"] = -1
-        else:
-            outputrow["succeed"] = 1
-
         outputrow["width"] = width
         outputrow["height"] = height
         outputrow["width_resized"] = resized_w
@@ -330,30 +345,91 @@ class SimpleImageQuality:
         outputrow["img_quality"] = img_quality
         outputrow["compression_ratio"] = compression_ratio
 
+        if img_file_size < 0 or laplacian_clarity < 0:
+            outputrow["succeed"] = -1
+        else:
+            outputrow["succeed"] = 1
+
         return outputrow
 
+def test_by_single_image(img_path, is_base64):
+    SimpleImageQualityTest = SimpleImageQuality()
+    if is_base64:
+        # # 读取 JPG 文件
+        with open(img_path, "rb") as f:
+            img_data = f.read()
+        img_base64 = base64.b64encode(img_data).decode("utf-8")
+        inputrow = {
+            'Base64Data': img_base64,
+            'ImageMD5': img_path,
+            'ImagePath': img_path,
+        }
+    else:
+        inputrow = {
+            'Base64Data': None,
+            'ImageMD5': img_path,
+            'ImagePath': img_path,
+        }
 
-if __name__ == "__main__":
-    img_path = r"D:\data\high-quality-images-labeling\Gooden set-tapeciarnia\landmark\230727_monako_miasto_noca.jpg"
-    img_path = r"D:\data\high-quality-images-labeling\Gooden set-tapeciarnia\animal\5.6_7a6cca0000e55923c34615c722c95085.jpg"
+    outputrow = {}
+    res = SimpleImageQualityTest.Process(inputrow, outputrow)
+    return res
 
-    # 读取 JPG 文件
-    with open(img_path, "rb") as f:
-        img_data = f.read()
 
-    # 转为 base64 字符串
-    img_base64 = base64.b64encode(img_data).decode("utf-8")
+def process_image_by_batch(batch_items, splits = 0, out_dir=None):
 
+    out_file = os.path.join(out_dir, f'task-output-{splits}.tsv')
+    fw = open(out_file, 'w', encoding='utf-8')
     SimpleImageQualityTest = SimpleImageQuality()
 
-    inputrow = {
-        'Base64Data': img_base64,
-        'ImageMD5': img_path
-    }
-    outputrow = {}
+    for inputrow in batch_items:
+        outputrow = {}
+        res = SimpleImageQualityTest.Process(inputrow, outputrow)
+        res_list = []
+        for key in res.keys():
+            print(key)
+            res_list.append(str(res[key]))
+        new_line = '\t'.join(res_list)
+        fw.write(new_line + '\n')
+    fw.close()
 
-    res = SimpleImageQualityTest.Process(inputrow, outputrow)
-    print(res)
+if __name__ == "__main__":
+
+    # test by single image with base64_str
+    # img_path = r"D:\data\high-quality-images-labeling\Gooden set-tapeciarnia\landmark\230727_monako_miasto_noca.jpg"
+    # res = test_by_single_image(img_path, is_base64 = False)
+
+    # parallel
+    in_file = 'D:\Projects\T2I\AllInfer\ms-image-quality-filters-aether-module\simple_image_quality_evaluation\img_list.tsv'
+    out_dir = r'D:\Projects\T2I\AllInfer\ms-image-quality-filters-aether-module\simple_image_quality_evaluation\out_dir'
+    fr = open(in_file, 'r', encoding='utf-8').readlines()
+    total_num = len(fr)
+
+    task_nums = 5
+    num_of_each_split = total_num//task_nums
+    task_list = []
+    s_index = 0
+    e_index = num_of_each_split + 1
+
+    for i in range(task_nums):
+        s_index = i * num_of_each_split
+        e_index = s_index + num_of_each_split
+        lines = fr[s_index:e_index]
+        img_list = []
+        for line in lines:
+            id, img_path = line.strip().split('   ')
+            inputrow = {
+                'Base64Data': None,
+                'ImageMD5': id,
+                'ImagePath': img_path,
+            }
+            img_list.append(inputrow)
+        task_list.append(img_list)
+
+    # 并行执行（n_jobs=-1 表示使用所有CPU核心）
+    print(task_list[0], len(task_list))
+    results_parallel = Parallel(n_jobs=task_nums, backend='loky')(delayed(process_image_by_batch)(task_list[i], i, out_dir) for i in range(task_nums))
+
 
 
 
