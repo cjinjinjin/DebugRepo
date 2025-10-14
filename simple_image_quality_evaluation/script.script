@@ -1,0 +1,79 @@
+//Script GUID:90476eb3-dea5-4a10-94de-2a8fe289bc6f
+//Used for tracking history
+
+RESOURCE "/shares/bingads.algo.prod.adinsights/data/prod/pipelines/Optimization/KeywordOpportunity/Resources/LuExtractor/unzip.exe";
+RESOURCE @"/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/zhahao/PythonCode/20240827_opencv_py311.zip";
+RESOURCE @"/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/zhahao/PythonCode/20240827_opencv_py38.zip";
+#DECLARE SimpleImageQualityCompute string = @"simple_image_quality_evaluation.py";
+RESOURCE @SimpleImageQualityCompute;
+
+//Data = 
+//    EXTRACT ImageMD5:string, Base64Data:string
+//    FROM @@ImageBase64List@@
+//    USING DefaultTextExtractor();
+
+Data =
+    SELECT ImageMD5,
+           Base64Data
+    FROM
+    (
+        SSTREAM @@ImageBase64Input@@
+    );
+
+
+[PARTITION = (PARTITIONCOUNT = 1000)]
+Data1 = 
+   PROCESS Data
+   PRODUCE 
+           ImageMD5: string,
+           width: int,
+           height: int,
+		   width_resized: int,
+           height_resized: int,
+		   aspect_ratio: float,
+		   img_bytes: int,
+		   img_bytes_resized: int,
+           bpp : float,
+		   bpp_resized : float,
+		   bpp_resized_v2 : float,
+           laplacian_clarity: float,
+           edge_clarity: float,
+           img_contrast: float,
+           under_exposed: float,
+           over_exposed: float,
+           img_noise: float,
+           weight_brightness: float,
+           avg_brightness: float,
+		   target_bucket_id: int,
+		   img_quality: int,
+		   compression_ratio: float,
+           succeed: int
+   USING Processors.Python(prologue:"import simple_image_quality_evaluation", expression:"simple_image_quality_evaluation.SimpleImageQuality()");
+
+Data2 =
+    SELECT *
+    FROM Data1
+    WHERE succeed > 0;
+
+
+OUTPUT TO SSTREAM @@SucceedImageQualityEvaluationResult@@;
+
+Data3 =
+    SELECT *
+    FROM Data1
+    WHERE succeed < 0;
+OUTPUT TO SSTREAM @@FailedImageQualityEvaluationResult@@;
+
+Stat =
+    SELECT "#1 Input Data" AS Key,
+           COUNT( * ) AS Value
+    FROM Data   UNION
+    SELECT "#2 Succeed Data" AS Key,
+           COUNT( * ) AS Value
+    FROM Data2   UNION
+    SELECT "#3 Failed Data" AS Key,
+           COUNT( * ) AS Value
+    FROM Data3;
+OUTPUT TO @@Stat@@;
+
+         
