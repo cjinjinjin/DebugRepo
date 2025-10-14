@@ -17,6 +17,10 @@ import cv2
 import numpy as np
 import os
 from joblib import Parallel, delayed
+import argparse
+from pathlib import Path
+
+  
 
 class SimpleImageQuality:
     def __init__(self):
@@ -376,48 +380,53 @@ def test_by_single_image(img_path, is_base64):
     return res
 
 
-def process_image_by_batch(batch_items, splits = 0, out_dir=None):
-
-    out_file = os.path.join(out_dir, f'task-output-{splits}.tsv')
-    fw = open(out_file, 'w', encoding='utf-8')
+def process_image_by_batch(batch_items, splits=0):
     SimpleImageQualityTest = SimpleImageQuality()
 
+    results = []
     for inputrow in batch_items:
         outputrow = {}
         res = SimpleImageQualityTest.Process(inputrow, outputrow)
-        res_list = []
-        for key in res.keys():
-            print(key)
-            res_list.append(str(res[key]))
-        new_line = '\t'.join(res_list)
-        fw.write(new_line + '\n')
-    fw.close()
+        res_list = [str(v) for v in res.values()]
+        results.append('\t'.join(res_list))
+    return results    
 
 if __name__ == "__main__":
+    # ====== 1. 命令行参数 ======
+    parser = argparse.ArgumentParser(description="Parallel image batch processor")
+    parser.add_argument("--input", required=True, help="Path to input TSV file")
+    parser.add_argument("--output", required=True, help="Directory to save results")
+    parser.add_argument("--num_tasks", type=int, default=5, help="Number of parallel tasks")
+    args = parser.parse_args()
 
-    # test by single image with base64_str
-    # img_path = r"D:\data\high-quality-images-labeling\Gooden set-tapeciarnia\landmark\230727_monako_miasto_noca.jpg"
-    # res = test_by_single_image(img_path, is_base64 = False)
+    in_file = Path(args.input)
+    out_dir = Path(args.output)
+    task_nums = args.num_tasks
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    # parallel
-    in_file = 'D:\Projects\T2I\AllInfer\ms-image-quality-filters-aether-module\simple_image_quality_evaluation\img_list.tsv'
-    out_dir = r'D:\Projects\T2I\AllInfer\ms-image-quality-filters-aether-module\simple_image_quality_evaluation\out_dir'
-    fr = open(in_file, 'r', encoding='utf-8').readlines()
+    # ====== 2. 读取输入文件 ======
+    with open(in_file, 'r', encoding='utf-8') as f:
+        fr = f.readlines()
     total_num = len(fr)
+    print(f"📘 Total lines: {total_num}")
 
-    task_nums = 5
-    num_of_each_split = total_num//task_nums
+    # ====== 3. 拆分任务 ======
+    num_of_each_split = total_num // task_nums
     task_list = []
-    s_index = 0
-    e_index = num_of_each_split + 1
 
     for i in range(task_nums):
         s_index = i * num_of_each_split
-        e_index = s_index + num_of_each_split
+        # ✅ 最后一段取到结尾，避免遗漏
+        e_index = (s_index + num_of_each_split) if i < task_nums - 1 else total_num
         lines = fr[s_index:e_index]
+
         img_list = []
         for line in lines:
-            id, img_path = line.strip().split('   ')
+            # 假设分隔符是多个空格
+            parts = line.strip().split()
+            if len(parts) < 2:
+                continue
+            id, img_path = parts[:2]
             inputrow = {
                 'Base64Data': None,
                 'ImageMD5': id,
@@ -426,10 +435,19 @@ if __name__ == "__main__":
             img_list.append(inputrow)
         task_list.append(img_list)
 
-    # 并行执行（n_jobs=-1 表示使用所有CPU核心）
-    print(task_list[0], len(task_list))
-    results_parallel = Parallel(n_jobs=task_nums, backend='loky')(delayed(process_image_by_batch)(task_list[i], i, out_dir) for i in range(task_nums))
+    print(f"✅ Total tasks: {len(task_list)}, example batch size: {len(task_list[0])}")
 
+    # ====== 4. 并行执行 ======
+    all_results = Parallel(n_jobs=task_nums, backend='loky')(
+        delayed(process_image_by_batch)(task_list[i], i, out_dir)
+        for i in range(task_nums)
+    )
 
+    # === 主进程合并保存 ===
+    out_file = out_dir / "output.txt"
+    with open(out_file, 'w', encoding='utf-8') as fw:
+        for task_res in all_results:
+            for line in task_res:
+                fw.write(line + '\n')
 
-
+    print(f"✅ Done! Merged output saved to {out_file}")
