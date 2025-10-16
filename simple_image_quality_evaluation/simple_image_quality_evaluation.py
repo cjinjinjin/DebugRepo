@@ -265,49 +265,67 @@ class SimpleImageQuality:
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 100]
         encode_param_v2 = [int(cv2.IMWRITE_JPEG_QUALITY), 85]
 
+        # Step 1: Decode base64 to image
         image, img_file_size, img_quality = self.get_image_info_from_base64(img_base64)
+        if image is None or not hasattr(image, "size") or image.size == 0:
+            print(f"❌ [Error] Empty or invalid image for MD5={outputrow['ImageMD5']}")
+            outputrow["succeed"] = 0
+            return outputrow
+
+        # Step 2: Estimate compression and dimensions
         bpp, height, width = self.estimate_jpg_compression(image, img_file_size)
-        aspect_ratio = float(width)/height
+        if height == 0 or width == 0:
+            print(f"❌ [Error] Invalid image dimension for MD5={outputrow['ImageMD5']}")
+            outputrow["succeed"] = 0
+            return outputrow
+        aspect_ratio = float(width) / height
 
-        # compression_ratio
-        _, encimg_raw = cv2.imencode('.jpg', image, encode_param)
-        compression_ratio = float(img_file_size)/len(encimg_raw)
+        # Step 3: compression ratio
+        try:
+            _, encimg_raw = cv2.imencode('.jpg', image, encode_param)
+            compression_ratio = float(img_file_size) / len(encimg_raw)
+        except Exception as e:
+            print(f"❌ [Error] imencode failed for raw image ({outputrow['ImageMD5']}): {e}")
+            outputrow["succeed"] = 0
+            return outputrow
 
-        # print('image:', image.shape)
+        # Step 4: Resize and check
         resized_image, resized_h, resized_w, target_bucket_id = self.resize_to_bucket_lanczos(image)
+        if resized_image is None or resized_image.size == 0:
+            print(f"❌ [Error] Resized image is empty for MD5={outputrow['ImageMD5']}")
+            outputrow["succeed"] = 0
+            return outputrow
 
-        img_quality_ratio = img_quality
-        if img_quality == None:
-            img_quality_ratio = 100
+        # Step 5: Quality-based encoding
+        img_quality_ratio = img_quality if img_quality is not None else 100
+        if img_quality is None:
             img_quality = -1
 
-        encode_param_resize = [int(cv2.IMWRITE_JPEG_QUALITY), img_quality_ratio]
-        _, encimg_resized = cv2.imencode('.jpg', resized_image, encode_param_resize)
-        _, encimg_resized_v2 = cv2.imencode('.jpg', resized_image, encode_param_v2)
-        img_file_size_resized = len(encimg_resized)
-        bpp_resized = img_file_size_resized / float(resized_h * resized_w)
-        bpp_resized_v2 = len(encimg_resized_v2) / float(resized_h * resized_w)
+        try:
+            encode_param_resize = [int(cv2.IMWRITE_JPEG_QUALITY), img_quality_ratio]
+            _, encimg_resized = cv2.imencode('.jpg', resized_image, encode_param_resize)
+            _, encimg_resized_v2 = cv2.imencode('.jpg', resized_image, encode_param_v2)
+            img_file_size_resized = len(encimg_resized)
+            bpp_resized = img_file_size_resized / float(resized_h * resized_w)
+            bpp_resized_v2 = len(encimg_resized_v2) / float(resized_h * resized_w)
+        except Exception as e:
+            print(f"❌ [Error] imencode failed for resized image ({outputrow['ImageMD5']}): {e}")
+            outputrow["succeed"] = 0
+            return outputrow
 
-        # image = resized_image
-
-        # print(memory_bytes, resized_h, resized_w, target_bucket_id, memory_bytes/(resized_h*resized_w))
-        # bpp, height, width = self.estimate_jpg_compression(image, img_file_size)
-
+        # Step 6: Compute metrics
         laplacian_clarity = self.calculate_sharpness_laplacian(image)
         edge_clarity = self.edge_clarity_sobel(image)
         img_contrast = self.calculate_contrast(image)
-
         under_exposed, over_exposed = self.calculate_exposure_ratio(image)
         weight_brightness = self.calculate_weight_brightness(image)
         avg_brightness = self.calculate_avg_brightness(image)
         img_noise = self.estimate_noise(image)
 
+        # Step 7: Final checks and output
+        outputrow["succeed"] = 1 if img_file_size > 0 and laplacian_clarity >= 0 else -1
 
-        if img_file_size < 0 or laplacian_clarity < 0:
-            outputrow["succeed"] = -1
-        else:
-            outputrow["succeed"] = 1
-
+        # === Write all outputs ===
         outputrow["width"] = width
         outputrow["height"] = height
         outputrow["width_resized"] = resized_w
@@ -324,15 +342,14 @@ class SimpleImageQuality:
         outputrow["under_exposed"] = under_exposed
         outputrow["over_exposed"] = over_exposed
         outputrow["img_noise"] = img_noise
-
         outputrow["weight_brightness"] = weight_brightness
         outputrow["avg_brightness"] = avg_brightness
-
         outputrow["target_bucket_id"] = target_bucket_id
         outputrow["img_quality"] = img_quality
         outputrow["compression_ratio"] = compression_ratio
 
         return outputrow
+
 
 
 # if __name__ == "__main__":
