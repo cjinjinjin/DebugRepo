@@ -113,7 +113,7 @@ def infer_dinov3_batch(
     df["cls_embedding"] = all_cls_strs
     df["patch_embedding"] = all_patch_strs
 
-    df.to_csv(output_file, sep="\t", index=False, quoting=3)
+    df.to_csv(output_file, sep="\t", index=False, quoting=3, header=False)
     print(f"[Done] Saved embeddings to: {output_file}")
 
 
