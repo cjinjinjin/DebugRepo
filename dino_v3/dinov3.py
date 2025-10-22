@@ -81,8 +81,7 @@ def infer_dinov3_batch(
 
     buffer_images = []
     buffer_indices = []
-
-    for idx, row in df.iterrows():
+    for idx, (_, row) in enumerate(df.iterrows()):
         img_path = row[image_col]
         image = load_image(img_path, http_url=http_url)
 
@@ -90,7 +89,6 @@ def infer_dinov3_batch(
             buffer_images.append(image)
             buffer_indices.append(idx)
         else:
-            # 如果无法加载图片则填充空特征
             dim = model.config.hidden_size
             all_cls_strs.append(",".join(["0"] * dim))
             all_patch_strs.append(",".join(["0"] * dim))
