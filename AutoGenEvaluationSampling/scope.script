@@ -1,0 +1,657 @@
+/*
+This script collects the monthly view data from all surface channels for unified funnel report.
+
+*/
+// Input Params
+#DECLARE RunDate DateTime = DateTime.Parse("2025-10-28");
+#DECLARE OutputFolder string = "//local/user/jinjinchen/AdDemandMeasurement/rerun_1028/";
+#DECLARE StreamExpiry string = "60";
+
+// Modules and Views
+MODULE "/shares/bingads.algo.prod.adinsights/data/AdInsightMeasurement/Common/modules/RecommendationMeasurement.module" AS RecMod;
+MODULE "/shares/bingads.algo.prod.adinsights/data/shared_data/AdvertiserEngagement/Metallica/prod/CommonDataFeed/Modules/C2C.module" AS C2C;
+#DECLARE UnifiedLayerPerf string = "/shares/bingAds.BI.OI/AdsOI/DemandMetrics/Views/UnifiedLayerPerf.view";
+
+// Libraries
+//REFERENCE "/shares/bingads.algo.prod.adinsights/data/AdInsightMeasurement/Common/dlls/OpportunityTypeLib.dll";
+//REFERENCE @"OpportunityTypeLib.dll";
+//USING OpportunityTypeLib;
+//USING Newtonsoft.Json.Linq;
+
+// Constants
+#DECLARE ViewWindow int = 0;
+
+#DECLARE GeneratedStartDate DateTime = @RunDate.AddDays(1 - @RunDate.Day);
+#DECLARE GeneratedEndDate DateTime = @RunDate;
+#DECLARE GeneratedDuration int = 1 + (@GeneratedEndDate - @GeneratedStartDate).Days;
+
+#DECLARE ViewStartDate DateTime = @GeneratedStartDate;
+#DECLARE ViewDuration int = @GeneratedDuration + @ViewWindow;
+#DECLARE ViewEndDate DateTime = @ViewStartDate.AddDays(@ViewDuration - 1);
+#DECLARE ViewStartDateStr string = @ViewStartDate.ToString("yyyy-MM-dd");
+#DECLARE ViewEndDateStr string = @ViewEndDate.ToString("yyyy-MM-dd");
+#DECLARE CurrentDataStrforImage string = @RunDate.ToString("yyyy_MM_dd");
+
+
+// Input Streams
+#DECLARE AccSegRoot string = "/shares/bingads.algo.prod.adinsights/data/shared_data/DemandResources/AccountSegment/";
+#DECLARE AccSegPath string = string.Format("{0}/{1:yyyy/MM}/AccountSegment_{1:yyyy-MM-dd}.ss", @AccSegRoot, @GeneratedEndDate);
+
+
+#DECLARE UcmTacticInfoFile string = "/shares/bingads.algo.prod.adinsights/data/prod/pipelines/Optimization/UCM/Data/UcmTacticInfo.csv";
+#DECLARE CDLFolder string = "/shares/bingads.algo.prod.adinsights/data/shared_data/AdvertiserEngagement/Metallica/prod/CommonDataFeed/";
+#DECLARE AccountVertical string = @CDLFolder + "/Modules/AccountVertical.view"; // Account vertical
+
+//AssetImages =
+//    SSTREAM SPARSE STREAMSET "/shares/bingAds.BI.OI/AdsOI/ObjectStoreDump/Images"
+//                   PATTERN @"Assets_"+@CurrentDataStrforImage + @"_%n.ss"
+//                   RANGE __serialnum = ["1", "5"];
+
+#DECLARE C2CMasterViewPath string = "/shares/adCenter.BICore.upload/prod/C2C/Views/MasterView/C2CMasterView.view"; 
+#DECLARE UnifiedLayerDemandView string = @"/shares/bingAds.BI.OI/AdsOI/DemandMetrics/Views/UnifiedLayerDemand.view"; 
+
+// Output Streams
+#DECLARE AccountInfoFile string = string.Format("{0}/{1:yyyy/MM}/AccountInfo_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
+#DECLARE SampledAccountsFile string = string.Format("{0}/{1:yyyy/MM}/SampledAccounts_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
+#DECLARE AggregatedAccountImagesFile string = string.Format("{0}/{1:yyyy/MM}/AggregatedAccountImagesFile_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
+#DECLARE VerticalDistributionFile string = string.Format("{0}/{1:yyyy/MM}/VerticalDistribution_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
+#DECLARE SampledNoAccountsFile string = string.Format("{0}/{1:yyyy/MM}/SampledNoAccounts_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
+#DECLARE StatFile string = string.Format("{0}/{1:yyyy/MM}/Stat_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
+// Account Information
+// Customer Mapping
+AccountCustomer =
+    SELECT AccountId,
+           CustomerId
+    FROM C2C.Account(DataDate = @GeneratedEndDate);
+
+// IsPerforming
+AccountPerf =
+    SELECT AccountId,
+           (double)SUM(RevenueUSD) AS RevenueUSD,
+           (double)SUM(Impressions) AS Impressions,
+           (double)SUM(Clicks) AS Clicks
+    FROM
+    (
+        VIEW @UnifiedLayerPerf
+        PARAMS
+        (
+            ViewName = "AccountPerf",
+            TimeZoneForUnifiedLayerPerf = "CampaignTimeZone",
+            StartDate = @GeneratedStartDate.AddDays(-366),
+            EndDate = @GeneratedStartDate.AddDays(-1)
+        )
+    );
+
+// IsServable
+AccountServable = 
+    SELECT DISTINCT AccountId, 
+                    AdId,
+                    AdTypeId,
+                    AdTitle,
+		            IsServable 
+    FROM 
+    ( 
+        VIEW @UnifiedLayerDemandView 
+        PARAMS 
+        ( 
+            ViewName = "Ads", 
+            LogDate = @RunDate 
+        ) 
+    ) WHERE IsServable == true; 
+
+// Segment
+AccountSegment =
+    SELECT AccountId,
+           Segment.Trim() AS Segment
+    FROM (SSTREAM @AccSegPath);
+
+//Get verticals
+AccountVertical =
+    VIEW @AccountVertical;
+
+AccountInfo =
+    SELECT C.AccountId,
+           C.CustomerId,
+           S.Segment ?? "UnSegmented" AS Segment,
+           P.RevenueUSD,
+           V.L1 AS Vertical_L1,
+           V.L2 AS Vertical_L2,
+           V.L3 AS Vertical_L3,
+           V.L4 AS Vertical_L4,
+           P.RevenueUSD > 0 AS IsPerforming
+    FROM AccountCustomer AS C
+        LEFT OUTER JOIN AccountPerf AS P
+            ON C.AccountId == P.AccountId
+        LEFT OUTER JOIN AccountSegment AS S
+            ON C.AccountId == S.AccountId
+        LEFT OUTER JOIN AccountVertical AS V
+            ON C.AccountId == V.AccountId
+        LEFT OUTER JOIN AccountServable AS Q
+            ON C.AccountId == Q.AccountId;
+
+// keep RevenueUSD >0 & exclude sensitive Vertical
+ValidAccounts =
+    SELECT *
+    FROM AccountInfo
+    WHERE RevenueUSD > 0 
+          AND Vertical_L1 NOT IN ("Health & Wellness", "Adult & Gambling", "Financial Services & Insurance") 
+          AND Vertical_L2 NOT IN ("Drug/Pharma (Retail)");
+
+// only one account per customId
+ValidAccounts = 
+    SELECT *,
+            ROW_NUMBER() OVER (
+               PARTITION BY CustomerId 
+               ORDER BY RevenueUSD
+               DESC
+           ) AS RevenueRank
+    FROM ValidAccounts 
+    HAVING RevenueRank == 1;
+
+//Stat = 
+//    SELECT "#1 after SampledAccounts" AS key,
+//           Segment,
+//           COUNT(DISTINCT AccountId) AS SampleAccountIdCount,
+//           SUM(RevenueUSD) AS TotalRevenue
+//    FROM SampledAccounts
+//    ;
+//    WHERE (Segment == "Enterprise" AND RandRank <= 500)
+//       OR (Segment == "SMB" AND RandRank <= 500);
+
+//AssetImages =
+//    SELECT DISTINCT AssetId,
+//                    Url,
+//                    ImageHelper.GetImageDimensions(Base64Data)[0] AS width,
+//                    ImageHelper.GetImageDimensions(Base64Data)[1] AS height
+//    FROM AssetImages;
+
+
+AccountAssetPair = 
+    SELECT  
+        AccountID AS AccountId, AdId, AssetId
+        FROM 
+        ( 
+            VIEW @C2CMasterViewPath 
+            PARAMS 
+            ( 
+                ViewName = "AdAsset_Raw", 
+                ViewType = 1, 
+                DataMode = "PROD",
+                ViewMode = "PROD",
+                IncludeDeletedRecordsForType1Data = true 
+            ) 
+        ) WHERE AccountID != NULL;
+
+AccountsAssetId =
+    SELECT A.*.Except(RevenueRank),
+           AdId
+           //AssetId
+    FROM ValidAccounts AS A
+    INNER JOIN
+        AccountAssetPair AS B
+        ON A.AccountId == B.AccountId;
+
+AccountsAssetId_ServableAds =
+    SELECT DISTINCT A.*.Except(AdId)
+//           AdTypeId,
+//           AdTitle
+    FROM AccountsAssetId AS A
+    LEFT SEMIJOIN
+        AccountServable AS B
+        ON A.AccountId == B.AccountId AND A.AdId == B.AdId;
+
+// group by Segment and rand
+AccountsAssetId_ServableAds_RankedSamples =
+    SELECT *,
+           ROW_NUMBER() OVER (
+               PARTITION BY Segment
+               ORDER BY RandomGenerator.GetRandom()
+           ) AS RandRank
+    FROM AccountsAssetId_ServableAds;
+
+AccountsAssetId_ServableAds_RankedSamples =
+    SELECT *.Except(RandRank)
+    FROM AccountsAssetId_ServableAds_RankedSamples
+    WHERE RandRank <= 500;
+
+Stat =
+//    SELECT *
+//    FROM Stat
+//    UNION ALL
+    SELECT "#2 after SampledAccountsAssetId_ServableAds" AS key,
+           Segment,
+           COUNT(DISTINCT AccountId) AS SampleAccountIdCount,
+           SUM(RevenueUSD) AS TotalRevenue
+    FROM AccountsAssetId_ServableAds_RankedSamples
+    ;
+
+AccountsAssetId_ServableAds_RankedSamples_Assets =
+    SELECT A.*,
+           B.AssetId
+    FROM AccountsAssetId_ServableAds_RankedSamples AS A
+    INNER JOIN
+        AccountAssetPair AS B
+        ON A.AccountId == B.AccountId;  
+
+AssetImages =
+    SELECT DISTINCT AccountID AS AccountId,
+                    AssetId,
+                    Url,
+                    (int) OriginalMediaWidth AS Width,
+                    (int) OriginalMediaHeight AS Height
+    FROM
+    (
+        VIEW @C2CMasterViewPath
+        PARAMS
+        (
+            ViewName = "Asset_Raw",
+            ViewType = 1,
+            RequestEndDateUtc = @RunDate,
+            LoadDlls = true
+        )
+    )
+    WHERE OriginalMediaWidth != null AND OriginalMediaHeight != null;
+
+
+SampledAccountsImages =
+    SELECT DISTINCT A.*,
+           Url AS ImageUrl,
+           Width,
+           Height,
+           1.0 * Width / Height AS AspectRatio
+    FROM AccountsAssetId_ServableAds_RankedSamples_Assets AS A
+    INNER JOIN
+        AssetImages AS B
+        ON A.AssetId == B.AssetId;
+
+Stat =     
+    SELECT *
+    FROM Stat
+    UNION ALL
+    SELECT "#3 after SampledAccountsImages" AS key,
+           Segment,
+           COUNT(DISTINCT AccountId) AS SampleAccountIdCount,
+           SUM(RevenueUSD) AS TotalRevenue
+    FROM SampledAccountsImages
+    ;
+WideImages =
+    SELECT *,
+           ROW_NUMBER() OVER(PARTITION BY AccountId ORDER BY RandomGenerator.GetRandom()) AS RandRank
+    FROM SampledAccountsImages
+    WHERE AspectRatio >= 1.77;
+
+WideImages_Top3 =
+    SELECT * FROM WideImages WHERE RandRank <= 3;
+
+TallImages =
+    SELECT *,
+           ROW_NUMBER() OVER(PARTITION BY AccountId ORDER BY RandomGenerator.GetRandom()) AS RandRank
+    FROM SampledAccountsImages
+    WHERE AspectRatio < 1.77;
+
+TallImages_Top3 =
+    SELECT * FROM TallImages WHERE RandRank <= 3;
+
+CombinedSamples =
+    SELECT *,
+           IF(AspectRatio >= 1.77, "WideImages", "TallImages") AS RatioType
+    FROM
+    (
+    SELECT *
+    FROM @WideImages_Top3
+    UNION ALL
+    SELECT *
+    FROM @TallImages_Top3
+    );
+
+OUTPUT CombinedSamples TO SSTREAM @SampledAccountsFile
+    CLUSTERED BY Segment,Vertical_L1
+    WITH STREAMEXPIRY @StreamExpiry;
+
+CombinedSamples =
+    SELECT *.Except(IsPerforming, AssetId, Width, Height, AspectRatio, RandRank); 
+
+AggregatedAccountImages =
+    REDUCE CombinedSamples
+    ON AccountId
+    USING AggregateImageByAspectReducer;
+
+OUTPUT AggregatedAccountImages TO SSTREAM @AggregatedAccountImagesFile
+    CLUSTERED BY Segment,Vertical_L1
+    WITH STREAMEXPIRY @StreamExpiry;
+
+Stat = SELECT *    
+    FROM Stat
+    UNION ALL
+    SELECT "#4 after AggregatedAccountImages" AS key,
+           Segment,
+           COUNT(DISTINCT AccountId) AS SampleAccountIdCount,
+           SUM(RevenueUSD) AS TotalRevenue
+    FROM AggregatedAccountImages
+    ;
+      
+
+SampledNoAccounts = 
+    SELECT DISTINCT A.*
+    FROM AccountsAssetId_ServableAds_RankedSamples AS A
+    LEFT ANTISEMIJOIN 
+        AggregatedAccountImages AS B
+         ON A.AccountId == B.AccountId;
+
+OUTPUT SampledNoAccounts TO SSTREAM @SampledNoAccountsFile
+    CLUSTERED BY AccountId, Segment,Vertical_L1
+    WITH STREAMEXPIRY @StreamExpiry;
+
+SampledNoAcccounts_stat = 
+    SELECT *    
+    FROM Stat
+    UNION ALL
+    SELECT "#5 SampledNoAccounts" AS key,
+           Segment,
+           COUNT(DISTINCT AccountId) AS SampleAccountIdCount,
+           SUM(RevenueUSD) AS TotalRevenue
+    FROM SampledNoAccounts
+    ;
+OUTPUT TO SSTREAM @StatFile
+    CLUSTERED BY key, Segment
+          WITH STREAMEXPIRY @StreamExpiry;
+
+ImageVerticalDistribution =
+    SELECT Segment,
+           Vertical_L1,
+           Vertical_L2,
+           COUNT(DISTINCT AccountId) AS SampleCount,
+           SUM(RevenueUSD) AS TotalRevenue
+    FROM SampledAccountsImages
+    GROUP BY Segment, Vertical_L1, Vertical_L2;
+
+OUTPUT ImageVerticalDistribution TO SSTREAM @VerticalDistributionFile
+    CLUSTERED BY Segment,Vertical_L1
+    WITH STREAMEXPIRY @StreamExpiry;
+
+//AccountInfo =
+//        SELECT *,
+//               MAX(IsPerforming) OVER (PARTITION BY CustomerId) AS CidIsPerforming,
+//               ARGMAX(SegmentPriority, Segment) OVER (PARTITION BY CustomerId) AS CidSegment
+//        FROM AccountInfo;
+
+//OUTPUT AccountInfo TO SSTREAM @AccountInfoFile
+//    CLUSTERED BY AccountId
+//    WITH STREAMEXPIRY @StreamExpiry;
+
+
+#CS
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using ScopeRuntime;
+
+//using OpportunityTypeLib;
+//
+//public static int GetFunnelOptTypeIdFromOptId(int optTypeId, long opportunityId)
+//{
+//    if (optTypeId == (int)OpportunityType.BudgetOpportunity) {
+//        var optDigit = opportunityId.ToString()[9];
+//        if (optDigit == '1') {
+//            return (int)OpportunityType.AIMBudgetOpportunity;
+//        } else if (optDigit == '2') {
+//            return (int)OpportunityType.CompetitiveBudgetOpportunity;
+//        } else if (optDigit == '3') {
+//            return (int)OpportunityType.AdjustSharedBudgetOpportunity;
+//        }
+//    }
+//    return optTypeId;
+//}
+
+////public static class RandomGenerator
+////{
+////    public static Random random = new Random((int)DateTime.Now.Ticks & 0x0000FFFF);
+////    public static int GetRandom()
+////    {
+////        return random.Next();
+////    }
+////}
+
+public static class RandomGenerator
+{
+    // 使用 ThreadStatic 属性确保每个线程都有自己的 Random 实例（一种 C# 解决方案）
+    [ThreadStatic] 
+    private static Random localRandom;
+
+    private static Random GlobalRandom = new Random();
+
+    public static int GetRandom()
+    {
+        if (localRandom == null)
+        {
+            // 如果是第一次调用，使用一个全局锁来安全地创建一个种子
+            int seed;
+            lock (GlobalRandom)
+            {
+                // 使用 Next() 作为新线程 Random 的种子
+                seed = GlobalRandom.Next(); 
+            }
+            localRandom = new Random(seed);
+        }
+        return localRandom.Next();
+    }
+}
+
+
+public static int GetSegmentPriority(string segment)
+{
+    if (segment == "Strategic") {
+        return 5;
+    } else if (segment == "Enterprise") {
+        return 4;
+    } else if (segment == "Corporate") {
+        return 3;
+    } else if (segment == "Channel Partner") {
+        return 2;
+    } else if (segment == "SMB") {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+//public class ImageHelper
+//{
+//    /// <summary>
+//    /// 获取Base64格式图片的宽度和高度
+//    /// </summary>
+//    /// <param name="base64String">Base64格式的图片字符串</param>
+//    /// <returns>包含宽度和高度的ImageDimensions对象</returns>
+//    public static ImageDimensions GetImageDimensions(string base64String)
+//    {
+//        try
+//        {
+//            // 确保base64String不是null或空
+//            if (string.IsNullOrEmpty(base64String))
+//            {
+//                //throw new ArgumentException("Base64 string cannot be null or empty.");
+//                return new ImageDimensions { Width = -1, Height = -1 };
+//            }
+//
+//            // 如果Base64字符串包含逗号，尝试移除可能存在的头部信息
+//            if (base64String.Contains(","))
+//            {
+//                base64String = base64String.Split(',')[1];
+//            }
+//
+//            byte[] imageBytes;
+//            try
+//            {
+//                // 将Base64字符串转换为字节数组
+//                imageBytes = Convert.FromBase64String(base64String);
+//            }
+//            catch (FormatException ex)
+//            {
+//                return new ImageDimensions { Width = -1, Height = -1 };
+//                //throw new ArgumentException($"Invalid Base64 string: {ex.Message}", ex);
+//            }
+//
+//            // 预检查：确认解码后的字节流非空且长度合理
+//            if (imageBytes.Length == 0 || imageBytes.Length < 4) // 最小的图像文件应至少有4个字节的文件头
+//            {
+//                return new ImageDimensions { Width = -1, Height = -1 };
+//                //throw new ArgumentException("Decoded Base64 stream is invalid or too short to be an image.");
+//            }
+//
+//            // 检查文件头以确定是否是有效的图像文件
+//            if (!IsValidImageFile(imageBytes))
+//            {
+//                return new ImageDimensions { Width = -1, Height = -1 };
+//                //throw new ArgumentException("Decoded Base64 stream does not represent a valid image file.");
+//            }
+//
+//            using (MemoryStream ms = new MemoryStream(imageBytes))
+//            using (Image image = Image.FromStream(ms, false, true))
+//            {
+//                return new ImageDimensions 
+//                { 
+//                    Width = image.Width, 
+//                    Height = image.Height 
+//                };
+//            }
+//            using (MemoryStream ms = new MemoryStream(imageBytes))
+//            {
+//                try
+//                {
+//                    using (Image image = Image.FromStream(ms, false, true))
+//                    {
+//                        return new ImageDimensions
+//                        {
+//                            Width = image.Width,
+//                            Height = image.Height
+//                        };
+//                    }
+//                }
+//                catch (Exception ex) when (ex is ArgumentException || ex is System.IO.InvalidDataException)
+//                {
+//                    Console.Error.WriteLine($"Image load failed: {ex.Message}");
+//                    return new ImageDimensions { Width = -1, Height = -1 };
+//                }
+//            }
+//        }
+//        catch (Exception ex)
+//        {
+//            // 增加详细的异常日志记录
+//            Console.Error.WriteLine($"Unexpected error: {ex.Message}");
+//            return new ImageDimensions { Width = -1, Height = -1 };
+//        }
+//    }
+//} 
+private static bool IsValidImageFile(byte[] imageBytes)
+{
+    // 检查PNG文件头 (89 50 4E 47)
+    if (imageBytes[0] == 0x89 && imageBytes[1] == 0x50 && imageBytes[2] == 0x4E && imageBytes[3] == 0x47)
+    {
+        return true;
+    }
+    // 检查JPEG文件头 (FF D8 FF)
+    else if (imageBytes[0] == 0xFF && imageBytes[1] == 0xD8 && imageBytes[2] == 0xFF)
+    {
+        return true;
+    }
+    // 可以添加更多的图像格式检查，例如GIF (47 49 46 38)
+    else if (imageBytes[0] == 0x47 && imageBytes[1] == 0x49 && imageBytes[2] == 0x46 && imageBytes[3] == 0x38)
+    {
+        return true;
+    }
+    // 其他格式...
+    else
+    {
+        return false;
+    }
+}
+
+public class ImageDimensions
+{
+    public int Width { get; set; }
+    public int Height { get; set; }
+}
+
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using ScopeRuntime;
+
+public class AggregateImageByAspectReducer : Reducer
+{
+    public override Schema Produces(string[] requestedColumns, string[] args, Schema input)
+    {
+        var schema = new Schema();
+        
+        // ????????? ImageUrl ? RatioType ?????
+        foreach (var col in input.Columns)
+        {
+            if (col.Name != "ImageUrl" && col.Name != "RatioType")
+            {
+                schema.Add(col);
+            }
+        }
+        
+        // ??????????
+        schema.Add(new ColumnInfo("WideImage1", typeof(string)));
+        schema.Add(new ColumnInfo("WideImage2", typeof(string)));
+        schema.Add(new ColumnInfo("WideImage3", typeof(string)));
+        schema.Add(new ColumnInfo("TallImage1", typeof(string)));
+        schema.Add(new ColumnInfo("TallImage2", typeof(string)));
+        schema.Add(new ColumnInfo("TallImage3", typeof(string)));
+        
+        return schema;
+    }
+   
+public override IEnumerable<Row> Reduce(RowSet input, Row outputRow, string[] args)
+{
+    outputRow.Reset();
+    
+    var wide = new List<string>();
+    var tall = new List<string>();
+    bool firstRead = true;
+    
+    // 找到公共列的结束位置（在 WideImage1 之前）
+    int commonColumnsEnd = outputRow.Schema.IndexOf("WideImage1");
+    
+    foreach (Row row in input.Rows)
+    {
+        if (firstRead)
+        {
+            // 按索引复制公共列（更快）
+            for (int i = 0; i < commonColumnsEnd; i++)
+            {
+                string colName = outputRow.Schema[i].Name;
+                // 确保输入也有这个列
+                if (row.Schema.Contains(colName))
+                {
+                    row[colName].CopyTo(outputRow[i]);
+                }
+            }
+            firstRead = false;
+        }
+        
+        // 收集URL
+        string url = row["ImageUrl"].String;
+        string ratioType = row["RatioType"].String;
+        
+        if (ratioType == "WideImages")
+            wide.Add(url);
+        else if (ratioType == "TallImages")
+            tall.Add(url);
+    }
+    
+    // 设置图片列
+    outputRow["WideImage1"].Set(wide.Count > 0 ? wide[0] : "");
+    outputRow["WideImage2"].Set(wide.Count > 1 ? wide[1] : "");
+    outputRow["WideImage3"].Set(wide.Count > 2 ? wide[2] : "");
+    outputRow["TallImage1"].Set(tall.Count > 0 ? tall[0] : "");
+    outputRow["TallImage2"].Set(tall.Count > 1 ? tall[1] : "");
+    outputRow["TallImage3"].Set(tall.Count > 2 ? tall[2] : "");
+    
+    yield return outputRow;
+}
+}
+#ENDCS
