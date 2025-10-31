@@ -554,7 +554,7 @@ OUTPUT CombinedSamples TO SSTREAM @SampledAccountsFile
     WITH STREAMEXPIRY @StreamExpiry;
 
 CombinedSamples =
-    SELECT *.Except(IsPerforming, AssetId, Width, Height, AspectRatio, RandRank); 
+    SELECT *.Except(IsPerforming, AssetId, AspectRatio, RandRank); 
 
 AggregatedAccountImages =
     REDUCE CombinedSamples
