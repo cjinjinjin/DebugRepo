@@ -61,8 +61,8 @@ REFERENCE @"System.IO.Compression.FileSystem.dll";
 REFERENCE @"System.Drawing.dll";
 
 // Input Params
-#DECLARE RunDate DateTime = DateTime.Parse("2025-10-28");
-#DECLARE OutputFolder string = "//local/user/jinjinchen/AdDemandMeasurement/rerun_1028/";
+#DECLARE RunDate DateTime = DateTime.Parse("2025-11-01");
+#DECLARE OutputFolder string = "//local/user/jinjinchen/AdDemandMeasurement/";
 #DECLARE StreamExpiry string = "60";
 
 // Modules and Views
@@ -190,7 +190,8 @@ AccountInfo =
 
 // keep RevenueUSD >0 & exclude sensitive Vertical
 ValidAccounts =
-    SELECT *
+    SELECT *, 
+           (AdTypeId == 1 ? "TextAd" : AdTypeId == 1024? "ExTA" : AdTypeId == 8192? "RSA" : AdTypeId == 4096? "MMA" : AdTypeId == 256? "AppInstall" : AdTypeId == 5? "ProductListingAd" : "Unknown") AS AdTypeMV 
     FROM AccountInfo
     WHERE RevenueUSD > 0 
           AND Vertical_L1 NOT IN ("Health & Wellness", "Adult & Gambling", "Financial Services & Insurance") 
@@ -288,7 +289,8 @@ AccountAssets =
            AssetId,
            AdType,
            IF(AssetAssociationTypeId IN(11, 32), "Headline", IF(AssetAssociationTypeId == 33, "LongHeadline", IF(AssetAssociationTypeId IN(12, 34), "Description", IF(AssetAssociationTypeId == 63, "BusinessName", IF(AssetAssociationTypeId == 1, "LandscapeImage", IF(AssetAssociationTypeId == 2, "SquareImage", IF(AssetAssociationTypeId == 3 OR AssetAssociationTypeId == 4, "Logo", "OtherSizeImage"))))))) AS AssetType
-    FROM AccountAssets;
+    FROM AccountAssets
+    HAVING AssetType != "Logo";
 
 // ImageExtension
 AdExtensionAccountView =  
@@ -454,7 +456,10 @@ Stat =
 
 AccountsAssetId_ServableAds_RankedSamples_Assets =
     SELECT A.*,
-           B.AssetId, B.AdType, B.AssetType
+           B.AssetId, 
+           B.AdType, 
+           B.AssetType,
+           A.AdTypeMV + "-" + B.AdType AS Displayed_source_AdType
     FROM AccountsAssetId_ServableAds_RankedSamples AS A
     LEFT JOIN
         AccountAssets_ImageExtension AS B
@@ -543,10 +548,10 @@ CombinedSamples =
     FROM
     (
     SELECT *
-    FROM @WideImages_Top3
+    FROM WideImages_Top3
     UNION ALL
     SELECT *
-    FROM @TallImages_Top3
+    FROM TallImages_Top3
     );
 
 OUTPUT CombinedSamples TO SSTREAM @SampledAccountsFile
@@ -577,9 +582,15 @@ Stat = SELECT *
 
 
 SampledNoAccounts =
-    SELECT *
+    SELECT AccountId, Segment,Vertical_L1, RevenueUSD
     FROM AccountsAssetId_ServableAds_RankedSamples_Assets
-    WHERE AssetId == null;
+    WHERE AssetId == null
+    UNION 
+    SELECT DISTINCT AccountId, Segment,Vertical_L1, RevenueUSD
+    FROM AccountsAssetId_ServableAds_RankedSamples_Assets AS A
+    LEFT ANTISEMIJOIN
+        AssetImages AS B
+        ON A.AssetId == B.AssetId;
 
 OUTPUT SampledNoAccounts TO SSTREAM @SampledNoAccountsFile
     CLUSTERED BY AccountId, Segment,Vertical_L1
@@ -760,7 +771,13 @@ public class AggregateImageByAspectReducer : Reducer
         schema.Add(new ColumnInfo("TallImage1", typeof(string)));
         schema.Add(new ColumnInfo("TallImage2", typeof(string)));
         schema.Add(new ColumnInfo("TallImage3", typeof(string)));
-
+        //WideImage1_ad_type
+        schema.Add(new ColumnInfo("WideImage1_ad_type", typeof(string)));
+        schema.Add(new ColumnInfo("WideImage2_ad_type", typeof(string)));
+        schema.Add(new ColumnInfo("WideImage3_ad_type", typeof(string)));
+        schema.Add(new ColumnInfo("TallImage1_ad_type", typeof(string)));
+        schema.Add(new ColumnInfo("TallImage2_ad_type", typeof(string)));
+        schema.Add(new ColumnInfo("TallImage3_ad_type", typeof(string)));
         
         return schema;
     }
@@ -775,6 +792,8 @@ public override IEnumerable<Row> Reduce(RowSet input, Row outputRow, string[] ar
     var wide_height = new List<string>();    
     var tall_width = new List<string>(); 
     var tall_height = new List<string>();  
+    var wide_ad_type = new List<string>(); 
+    var tall_ad_type = new List<string>(); 
     bool firstRead = true;
     
     // ???????????? WideImage1 ???
@@ -800,18 +819,20 @@ public override IEnumerable<Row> Reduce(RowSet input, Row outputRow, string[] ar
         // ??URL
         string url = row["ImageUrl"].String;
         string ratioType = row["RatioType"].String;
-        
+       
         if (ratioType == "WideImages")
         {
             wide.Add(url);
             wide_width.Add(row["Width"].String);
             wide_height.Add(row["Height"].String);
+            wide_ad_type.Add(row["Displayed_source_AdType"].String);
         }
         else if (ratioType == "TallImages")
         {
             tall.Add(url);
             tall_width.Add(row["Width"].String);
             tall_height.Add(row["Height"].String);
+            tall_ad_type.Add(row["Displayed_source_AdType"].String);
         }
     }
     
@@ -828,6 +849,13 @@ public override IEnumerable<Row> Reduce(RowSet input, Row outputRow, string[] ar
     outputRow["TallImage1"].Set(tall.Count > 0 ? tall[0] : "");
     outputRow["TallImage2"].Set(tall.Count > 1 ? tall[1] : "");
     outputRow["TallImage3"].Set(tall.Count > 2 ? tall[2] : "");
+   
+    outputRow["WideImage1_ad_type"].Set(wide_ad_type.Count > 0 ? wide[0] : "");
+    outputRow["WideImage2_ad_type"].Set(wide_ad_type.Count > 1 ? wide[1] : "");
+    outputRow["WideImage3_ad_type"].Set(wide_ad_type.Count > 2 ? wide[2] : "");
+    outputRow["TallImage1_ad_type"].Set(tall_ad_type.Count > 0 ? wide[0] : "");
+    outputRow["TallImage2_ad_type"].Set(tall_ad_type.Count > 1 ? wide[0] : "");
+    outputRow["TallImage3_ad_type"].Set(tall_ad_type.Count > 2 ? wide[0] : "");
     
     yield return outputRow;
 }
