@@ -850,12 +850,12 @@ public override IEnumerable<Row> Reduce(RowSet input, Row outputRow, string[] ar
     outputRow["TallImage2"].Set(tall.Count > 1 ? tall[1] : "");
     outputRow["TallImage3"].Set(tall.Count > 2 ? tall[2] : "");
    
-    outputRow["WideImage1_ad_type"].Set(wide_ad_type.Count > 0 ? wide[0] : "");
-    outputRow["WideImage2_ad_type"].Set(wide_ad_type.Count > 1 ? wide[1] : "");
-    outputRow["WideImage3_ad_type"].Set(wide_ad_type.Count > 2 ? wide[2] : "");
-    outputRow["TallImage1_ad_type"].Set(tall_ad_type.Count > 0 ? wide[0] : "");
-    outputRow["TallImage2_ad_type"].Set(tall_ad_type.Count > 1 ? wide[0] : "");
-    outputRow["TallImage3_ad_type"].Set(tall_ad_type.Count > 2 ? wide[0] : "");
+    outputRow["WideImage1_ad_type"].Set(wide.Count > 0 && wide_ad_type.Count > 0 ? wide_ad_type[0] : "");
+    outputRow["WideImage2_ad_type"].Set(wide.Count > 1 && wide_ad_type.Count > 0 ? wide_ad_type[0] : "");
+    outputRow["WideImage3_ad_type"].Set(wide.Count > 2 && wide_ad_type.Count > 0 ? wide_ad_type[0] : "");
+    outputRow["TallImage1_ad_type"].Set(tall.Count > 0 && tall_ad_type.Count > 0 ? tall_ad_type[0] : "");
+    outputRow["TallImage2_ad_type"].Set(tall.Count > 1 && tall_ad_type.Count > 0 ? tall_ad_type[0] : "");
+    outputRow["TallImage3_ad_type"].Set(tall.Count > 2 && tall_ad_type.Count > 0 ? tall_ad_type[0] : "");
     
     yield return outputRow;
 }
