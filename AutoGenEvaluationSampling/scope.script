@@ -62,7 +62,7 @@ REFERENCE @"System.Drawing.dll";
 
 // Input Params
 #DECLARE RunDate DateTime = DateTime.Parse("2025-11-01");
-#DECLARE OutputFolder string = "//local/user/jinjinchen/AdDemandMeasurement/";
+#DECLARE OutputFolder string = "//local/user/jinjinchen/AdDemandMeasurement/SampledCustomer";
 #DECLARE StreamExpiry string = "60";
 
 // Modules and Views
@@ -198,40 +198,67 @@ ValidAccounts =
           AND Vertical_L2 NOT IN ("Drug/Pharma (Retail)");
 
 // only one account per customId
-ValidAccounts = 
-    SELECT *,
-            ROW_NUMBER() OVER (
-               PARTITION BY CustomerId 
-               ORDER BY RevenueUSD
-               DESC
-           ) AS RevenueRank
-    FROM ValidAccounts 
-    HAVING RevenueRank == 1;
+//ValidAccounts = 
+//    SELECT *,
+//            ROW_NUMBER() OVER (
+//               PARTITION BY CustomerId 
+//               ORDER BY RandomGenerator.GetRandom()
+//               DESC
+//           ) AS RevenueRank
+//    FROM ValidAccounts 
+//    HAVING RevenueRank == 1;
 
 Stat =
-    SELECT "#0 after one account per customId & sensitive Vertical condition" AS key,
+    SELECT "#0 sensitive Vertical condition" AS key,
            Segment,
            COUNT(DISTINCT AccountId) AS SampleAccountIdCount,
            SUM(RevenueUSD) AS TotalRevenue
     FROM ValidAccounts
     ;
 
-//Stat = 
-//    SELECT "#1 after SampledAccounts" AS key,
-//           Segment,
-//           COUNT(DISTINCT AccountId) AS SampleAccountIdCount,
-//           SUM(RevenueUSD) AS TotalRevenue
-//    FROM SampledAccounts
-//    ;
-//    WHERE (Segment == "Enterprise" AND RandRank <= 500)
-//       OR (Segment == "SMB" AND RandRank <= 500);
+ValidAccounts_ServableAds =
+    SELECT DISTINCT A.*
+    FROM ValidAccounts AS A
+    INNER JOIN 
+        AccountServable AS B
+        ON A.AccountId == B.AccountId;
 
-//AssetImages =
-//    SELECT DISTINCT AssetId,
-//                    Url,
-//                    ImageHelper.GetImageDimensions(Base64Data)[0] AS width,
-//                    ImageHelper.GetImageDimensions(Base64Data)[1] AS height
-//    FROM AssetImages;
+Stat =  
+    SELECT *
+    FROM Stat
+    UNION ALL
+    SELECT "#1 after servable ads join" AS key,
+           Segment,
+           COUNT(DISTINCT AccountId) AS SampleAccountIdCount,
+           SUM(RevenueUSD) AS TotalRevenue
+    FROM ValidAccounts_ServableAds
+    ;
+// sample 1k customer:
+DistinctCustomers =
+    SELECT DISTINCT CustomerId
+    FROM ValidAccounts_ServableAds;
+ValidCustom =
+    SELECT CustomerId,
+                    ROW_NUMBER() OVER(ORDER BY RandomGenerator.GetRandom()) AS RandRank
+    FROM DistinctCustomers
+    HAVING RandRank <= 1000;
+    ;
+SampledCustom = SELECT A.* 
+                FROM ValidAccounts_ServableAds AS A
+                INNER JOIN ValidCustom AS B
+        ON A.CustomerId == B.CustomerId;
+
+
+Stat =
+    SELECT *
+    FROM Stat
+    UNION ALL
+    SELECT "#2 after sample 1k custom" AS key,
+           Segment,
+           COUNT(DISTINCT AccountId) AS SampleAccountIdCount,
+           SUM(RevenueUSD) AS TotalRevenue
+    FROM SampledCustom
+    ;
 
 
 AccountAssetPair = 
@@ -411,56 +438,13 @@ AccountAssets_ImageExtension =
 //        AccountAssetPair AS B
 //        ON A.AccountId == B.AccountId;
 
-AccountsAssetId_ServableAds =
-    SELECT DISTINCT A.*.Except(RevenueRank)
-    FROM ValidAccounts AS A
-    INNER JOIN 
-        AccountServable AS B
-        ON A.AccountId == B.AccountId;
-
-Stat =
-    SELECT *
-    FROM Stat
-    UNION ALL
-    SELECT "#1 after ServableAds condition" AS key,
-           Segment,
-           COUNT(DISTINCT AccountId) AS SampleAccountIdCount,
-           SUM(RevenueUSD) AS TotalRevenue
-    FROM AccountsAssetId_ServableAds
-    ;
-
-// group by Segment and rand
-AccountsAssetId_ServableAds_RankedSamples =
-    SELECT *,
-           ROW_NUMBER() OVER (
-               PARTITION BY Segment
-               ORDER BY RandomGenerator.GetRandom()
-           ) AS RandRank
-    FROM AccountsAssetId_ServableAds;
-
-AccountsAssetId_ServableAds_RankedSamples =
-    SELECT *.Except(RandRank)
-    FROM AccountsAssetId_ServableAds_RankedSamples
-    WHERE RandRank <= 1000;
-
-Stat =
-    SELECT *
-    FROM Stat
-    UNION ALL
-    SELECT "#2 after SampledAccountsAssetId_ServableAds" AS key,
-           Segment,
-           COUNT(DISTINCT AccountId) AS SampleAccountIdCount,
-           SUM(RevenueUSD) AS TotalRevenue
-    FROM AccountsAssetId_ServableAds_RankedSamples
-    ;
-
 AccountsAssetId_ServableAds_RankedSamples_Assets =
     SELECT A.*,
            B.AssetId, 
            B.AdType, 
            B.AssetType,
            A.AdTypeMV + "-" + B.AdType AS Displayed_source_AdType
-    FROM AccountsAssetId_ServableAds_RankedSamples AS A
+    FROM SampledCustom AS A
     LEFT JOIN
         AccountAssets_ImageExtension AS B
         ON A.AccountId == B.AccountId;
@@ -469,29 +453,7 @@ AssetImages =
     SELECT DISTINCT AssetId.ToString() AS AssetId,
                     Url,
                     Base64Data
-//                    ImageHelper.GetImageDimensions(Base64Data).Width AS Width,
-//                    ImageHelper.GetImageDimensions(Base64Data).Height AS Height
     FROM AssetImages;
-
-//AssetImages =
-//    SELECT DISTINCT AccountID AS AccountId,
-//                    AssetId,
-//                    Url,
-//                    (int) OriginalMediaWidth AS Width,
-//                    (int) OriginalMediaHeight AS Height
-//    FROM
-//    (
-//        VIEW @C2CMasterViewPath
-//        PARAMS
-//        (
-//            ViewName = "Asset_Raw",
-//            ViewType = 1,
-//            RequestEndDateUtc = @RunDate,
-//            LoadDlls = true
-//        )
-//    )
-//    WHERE OriginalMediaWidth != null AND OriginalMediaHeight != null;
-
 
 SampledAccountsImages =
     SELECT DISTINCT A.*,
@@ -518,7 +480,7 @@ Stat =
     SELECT *
     FROM Stat
     UNION ALL
-    SELECT "#3 after SampledAccountsImages" AS key,
+    SELECT "#3 after joined Images" AS key,
            Segment,
            COUNT(DISTINCT AccountId) AS SampleAccountIdCount,
            SUM(RevenueUSD) AS TotalRevenue
@@ -581,11 +543,7 @@ Stat = SELECT *
     ;
 
 
-SampledNoAccounts =
-    SELECT AccountId, Segment,Vertical_L1, RevenueUSD
-    FROM AccountsAssetId_ServableAds_RankedSamples_Assets
-    WHERE AssetId == null
-    UNION 
+SampledNoAccounts = 
     SELECT DISTINCT AccountId, Segment,Vertical_L1, RevenueUSD
     FROM AccountsAssetId_ServableAds_RankedSamples_Assets AS A
     LEFT ANTISEMIJOIN
@@ -609,19 +567,6 @@ SampledNoAcccounts_stat =
 OUTPUT TO SSTREAM @StatFile
     CLUSTERED BY key, Segment
           WITH STREAMEXPIRY @StreamExpiry;
-
-ImageVerticalDistribution =
-    SELECT Segment,
-           Vertical_L1,
-           Vertical_L2,
-           COUNT(DISTINCT AccountId) AS SampleCount,
-           SUM(RevenueUSD) AS TotalRevenue
-    FROM SampledAccountsImages
-    GROUP BY Segment, Vertical_L1, Vertical_L2;
-
-OUTPUT ImageVerticalDistribution TO SSTREAM @VerticalDistributionFile
-    CLUSTERED BY Segment,Vertical_L1
-    WITH STREAMEXPIRY @StreamExpiry;
 
 //AccountInfo =
 //        SELECT *,
