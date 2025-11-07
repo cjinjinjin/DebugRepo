@@ -5,6 +5,12 @@
             "clusterRun": {},
             "localRun": {},
             "codeBehindFiles": []
+        },
+        "AutoGenEvaluationSampling/overallimageratio.script": {
+            "account": "",
+            "clusterRun": {},
+            "localRun": {},
+            "codeBehindFiles": []
         }
     }
 }
