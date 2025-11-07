@@ -62,7 +62,7 @@ REFERENCE @"System.Drawing.dll";
 
 // Input Params
 #DECLARE RunDate DateTime = DateTime.Parse("2025-11-01");
-#DECLARE OutputFolder string = "//local/user/jinjinchen/AdDemandMeasurement/";
+#DECLARE OutputFolder string = "//local/user/jinjinchen/AdDemandMeasurement/FullExtension/";
 #DECLARE StreamExpiry string = "60";
 
 // Modules and Views
@@ -112,7 +112,7 @@ AssetImages =
 #DECLARE AccountInfoFile string = string.Format("{0}/{1:yyyy/MM}/AccountInfo_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
 #DECLARE SampledAccountsFile string = string.Format("{0}/{1:yyyy/MM}/SampledAccounts_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
 #DECLARE AggregatedAccountImagesFile string = string.Format("{0}/{1:yyyy/MM}/AggregatedAccountImagesFile_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
-#DECLARE VerticalDistributionFile string = string.Format("{0}/{1:yyyy/MM}/VerticalDistribution_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
+#DECLARE RatioDistributionFile string = string.Format("{0}/{1:yyyy/MM}/RatioDistribution_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
 #DECLARE SampledNoAccountsFile string = string.Format("{0}/{1:yyyy/MM}/SampledNoAccounts_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
 #DECLARE StatFile string = string.Format("{0}/{1:yyyy/MM}/Overall_Stat_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
 // Account Information
@@ -308,80 +308,59 @@ AdExtensionAccountView =
                 )  
             )
     WHERE LifeCycleStatusId != 110;
-
-AdExtension = SELECT AdExtensionTypeId, AdExtensionId FROM (  
-    VIEW @C2CMasterViewPath  
-            PARAMS   
-            (  
-                ViewName = "AdExtension_Raw",  
-                DataMode = "PROD",  
-                ViewMode = "PROD",
-                ViewType = 1,  
-                RequestEndDateUtc = @RunDate,  
-                RequestEndHourUtc = 23 
-            ))
-        WHERE LifeCycleStatusId != 110 AND AdExtensionTypeId == 35;
-
-//AdExtesnionId -> AdExtensionItemId Mapping
-AdExtensionItemView =  
-            SELECT AdExtensionId,  
-                    AdExtensionItemId,
-                    Properties
+AdExtensionCampaignView =  
+            SELECT AccountID AS AccountId,  
+                   AdExtensionId  
             FROM  
             (  
                 VIEW @C2CMasterViewPath  
                 PARAMS  
                 (  
-                    ViewName = "AdExtensionItem_Raw", 
-                    ViewType = 1, 
-                    RequestEndDateUtc = @RunDate,  
-                    RequestEndHourUtc = 23  
+                      ViewName = "AdExtensionCampaign_Raw",  
+                      ViewType=1,                
+                      RequestEndDateUtc= @RunDate,  
+                    RequestEndHourUtc = 23          
                 )  
             )
-            WHERE LifeCycleStatusId != 110 && !string.IsNullOrWhiteSpace(Properties);
-            //WHERE LifeCycleStatusId == 108;
-    
-AdExtItem =
-SELECT AdExtensionId,
-        AdExtensionItemId,
-        AdExtensionItemPropertyParser.PropertyToData(Properties) AS Properties
-FROM AdExtensionItemView
-        SEMIJOIN AdExtension ON AdExtensionItemView.AdExtensionId == AdExtension.AdExtensionId;
+    WHERE LifeCycleStatusId != 110;
 
-AdExtensionData =
-    SELECT AdExtensionId,
-           AdExtensionItemId,
-           Property.AdExtensionPropertyId AS AdExtensionPropertyId,
-           Property.AdExtensionPropertyValue AS AdExtensionPropertyValue
-    FROM AdExtItem
-         CROSS APPLY Properties AS Property;
-
+AdExtensionOrderView =  
+            SELECT AccountID AS AccountId,  
+                   AdExtensionId  
+            FROM  
+            (  
+                VIEW @C2CMasterViewPath  
+                PARAMS  
+                (  
+                      ViewName = "AdExtensionOrder_Raw",  
+                      ViewType=1,                
+                      RequestEndDateUtc= @RunDate,  
+                    RequestEndHourUtc = 23          
+                )  
+            )
+            WHERE LifeCycleStatusId != 110;
 AdExtensionData = 
-    REDUCE AdExtensionData
-    USING GenerateImageExtensionItemData
-    ON AdExtensionItemId,AdExtensionId
-    PRESORT AdExtensionPropertyId
-    PRODUCE AdExtensionItemId,
-            AdExtensionId,
-            AssetId,
-            MediaURL,
-            DestintationUrl,
-            OriginalMediaHeight,
-            OriginalMediaWidth,
-            AltText,
-            AssetId2,
-            AssetId3,
-            AssetId4,
-            AssetId5;
+        SELECT AccountId, AdExtensionId FROM AdExtensionAccountView
+        UNION
+        SELECT AccountId, AdExtensionId FROM AdExtensionCampaignView
+        UNION
+        SELECT AccountId, AdExtensionId FROM AdExtensionOrderView;
 
-//
+FullExtensionItemAssets = SELECT
+                                 AdExtensionId,
+                                 AssetId
+                          FROM 
+                          (
+                              SSTREAM "/local/user/jinjinchen/AdDemandMeasurement/2025/11/2025-11-05-ImageExtension.ss"
+                          );
+                          
 AdExtensionItemDataAccount =  
             SELECT DISTINCT  
                    AccountId,
-                   AdExtensionData.*
+                   AssetId
         FROM AdExtensionData 
-        INNER JOIN AdExtensionAccountView 
-        ON AdExtensionData.AdExtensionId == AdExtensionAccountView.AdExtensionId; 
+        INNER JOIN FullExtensionItemAssets 
+        ON FullExtensionItemAssets.AdExtensionId == AdExtensionData.AdExtensionId; 
 
 ImageExtensionData =
     SELECT AccountId,
@@ -446,41 +425,37 @@ Stat =
 AssetImages =
     SELECT DISTINCT AssetId.ToString() AS AssetId,
                     Url,
-                    Base64Data
-//                    ImageHelper.GetImageDimensions(Base64Data).Width AS Width,
-//                    ImageHelper.GetImageDimensions(Base64Data).Height AS Height
-    FROM AssetImages;
-
-//AssetImages =
-//    SELECT DISTINCT AccountID AS AccountId,
-//                    AssetId,
-//                    Url,
-//                    (int) OriginalMediaWidth AS Width,
-//                    (int) OriginalMediaHeight AS Height
-//    FROM
-//    (
-//        VIEW @C2CMasterViewPath
-//        PARAMS
-//        (
-//            ViewName = "Asset_Raw",
-//            ViewType = 1,
-//            RequestEndDateUtc = @RunDate,
-//            LoadDlls = true
-//        )
-//    )
-//    WHERE OriginalMediaWidth != null AND OriginalMediaHeight != null;
+                    
+                    ImageHelper.GetImageDimensions(Base64Data).Width AS Width,
+                    ImageHelper.GetImageDimensions(Base64Data).Height AS Height
+    FROM AssetImages WHERE Base64Data != null AND Base64Data != "";
 
 
 SampledAccountsImages =
     SELECT DISTINCT A.*,
-           Url AS ImageUrl
-           //Base64Data
+           Url AS ImageUrl,
+           Width,
+           Height
     FROM AccountsAssetId_ServableAds_RankedSamples_Assets AS A
     INNER JOIN
         AssetImages AS B
         ON A.AssetId == B.AssetId;
  
-
+SampledAccountsImages =
+    SELECT *,
+           IF(AspectRatio >= 1.77, "WideImages", "TallImages") AS RatioType
+    FROM SampledAccountsImages
+    WHERE Width != null AND Height != null;
+ImageSizeStat = 
+    SELECT Segment,
+           //Vertical_L1,
+           COUNT(DISTINCT AccountId) AS AccountCount,
+           COUNTIF(RatioType == "TallImages") AS TallImagesCount,
+           COUNTIF(RatioType == "WideImages") AS WideImagesCount
+    FROM SampledAccountsImages;
+OUTPUT TO SSTREAM @RatioDistributionFile
+    CLUSTERED BY Segment
+          WITH STREAMEXPIRY @StreamExpiry;
 Stat =     
     SELECT *
     FROM Stat
@@ -489,8 +464,8 @@ Stat =
            Segment,
            COUNT(DISTINCT AccountId) AS SampleAccountIdCount,
            SUM(RevenueUSD) AS TotalRevenue
-    FROM SampledAccountsImages
-    ;
+    FROM SampledAccountsImages;
+
 
 SampledNoAccounts =
     SELECT DISTINCT AccountId, Segment,Vertical_L1, RevenueUSD
@@ -512,17 +487,6 @@ SampledNoAcccounts_stat =
 OUTPUT TO SSTREAM @StatFile
     CLUSTERED BY key, Segment
           WITH STREAMEXPIRY @StreamExpiry;
-
-
-//AccountInfo =
-//        SELECT *,
-//               MAX(IsPerforming) OVER (PARTITION BY CustomerId) AS CidIsPerforming,
-//               ARGMAX(SegmentPriority, Segment) OVER (PARTITION BY CustomerId) AS CidSegment
-//        FROM AccountInfo;
-
-//OUTPUT AccountInfo TO SSTREAM @AccountInfoFile
-//    CLUSTERED BY AccountId
-//    WITH STREAMEXPIRY @StreamExpiry;
 
 
 #CS
