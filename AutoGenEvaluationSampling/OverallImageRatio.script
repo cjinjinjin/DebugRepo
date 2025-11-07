@@ -340,11 +340,11 @@ AdExtensionOrderView =
             )
             WHERE LifeCycleStatusId != 110;
 AdExtensionData = 
-        SELECT AccountId, AdExtensionId FROM AdExtensionAccountView
+        SELECT AccountId, AdExtensionId.ToString() AS AdExtensionId FROM AdExtensionAccountView
         UNION
-        SELECT AccountId, AdExtensionId FROM AdExtensionCampaignView
+        SELECT AccountId, AdExtensionId.ToString() AS AdExtensionId FROM AdExtensionCampaignView
         UNION
-        SELECT AccountId, AdExtensionId FROM AdExtensionOrderView;
+        SELECT AccountId, AdExtensionId.ToString() AS AdExtensionId FROM AdExtensionOrderView;
 
 FullExtensionItemAssets = SELECT
                                  AdExtensionId,
@@ -423,19 +423,27 @@ Stat =
     ;
 
 AssetImages =
-    SELECT DISTINCT AssetId.ToString() AS AssetId,
-                    Url,
-                    
-                    ImageHelper.GetImageDimensions(Base64Data).Width AS Width,
-                    ImageHelper.GetImageDimensions(Base64Data).Height AS Height
-    FROM AssetImages WHERE Base64Data != null AND Base64Data != "";
+    SELECT AssetId,
+           Url, 
+           Size[1] AS Width,
+           Size[0] AS Height,
+           1.0 * Size[1] / Size[0] AS AspectRatio
+    FROM
+    (
+        SELECT  
+               AssetId.ToString() AS AssetId,
+               Url,
+               ImageUtils.GetSize(Base64Data) AS Size
+        FROM AssetImages WHERE Base64Data != null AND Base64Data != ""
+    );  
 
 
 SampledAccountsImages =
     SELECT DISTINCT A.*,
            Url AS ImageUrl,
            Width,
-           Height
+           Height,
+           AspectRatio
     FROM AccountsAssetId_ServableAds_RankedSamples_Assets AS A
     INNER JOIN
         AssetImages AS B
