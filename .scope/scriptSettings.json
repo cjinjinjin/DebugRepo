@@ -1,0 +1,10 @@
+{
+    "scripts": {
+        "AutoGenEvaluationSampling/msan_potential_ads.script": {
+            "account": "",
+            "clusterRun": {},
+            "localRun": {},
+            "codeBehindFiles": []
+        }
+    }
+}

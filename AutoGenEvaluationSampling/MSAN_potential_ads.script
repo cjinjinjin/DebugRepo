@@ -1,0 +1,480 @@
+#DECLARE RunDate DateTime = DateTime.Parse("2025-11-01");
+#DECLARE RunDateStr string = @RunDate.ToString("yyyy-MM-dd"); 
+#DECLARE OutputFolder string = "/local/user/jinjinchen/MSNPotentialAds/";
+#DECLARE OutputFile string = string.Format("{0}/Overall_Stat_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
+#DECLARE StatFile string = string.Format("{0}/Overall_Stat_{1:yyyy-MM-dd}.stat", @OutputFolder, @RunDate);
+Corpus =  
+    SELECT CustomerId,  
+           AccountId,  
+           CampaignId,  
+           CampaignTypeId,  
+           OrderId,  
+           ListingId,  
+           AdId,  
+           UrlId,  
+           Keyword,  
+           ActualDestinationURL,  
+           BingUrlHash,  
+           Domain,  
+           AdTitle,  
+           LanguageCodes,  
+           TargetCountries  
+    FROM  
+    (  
+        VIEW @"/shares/bingads.hm/local/NativeAds/RRI/Data/Demand/Views/MSANUnifiedDemandView.view"  
+        PARAMS(AdTypes = "All", RunDateStr = @RunDateStr) 
+    )  
+    WHERE !string.IsNullOrEmpty(AdTitle) AND !string.IsNullOrEmpty(ActualDestinationURL); 
+
+NativeEligibleCampaigns =
+    SELECT *
+    FROM
+    (
+        SSTREAM "/shares/bingads.hm/NativeAds/RRI/Data/Demand/MSANEligibleCampaigns/2025/10/27/NativeEligibleCampaigns.ss"
+    );
+NativeEligibleCampaignsFeatures =
+    SELECT A.*,
+           FIRST(CampaignTypeId) AS CampaignTypeId,
+           FIRST(Keyword) AS Keyword,
+           FIRST(AdTitle) AS AdTitle,
+           FIRST(ActualDestinationURL) AS ActualDestinationURL
+    FROM NativeEligibleCampaigns AS A
+    INNER JOIN
+        Corpus AS B
+        ON A.CampaignId == B.CampaignId AND A.CustomerId == B.CustomerId;
+
+
+OUTPUT TO SSTREAM @OutputFile;
+Stat =
+    SELECT "NativeEligibleCampaigns" AS K,
+           COUNT() AS V
+    FROM NativeEligibleCampaigns
+    UNION ALL
+    SELECT "NativeEligibleCampaignsFeatures" AS K,
+           COUNT() AS V
+    FROM NativeEligibleCampaignsFeatures;
+OUTPUT TO @StatFile USING DefaultTextOutputter(outputHeader: true);
+
+#CS
+using System;
+using System.Collections.Generic;
+using System.IO;
+using ScopeRuntime;
+using System.Text.RegularExpressions;
+using System.Linq;
+
+
+public static double GetPClickScore(string PClickScores, string SlotId = "2")
+    {
+        double PClickScore = -1;
+        if (!string.IsNullOrWhiteSpace(PClickScores) && PClickScores.Contains(":"))
+        {
+            foreach (var PClicks in PClickScores.Split(';'))
+            {
+                if (string.IsNullOrWhiteSpace(PClicks)
+                || !PClicks.Contains(":"))
+                {
+                    continue;
+                }
+                var splits = PClicks.Split(':');
+                if (splits[0] == SlotId)
+                {
+                    PClickScore = double.Parse(splits[1]);
+                    return PClickScore;
+                }
+            }
+        }
+        return PClickScore;
+    }
+
+public class Sampler
+{
+    public static Random Rand = new Random();
+
+    public static int HashGuid(string rguid)
+    {
+        return Math.Abs(rguid.GetHashCode() % 1000000);
+    }
+
+    public static int HashGuid1000(string rguid)
+    {
+        return Math.Abs(rguid.GetHashCode() % 1000);
+    }
+
+    public static bool IsSelectedTraffic(int partionId, long returnImprNum, long totalImprNum, int maxPartionId, double times)
+    {
+        if (times <= 0) return true;
+
+        return partionId < times * ((returnImprNum * 1.0 / totalImprNum) * (maxPartionId + 1));
+    }
+}
+
+public static class RandomGenerator
+{
+    public static Random random = new Random((int)DateTime.Now.Ticks & 0x0000FFFF);
+    public static int GetRandom()
+    {
+        return random.Next();
+    }
+}
+
+static Regex rgx = new Regex("[^a-zA-Z0-9 -]");
+static string deep_clean(string str)
+{
+	return rgx.Replace(str, "");
+}
+
+public class Func
+{
+    public static string LegalizeColumnName(string name)
+    {
+        string legalized = name.Replace("DateTime", "DateTime_");
+        legalized = Regex.Replace(legalized, @"(^m:)", "m_");
+        legalized = Regex.Replace(legalized, @"(@)", "_atsymbol_");
+
+        // replace the illegal char brought in by Category transform and Generic transform
+        legalized = Regex.Replace(legalized, @"([^\w\d_]+)", "_");
+
+        // and cut the length to 450 if it's too long. C# has a 512 char length limit to identifier(so does scope)
+        legalized = legalized.Substring(0, Math.Min(450, legalized.Length)); // cap length to 450
+
+        return legalized;
+    }
+
+    public static string RevertLegalizeColumnName(string name)
+    {
+        string legalized = name.Replace("DateTime_", "DateTime");
+        legalized = Regex.Replace(legalized, @"(^m_)", "m:");
+        legalized = Regex.Replace(legalized, @"(_atsymbol_)", "@");
+        return legalized;
+    }
+}
+
+public class OutputterHeader : Outputter
+{
+    public override void Output(RowSet input, System.IO.StreamWriter writer, string[] args)
+    {
+        // output the header
+        writer.WriteLine(string.Join("\t", input.Schema.ToString().Split(',').Select(c => Func.RevertLegalizeColumnName(c.Split(':')[0])).ToArray()));
+        writer.Flush();
+    }
+}
+
+public class TSVWithHeaderExtractor : Extractor
+{
+    private bool initialized = false;
+    private string delim = "\t";
+    private string schemaFile = "";
+    private string schemaString = "";
+
+    public static string LegalizeColumnName(string name)
+    {
+        string legalized = name.Replace("DateTime", "DateTime_");
+        legalized = Regex.Replace(legalized, @"(^m:)", "m_");
+        legalized = Regex.Replace(legalized, @"(@)", "_atsymbol_");
+
+        // replace the illegal char brought in by Category transform and Generic transform
+        legalized = Regex.Replace(legalized, @"([^\w\d_]+)", "_");
+
+        return legalized;
+    }
+
+    public void Initialize(string[] args)
+    {
+        if (initialized)
+            return;
+
+        // create and add 
+        // Process args, if any
+        for (Int32 i = 0; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "-schemaFile":
+                    if (i == args.Length - 1)
+                        throw new ArgumentException("No value specified", "schemaFile");
+                    schemaFile = Path.GetFileName(args[++i]); //only get file name
+
+                    // load up schemafile
+                    using (StreamReader sr = new StreamReader(schemaFile))//read header
+                    {
+                        schemaString = string.Join(",", sr.ReadLine().Trim().Split('\t').Select(t => LegalizeColumnName(t)).ToArray());
+                    }
+                    break;
+
+                case "-delim":
+                    if (i == args.Length - 1)
+                        throw new ArgumentException("No value specified", "delim");
+                    delim = args[++i];
+                    break;
+            }
+        }
+
+        initialized = true;
+    }
+
+    public override Schema GetOutputSchemaAtCompileTime(string[] requestedColumns, string[] args)
+    {
+        Initialize(args);
+        return new Schema(schemaString);
+    }
+
+    public override IEnumerable<Row> Extract(StreamReader reader, Row outputRow, string[] args)
+    {
+        Initialize(args);
+
+        string line;
+        int count = 0;
+        while ((line = reader.ReadLine()) != null)
+        {
+            count++;
+
+            if (count == 1 && (line.StartsWith("m:", StringComparison.OrdinalIgnoreCase) || line.StartsWith("Feature_", StringComparison.OrdinalIgnoreCase)))//skip header
+            {
+                continue;
+            }
+
+            string[] tokens = line.Split(delim.ToCharArray());
+            if (tokens.Length < outputRow.Count)
+            {
+                continue;
+            }
+            for (int i = 0; i < tokens.Length; ++i)
+            {
+                outputRow[i].UnsafeSet(tokens[i]);
+            }
+
+            yield return outputRow;
+        }
+    }
+}
+
+public class HeaderOutputter : Outputter
+{
+    public static string RevertLegalizeColumnName(string name)
+    {
+        string legalized = name.Replace("DateTime_", "DateTime");
+        legalized = Regex.Replace(legalized, @"(^m_)", "m:");
+        legalized = Regex.Replace(legalized, @"(_atsymbol_)", "@");
+        return legalized;
+    }
+
+    public override void Output(RowSet input, StreamWriter writer, string[] args)
+    {
+        // output the header
+        writer.WriteLine(string.Join("\t", input.Schema.ToString().Split(',').Select(c => RevertLegalizeColumnName(c.Split(':')[0])).ToArray()));
+        writer.Flush();
+    }
+}
+public static string GetFeature(string featureString, string key)
+{
+	int pos = featureString.IndexOf(key + ":");
+	int endPos = 0;
+	if (pos >= 0)
+	{
+		pos += key.Length + 1;
+		endPos = featureString.IndexOf(",", pos);
+		string featureValue = (endPos > 0) ? featureString.Substring(pos, endPos - pos) : featureString.Substring(pos);
+		return featureValue.Trim();
+	}
+
+	return "";
+}
+
+public static string GetDebugInfoField(string debugInfo, int id)
+{
+	string[] fs = debugInfo.Split(',');
+	foreach (string f in fs)
+	{
+		string[] pair = f.Split(':');
+		if (pair[0] == id.ToString())
+		{
+			return f.Substring(f.IndexOf(':') + 1);
+		}
+	}
+	throw new Exception(string.Format("Debug info not found: {0}, metadata key: {1} ", debugInfo, id));
+}
+
+public static class RegexExtractor
+{
+    public static string ExtractWithRegex(string targetString, Regex regex, int index = 1)
+    {
+        string extractedString = null;
+        if (targetString != null)
+        {
+            var match = regex.Match(targetString);
+
+            if (match.Success)
+            {
+                extractedString = match.Groups[index].Value;
+            }
+        }
+        return extractedString;
+    }
+}
+
+public static class FlightExtractor
+{
+    /// <summary>
+    /// Currently, native ads run flights on 5 flight lines.
+    /// </summary>
+    private static readonly Regex fln0regex = new Regex("\\S+;AdsFLN0\\|(\\d+)", RegexOptions.Compiled);
+    private static readonly Regex fln1regex = new Regex("\\S+;AdsFLN1\\|(\\d+)", RegexOptions.Compiled);
+    private static readonly Regex fln3regex = new Regex("\\S+;AdsFLN3\\|(\\d+)", RegexOptions.Compiled);
+    private static readonly Regex fln4regex = new Regex("\\S+;AdsFLN4\\|(\\d+)", RegexOptions.Compiled);
+    private static readonly Regex fln7regex = new Regex("\\S+;AdsFLN7\\|(\\d+)", RegexOptions.Compiled);
+    private static readonly Regex fln13regex = new Regex("\\S+;AdsFLN13\\|(\\d+)", RegexOptions.Compiled);
+
+    public static int Extract(string flights, int flightline = 0)
+    {
+        string extractedString = string.Empty;
+        switch (flightline)
+        {
+            case 1:
+                extractedString = RegexExtractor.ExtractWithRegex(flights, fln1regex);
+                break;
+            case 3:
+                extractedString = RegexExtractor.ExtractWithRegex(flights, fln3regex);
+                break;
+            case 4:
+                extractedString = RegexExtractor.ExtractWithRegex(flights, fln4regex);
+                break;
+            case 7:
+                extractedString = RegexExtractor.ExtractWithRegex(flights, fln7regex);
+                break;
+            case 13:
+                extractedString = RegexExtractor.ExtractWithRegex(flights, fln13regex);
+                break;
+            default:
+                // Default get FLN0 flight.
+                extractedString = RegexExtractor.ExtractWithRegex(flights, fln0regex);
+                break;
+        }
+
+        int flight;
+        if (Int32.TryParse(extractedString, out flight))
+        {
+            return flight;
+        }
+
+        // Return -1 if not available.
+        return -1;
+
+    }
+
+    //Get the ABConfig Version from flightInfoRecordList for a given flightLine (e.g., AdsFLN0)
+    public static uint GetABConfigVersion(string flightInfoRecordList, string flightLine = "AdsFLN0")
+    {
+
+        uint abConfigVersion = 0;
+        if (!string.IsNullOrWhiteSpace(flightInfoRecordList) && flightInfoRecordList.Contains(";"))
+        {
+            foreach (var flightInfoRecord in flightInfoRecordList.Split(';'))
+            {
+                if (string.IsNullOrWhiteSpace(flightInfoRecord)
+                    || !flightInfoRecord.Contains("|")
+                    || (flightInfoRecord.Split('|').Length < 3))
+                {
+                    continue;
+                }
+                var splits = flightInfoRecord.Split('|');
+
+                if (splits[0] == flightLine)
+                {
+                    UInt32.TryParse(splits[2], out abConfigVersion);
+                }
+            }
+        }
+        return abConfigVersion;
+    }
+
+    //Get the FlightId from flightInfoRecordList for a given flightLine (e.g., AdsFLN0)
+    public static string GetFlightId(string flightInfoRecordList, string flightLine = "AdsFLN0")
+    {
+
+        string flightId = "";
+        if (!string.IsNullOrWhiteSpace(flightInfoRecordList) && flightInfoRecordList.Contains(";"))
+        {
+            foreach (var flightInfoRecord in flightInfoRecordList.Split(';'))
+            {
+                if (string.IsNullOrWhiteSpace(flightInfoRecord)
+                    || !flightInfoRecord.Contains("|")
+                    || (flightInfoRecord.Split('|').Length < 3))
+                {
+                    continue;
+                }
+                var splits = flightInfoRecord.Split('|');
+
+                if (splits[0] == flightLine)
+                {
+                    flightId = splits[1];
+                }
+            }
+        }
+        return flightId;
+    }
+
+    // Get the TrafficGroup from flightInfoRecordList for a given flightLine (e.g., AdsFLN0)
+    // Eg. flightInfoRecordList = AdsFLNGlobal|0|82094438|0;AdsFLN_Uber|52018|82095086|596;AdsFLN0|50722|82396838|668;
+    public static string GetTrafficGroupID(string flightInfoRecordList, string flightLine = "AdsFLN0")
+    {
+
+        string tgId = "";
+        if (!string.IsNullOrWhiteSpace(flightInfoRecordList) && flightInfoRecordList.Contains(";"))
+        {
+            foreach (var flightInfoRecord in flightInfoRecordList.Split(';'))
+            {
+                if (string.IsNullOrWhiteSpace(flightInfoRecord) || !flightInfoRecord.Contains("|"))
+                {
+                    continue;
+                }
+
+                var splits = flightInfoRecord.Split('|');
+                if ((splits.Length < 4))
+                {
+                    continue;
+                }
+
+                if (splits[0] == flightLine)
+                {
+                    tgId = splits[3];
+                    return tgId;
+                }
+            }
+        }
+        return tgId;
+    }
+}
+public static string CleanURLDomain(string url)
+{
+	url = url.ToLower();
+	int protocol = url.IndexOf("://");
+	if (protocol >= 0)
+		url = url.Substring(protocol + 3);
+	int end = url.IndexOf('/');
+	if (end >= 0)
+		url = url.Substring(0, end);
+    url.Replace("\n", "");
+    url.Replace("\t", "");
+	return url;
+}
+
+public static string CleanURLPath(string url)
+{
+	url = url.ToLower();
+	int protocol = url.IndexOf("://");
+	if (protocol >= 0)
+		url = url.Substring(protocol + 3);
+	int end = url.IndexOf('/');
+	if (end >= 0)
+		url = url.Substring(end + 1);
+	else
+		url = "";
+    url.Replace("\n", "");
+    url.Replace("\t", "");
+	return url;
+}
+
+#ENDCS
+
+// Generated by ScopeStudio, version 2.0.9560.0
