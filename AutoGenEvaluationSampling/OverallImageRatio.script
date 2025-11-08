@@ -583,22 +583,63 @@ public static int GetSegmentPriority(string segment)
     }
 }
 
+//public static class ImageUtils
+//{
+//    public static int[] GetSize(String base64string)
+//    {
+//        var bytes = Convert.FromBase64String(base64string);
+//        using (var stream = new MemoryStream(bytes))
+//        {
+//            var image = Image.FromStream(stream);
+//            int[] size = new int[2];
+//            size[0] = image.Height;
+//            size[1] = image.Width;
+//            return size;
+//            
+//        }
+//    }
+//} 
 public static class ImageUtils
 {
-    public static int[] GetSize(String base64string)
+    public static int[] GetSize(string base64string)
     {
-        var bytes = Convert.FromBase64String(base64string);
-        using (var stream = new MemoryStream(bytes))
+        if (string.IsNullOrWhiteSpace(base64string))
+            return new int[] { 0, 0 };
+
+        try
         {
-            var image = Image.FromStream(stream);
-            int[] size = new int[2];
-            size[0] = image.Height;
-            size[1] = image.Width;
-            return size;
-            
+            // 移除可能的 "data:image/png;base64," 前缀
+            var commaIndex = base64string.IndexOf(',');
+            if (commaIndex > 0)
+                base64string = base64string.Substring(commaIndex + 1);
+
+            var bytes = Convert.FromBase64String(base64string);
+            if (bytes.Length == 0)
+                return new int[] { 0, 0 };
+
+            using (var stream = new MemoryStream(bytes))
+            using (var image = Image.FromStream(stream, useEmbeddedColorManagement: false, validateImageData: false))
+            {
+                return new int[] { image.Height, image.Width };
+            }
+        }
+        catch (FormatException)
+        {
+            // Base64 格式无效
+            return new int[] { 0, 0 };
+        }
+        catch (ArgumentException)
+        {
+            // 参数无效（不是合法图片）
+            return new int[] { 0, 0 };
+        }
+        catch (Exception)
+        {
+            // 其他未知异常
+            return new int[] { 0, 0 };
         }
     }
-} 
+}
 
 
 using System;
