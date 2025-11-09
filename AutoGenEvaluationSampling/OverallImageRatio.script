@@ -435,7 +435,8 @@ AssetImages =
                Url,
                ImageUtils.GetSize(Base64Data) AS Size
         FROM AssetImages WHERE Base64Data != null AND Base64Data != ""
-    );  
+    ) 
+    HAVING Width != null AND Height != null AND Width > 0 AND Height > 0;  
 
 
 SampledAccountsImages =
@@ -453,7 +454,7 @@ SampledAccountsImages =
     SELECT *,
            IF(AspectRatio >= 1.77, "WideImages", "TallImages") AS RatioType
     FROM SampledAccountsImages
-    WHERE Width != null AND Height != null;
+    ;
 ImageSizeStat = 
     SELECT Segment,
            //Vertical_L1,
@@ -479,10 +480,10 @@ SampledNoAccounts =
     SELECT DISTINCT AccountId, Segment,Vertical_L1, RevenueUSD
     FROM AccountsAssetId_ServableAds_RankedSamples_Assets AS A
     LEFT ANTISEMIJOIN
-        AssetImages AS B
-        ON A.AssetId == B.AssetId;
+        SampledAccountsImages AS B
+        ON A.AccountId == B.AccountId;
 
-SampledNoAcccounts_stat = 
+SampledNoAccounts_stat = 
     SELECT *    
     FROM Stat
     UNION ALL

@@ -419,7 +419,8 @@ AssetImages =
                Url,
                ImageUtils.GetSize(Base64Data) AS Size
         FROM AssetImages WHERE Base64Data != null AND Base64Data != ""
-    );  
+    )
+    HAVING Width != null AND Height != null AND Width > 0 AND Height > 0;  
 
 
 AccountsImages =
@@ -432,6 +433,7 @@ AccountsImages =
     INNER JOIN
         AssetImages AS B
         ON A.AssetId == B.AssetId;
+
 Stat = SELECT *
     FROM Stat
     UNION ALL
@@ -442,15 +444,19 @@ Stat = SELECT *
     FROM AccountsImages;
 
 SampledAccountsImages = 
-    SELECT *, 
-    IF(AspectRatio >= 1.77, "WideImages", "TallImages") AS RatioType,
+    SELECT *,
     ROW_NUMBER() OVER (
                 PARTITION BY Segment
                 ORDER BY RandomGenerator.GetRandom() DESC
             ) AS RandRank
-    FROM AccountsImages 
-    HAVING RandRank <= 500;    
+    FROM AccountsImages;  
 
+SampledAccountsImages = 
+    SELECT 
+        *.Except(RandRank),
+        IF(AspectRatio >= 1.77, "WideImages", "TallImages") AS RatioType
+    FROM SampledAccountsImages
+    WHERE RandRank <= 500;
 
 
 OUTPUT SampledAccountsImages TO SSTREAM @SampledAccountsFile
@@ -467,10 +473,20 @@ ImageSizeStat =
 OUTPUT TO SSTREAM @RatioDistributionFile
     CLUSTERED BY Segment
           WITH STREAMEXPIRY @StreamExpiry;
+
 SampledAccountsImages =
-    SELECT *.Except(AssetId, AspectRatio, RandRank) 
+    SELECT *.Except(AssetId, AspectRatio) 
     FROM SampledAccountsImages; 
 
+Stat = SELECT *
+    FROM Stat
+    UNION ALL
+    SELECT "#4 after SampledAccountsImages" AS key,
+           Segment,
+           COUNT(DISTINCT AccountId) AS SampleAccountIdCount,
+           SUM(RevenueUSD) AS TotalRevenue
+    FROM SampledAccountsImages
+    ;
 AggregatedAccountImages =
     REDUCE SampledAccountsImages
     ON AccountId
@@ -483,7 +499,7 @@ OUTPUT AggregatedAccountImages TO SSTREAM @AggregatedAccountImagesFile
 Stat = SELECT *    
     FROM Stat
     UNION ALL
-    SELECT "#4 after AggregatedAccountImages" AS key,
+    SELECT "#5 after AggregatedAccountImages" AS key,
            Segment,
            COUNT(DISTINCT AccountId) AS SampleAccountIdCount,
            SUM(RevenueUSD) AS TotalRevenue
