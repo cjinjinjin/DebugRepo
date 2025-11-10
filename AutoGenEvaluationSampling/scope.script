@@ -94,7 +94,7 @@ MODULE "/shares/bingads.algo.prod.adinsights/data/shared_data/AdvertiserEngageme
 // Input Streams
 #DECLARE AccSegRoot string = "/shares/bingads.algo.prod.adinsights/data/shared_data/DemandResources/AccountSegment/";
 #DECLARE AccSegPath string = string.Format("{0}/{1:yyyy/MM}/AccountSegment_{1:yyyy-MM-dd}.ss", @AccSegRoot, @GeneratedEndDate);
-
+#DECLARE C2CMasterViewPath string = "/shares/adCenter.BICore.upload/prod/C2C/Views/MasterView/C2CMasterView.view"; 
 
 #DECLARE UcmTacticInfoFile string = "/shares/bingads.algo.prod.adinsights/data/prod/pipelines/Optimization/UCM/Data/UcmTacticInfo.csv";
 #DECLARE CDLFolder string = "/shares/bingads.algo.prod.adinsights/data/shared_data/AdvertiserEngagement/Metallica/prod/CommonDataFeed/";
@@ -111,6 +111,7 @@ AssetImages =
 // Output Streams
 #DECLARE AccountInfoFile string = string.Format("{0}/{1:yyyy/MM}/AccountInfo_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
 #DECLARE SampledAccountsFile string = string.Format("{0}/{1:yyyy/MM}/SampledAccounts_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
+#DECLARE AllAccountsFile string = string.Format("{0}/{1:yyyy/MM}/AllAccounts_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
 #DECLARE AggregatedAccountImagesFile string = string.Format("{0}/{1:yyyy/MM}/AggregatedAccountImagesFile_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
 #DECLARE RatioDistributionFile string = string.Format("{0}/{1:yyyy/MM}/RatioDistribution_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
 #DECLARE SampledNoAccountsFile string = string.Format("{0}/{1:yyyy/MM}/SampledNoAccounts_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
@@ -331,11 +332,11 @@ AdExtensionData =
         SELECT AccountId, AdExtensionId.ToString() AS AdExtensionId FROM AdExtensionOrderView;
 
 FullExtensionItemAssets = SELECT
-            AdExtensionId,
-                                 AssetId
+                            AdExtensionId,
+                            AssetId
                           FROM 
                           (
-                              SSTREAM "/local/user/jinjinchen/AdDemandMeasurement/2025/11/2025-11-05-ImageExtension.ss"
+                              SSTREAM "/local/user/jinjinchen/AdDemandMeasurement/FullExtension/2025/11/ImageExtension_20251109_195818.ss"
                           );
                           
 AdExtensionItemDataAccount =  
@@ -434,6 +435,15 @@ AccountsImages =
         AssetImages AS B
         ON A.AssetId == B.AssetId;
 
+AccountsImages =
+    SELECT *,
+           IF(AspectRatio >= 1.77, "WideImages", "TallImages") AS RatioType
+    FROM AccountsImages
+
+OUTPUT TO SSTREAM @AllAccountsFile
+    CLUSTERED BY AccountId
+          WITH STREAMEXPIRY @StreamExpiry; 
+
 Stat = SELECT *
     FROM Stat
     UNION ALL
@@ -443,40 +453,69 @@ Stat = SELECT *
            SUM(RevenueUSD) AS TotalRevenue
     FROM AccountsImages;
 
+AccountNoImage =
+    SELECT DISTINCT AccountId, Segment,Vertical_L1, RevenueUSD
+    FROM AccountsAssetId_ServableAds AS A
+    LEFT ANTISEMIJOIN
+        AccountsImages AS B
+        ON A.AccountId == B.AccountId;
+
+Stat = 
+    SELECT *    
+    FROM Stat
+    UNION ALL
+    SELECT "#3.1 SampledNoAccounts" AS key,
+           Segment,
+           COUNT(DISTINCT AccountId) AS SampleAccountIdCount,
+           SUM(RevenueUSD) AS TotalRevenue
+    FROM AccountNoImage
+    ;
+
 SampledAccountsImages = 
-    SELECT *,
+    SELECT DISTINCT Segment, AccountId
+    FROM AccountsImages;  
+
+SampledAccountsImages = 
+SELECT *,
     ROW_NUMBER() OVER (
                 PARTITION BY Segment
                 ORDER BY RandomGenerator.GetRandom() DESC
             ) AS RandRank
-    FROM AccountsImages;  
+    FROM SampledAccountsImages;
 
 SampledAccountsImages = 
-    SELECT 
-        *.Except(RandRank),
-        IF(AspectRatio >= 1.77, "WideImages", "TallImages") AS RatioType
+    SELECT Segment, AccountId
     FROM SampledAccountsImages
     WHERE RandRank <= 500;
 
+SampleImages = SELECT A.*
+    FROM AccountsImages AS A
+    INNER JOIN SampledAccountsImages AS B
+        ON A.Segment == B.Segment AND A.AccountId == B.AccountId;
 
-OUTPUT SampledAccountsImages TO SSTREAM @SampledAccountsFile
+OUTPUT SampleImages TO SSTREAM @SampledAccountsFile
     CLUSTERED BY Segment,Vertical_L1
     WITH STREAMEXPIRY @StreamExpiry;
 
+
 ImageSizeStat = 
-    SELECT Segment,
+    SELECT "AllAccountsImages" AS Source,
+            Segment,
+           COUNT(DISTINCT AccountId) AS AccountCount,
+           COUNTIF(RatioType == "TallImages") AS TallImagesCount,
+           COUNTIF(RatioType == "WideImages") AS WideImagesCount
+    FROM AccountsImages
+    UNION ALL
+    SELECT  "SampledAccountsImages" AS Source,
+            Segment,
            //Vertical_L1,
            COUNT(DISTINCT AccountId) AS AccountCount,
            COUNTIF(RatioType == "TallImages") AS TallImagesCount,
            COUNTIF(RatioType == "WideImages") AS WideImagesCount
-    FROM SampledAccountsImages;
+    FROM SampleImages;
 OUTPUT TO SSTREAM @RatioDistributionFile
     CLUSTERED BY Segment
           WITH STREAMEXPIRY @StreamExpiry;
-
-SampledAccountsImages =
-    SELECT *.Except(AssetId, AspectRatio) 
-    FROM SampledAccountsImages; 
 
 Stat = SELECT *
     FROM Stat
@@ -485,10 +524,10 @@ Stat = SELECT *
            Segment,
            COUNT(DISTINCT AccountId) AS SampleAccountIdCount,
            SUM(RevenueUSD) AS TotalRevenue
-    FROM SampledAccountsImages
+    FROM SampleImages
     ;
 AggregatedAccountImages =
-    REDUCE SampledAccountsImages
+    REDUCE SampleImages
     ON AccountId
     USING AggregateImageByAspectReducer;
 

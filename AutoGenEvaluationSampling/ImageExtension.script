@@ -1,0 +1,291 @@
+REFERENCE @"System.Core.dll";
+//Script GUID:491d309b-1DeltaImage6-43b6-a9e5-79266d121b39
+//Used for tracking history
+//REFERENCE @"System.Core.dll";
+USING System;
+REFERENCE @"/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/AdsPlus/SangamCommon/DLL/AdsPlus.AAASchemas.dll";
+REFERENCE @"/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/AdsPlus/SangamCommon/DLL/Microsoft.Bond.dll";
+REFERENCE @"/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/AdsPlus/SangamCommon/DLL/Microsoft.Bond.Interfaces.dll";
+REFERENCE @"/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/AdsPlus/SangamCommon/DLL/RichAds.Cosmos.dll";
+REFERENCE @"/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/AdsPlus/SangamCommon/DLL/MurmurHash.dll";
+REFERENCE @"/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/AdsPlus/Annotation/16082_DynamicCalloutAnnotation/References/DynamicCalloutLibrary.dll";
+REFERENCE @"/shares/bingads.algo.adsplus/AdsPlusDataShare/Team/Gene/ForAether/bin/AdPredictor.ScopeUtils.dll";
+REFERENCE @"/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/AdsPlus/SangamCommon/DLL/RichAds.Cosmos.dll";
+REFERENCE @"/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/AdsPlus/SangamCommon/DLL/AdsPlus.AAASchemas.dll";
+REFERENCE @"/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/AdsPlus/SangamCommon/DLL/Newtonsoft.Json.dll";
+[PIN] REFERENCE "/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/AdsPlus/SangamCommon/DLL/Microsoft.Bond.dll";
+[PIN] REFERENCE "/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/AdsPlus/SangamCommon/DLL/Microsoft.Bond.Interfaces.dll";
+REFERENCE @"/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/AdsPlus/SangamCommon/DLL/Newtonsoft.Json.dll";
+REFERENCE @"/shares/bingads.algo.adsplus/AdsPlusDataShare/Team/Gene/ForAether/bin/AdPredictor.ScopeUtils.dll";
+RESOURCE "shares/bingads.algo.adsplus/AdsPlusDataShare/AdsPlus/DecorationConsolidation/Reference/AdExtensionProertyId-Name.txt";
+MODULE @"/shares/bingads.data.clickpredict/data/ClickPrediction/DEWordBreaker/PROD/DEWordBreaker.module";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/WordBreaker.dll";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/WordBreaker.dll.config";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/WordBreakerServices.dll";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/WordBreakerServicesWrapper.dll";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/TrademarkReplacements.txt";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/ADC-langwrbk.dll";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/1028noise.bin";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/1030noise.bin";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/1031noise.bin";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/1033noise.bin";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/1035noise.bin";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/1036noise.bin";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/1040noise.bin";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/1041noise.bin";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/1042noise.bin";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/1043noise.bin";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/1044noise.bin";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/1046noise.bin";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/1053noise.bin";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/2052noise.bin";
+RESOURCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/3082noise.bin";
+USING ExpLib REFERENCE @"/shares/adCenter.RnR.Daily_SLA/data/QKPI/resources/common/ExpLib.exe";
+USING System.Collections.Specialized;
+USING System.Text.RegularExpressions;
+USING System.Threading;
+USING System.Linq;
+USING ExpLib;
+REFERENCE @"/shares/searchDM/distrib/released/FrontEndUtil/FrontEndUtil.dll"; 
+RESOURCE @"/shares/searchDM/distrib/released/FrontEndUtil/GetHashUtil.dll";
+
+REFERENCE "/shares/BingAds.Algo.Relevance/Team/Relevance/Libs/AbacusExpScopeLib.dll";  // GenericExeInvokingProcessor
+USING AbacusExpScopeLib;
+REFERENCE "/shares/BingAds.Algo.Relevance/Team/Relevance/Libs/ScopeExtension.dll";
+USING Microsoft.AdCenter.RnR.Relevance.ScopeExtension;
+
+// Word Breaker
+REFERENCE @"/shares/BingAds.Algo.Relevance/Team/Relevance/Libs/ICSharpCode.SharpZipLib.dll";
+REFERENCE @"/shares/BingAds.Algo.Relevance/Team/Relevance/Libs/Microsoft.AdCenter.AlteredQuery.dll";
+RESOURCE @"/shares/BingAds.Algo.Relevance/Team/Relevance/Libs/EnFrWordBreaker.zip";
+
+REFERENCE "/shares/BingAds.Algo.Relevance/Team/Relevance/Libs/PegBinGenerationUtility.dll";  // GenericAdaptor
+USING PegBinGenerationUtility;
+
+REFERENCE "/shares/BingAds.Algo.Relevance/Team/Relevance/Libs/RelevanceLibrary.dll";  // BinFileUtilities.GetMurmurHash
+USING RelevanceLibrary;
+REFERENCE "/shares/BingAds.Algo.Relevance/Team/Relevance/Libs/mytest.dll";
+RESOURCE @"/shares/BingAds.Algo.Relevance/Team/Relevance/Libs/IPXDatapipelineUtil.dll";
+
+REFERENCE @"System.Core.dll";
+//Script GUID:0e6716e8-b94d-4cd1-9875-9b2da4d189c2
+//Used for tracking history
+
+RESOURCE @"/shares/Bingads.algo.prod.IntentMatching/Data/RelatedContent/IUPipeline/flang.dll"; RESOURCE @"/shares/Bingads.algo.prod.IntentMatching/Data/RelatedContent/IUPipeline/flangrti.dll"; RESOURCE @"/shares/Bingads.algo.prod.IntentMatching/Data/RelatedContent/IUPipeline/IUNativeExecutor.dll"; RESOURCE @"/shares/Bingads.algo.prod.IntentMatching/Data/RelatedContent/IUPipeline/libomp.dll"; RESOURCE @"/shares/Bingads.algo.prod.IntentMatching/Data/RelatedContent/IUPipeline/MLTKNeuralNetWrapper.dll"; RESOURCE @"/shares/Bingads.algo.prod.IntentMatching/Data/RelatedContent/IUPipeline/openblas.dll"; RESOURCE @"/shares/Bingads.algo.prod.IntentMatching/Data/RelatedContent/IUPipeline/SvgDecoder.dll"; REFERENCE @"/shares/Bingads.algo.prod.IntentMatching/Data/RelatedContent/IUPipeline/IUManagedExecutor.dll"; REFERENCE @"/shares/Bingads.algo.prod.IntentMatching/Data/RelatedContent/IUPipeline/IUScopeProcessor.dll"; RESOURCE @"/shares/Bingads.algo.prod.IntentMatching/Data/RelatedContent/IUPipeline/7z.exe";
+
+
+#DECLARE ENV string = "PROD".StartsWith("@") ? "PROD" : "PROD"; // TEST or PROD
+
+#DECLARE ResourceRoot string = @"/shares/bingads.data.prod.rap/shared/MMA/PipelineResources/"+ @ENV + "/Resources/";
+
+
+REFERENCE @ResourceRoot + "MMAScopeUtilities.dll";
+REFERENCE @ResourceRoot + "MMAUtilities.dll";
+REFERENCE @ResourceRoot + "MMA.DataContracts.dll";
+REFERENCE @ResourceRoot + "Microsoft.Bond.Interfaces.dll";
+
+USING Microsoft.Bing.Ads.MMA.Utilities;
+//RESOURCE @"/local/RelatedContent/AVEV9IUPipeline/pipeline_rc3.7z.001"; 
+//RESOURCE @"/local/RelatedContent/AVEV9IUPipeline/pipeline_rc3.7z.002"; 
+//RESOURCE @"/local/RelatedContent/AVEV9IUPipeline/pipeline_rc3.7z.003"; 
+//RESOURCE @"/local/RelatedContent/AVEV9IUPipeline/pipeline_rc3.7z.004"; 
+//RESOURCE @"/local/RelatedContent/AVEV9IUPipeline/pipeline_rc3.7z.005"; 
+//USING IUPipelineScopeProcessor;
+
+#DECLARE RootDir string = @"/local/user/jinjinchen/AdDemandMeasurement/FullExtension/2025/11/";
+#DECLARE Datetime string = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+#DECLARE OutputSSPath string = @RootDir + "ImageExtension_" + @Datetime + ".ss";
+#DECLARE RawDataImageExtensionLatest string = @"/shares/bingAds.BI.OI/AdsOI/ObjectStoreDump/Images/Assets_2025_11_05_1.ss";
+
+AccountImageExtension = SSTREAM @"/local/aether/_b/rauser3/be8127c6-8621-4ac5-bd99-a9f47412a6f3@@@Extract_Image_Extension@@@5da0ed5e@@@11-7-2025_11-31-28_AM/AccountExtensionData/AccountExtensionData_db309302-26e5-4a8c-973b-8d881b2404ba.ss";
+CampaignImageExtension = SSTREAM @"/local/aether/_b/rauser3/be8127c6-8621-4ac5-bd99-a9f47412a6f3@@@Extract_Image_Extension@@@5da0ed5e@@@11-7-2025_11-31-28_AM/CampaignExtensionData/CampaignExtensionData_14d184a8-9f2c-4c2f-b4b0-ca6ddac7b78a.ss";
+OrderImageExtension = SSTREAM @"/local/aether/_b/rauser3/be8127c6-8621-4ac5-bd99-a9f47412a6f3@@@Extract_Image_Extension@@@5da0ed5e@@@11-7-2025_11-31-28_AM/OrderExtensionData/OrderExtensionData_6a56e479-8f49-458a-a5c2-7313ba1e33e5.ss";
+
+#DECLARE py_expr string = "Segmentator()";
+#DECLARE py_prologue string = @"#!/usr/bin/env python 
+import json
+from collections import OrderedDict
+import sys
+ 
+ 
+class Segmentator:
+ 
+    def Process(self, inputRow, outputRow):
+        outputRow['AdExtensionItemId'] = inputRow['AdExtensionItemId']
+        outputRow['AdExtensionId'] = inputRow['AdExtensionId']
+        outputRow['AssetId'] = inputRow['AssetId']
+        outputRow['MediaURL'] = inputRow['MediaURL']
+        outputRow['DestintationUrl'] = inputRow['DestintationUrl']
+        outputRow['OriginalMediaHeight'] = inputRow['OriginalMediaHeight']
+        outputRow['OriginalMediaWidth'] = inputRow['OriginalMediaWidth']
+        outputRow['AltText'] = inputRow['AltText']
+        outputRow['AssetId2'] = inputRow['AssetId2']
+        outputRow['AssetId3'] = inputRow['AssetId3']
+        outputRow['AssetId4'] = inputRow['AssetId4']
+        outputRow['AssetId5'] = inputRow['AssetId5']
+    
+        json_str = inputRow['AssetId5']
+        json_list = json.loads(json_str)
+
+        ids = [item['id'] for item in json_list]
+        for i in range(8):
+            column_name = 'AssetId' + str(6+i)
+            if i < len(ids):
+                outputRow[column_name] = str(ids[i])
+            else:
+                outputRow[column_name] = ''
+            
+        return outputRow
+ 
+";
+
+HotAds_ImageExtension =
+    SELECT AdExtensionItemId.ToString() AS AdExtensionItemId,
+            AdExtensionId.ToString() AS AdExtensionId,
+            AssetId,
+            MediaURL,
+            DestintationUrl,
+            OriginalMediaHeight,OriginalMediaWidth,AltText, AssetId2, AssetId3, AssetId4, AssetId5
+    FROM AccountImageExtension
+    UNION ALL
+    SELECT AdExtensionItemId.ToString() AS AdExtensionItemId,
+            AdExtensionId.ToString() AS AdExtensionId,
+            AssetId,
+            MediaURL,
+            DestintationUrl,
+            OriginalMediaHeight,OriginalMediaWidth,AltText, AssetId2, AssetId3, AssetId4, AssetId5
+    FROM CampaignImageExtension UNION ALL
+    SELECT AdExtensionItemId.ToString() AS AdExtensionItemId,
+            AdExtensionId.ToString() AS AdExtensionId,
+            AssetId,
+            MediaURL,
+            DestintationUrl,
+            OriginalMediaHeight,OriginalMediaWidth,AltText, AssetId2, AssetId3, AssetId4, AssetId5
+    FROM OrderImageExtension;
+
+// extract AssetId6 ~ AssetId13
+HotAds_ImageExtension_WithAssetId5 =
+    SELECT *
+    FROM HotAds_ImageExtension
+    WHERE !String.IsNullOrEmpty(AssetId5);
+
+HotAds_ImageExtension_WithoutAssetId5 = 
+    SELECT * FROM HotAds_ImageExtension
+    WHERE String.IsNullOrEmpty(AssetId5);
+
+HotAds_ImageExtension_WithAssetId5 = PROCESS HotAds_ImageExtension_WithAssetId5
+         PRODUCE AdExtensionItemId:string,
+            AdExtensionId:string,
+            AssetId:string,
+            MediaURL:string,
+            DestintationUrl:string,
+            OriginalMediaHeight:string,OriginalMediaWidth:string,AltText:string, AssetId2:string, AssetId3:string, AssetId4:string, AssetId5:string,
+            AssetId6: string, AssetId7: string, AssetId8: string, AssetId9: string, AssetId10: string, AssetId11: string, AssetId12: string, AssetId13: string
+         USING Processors.Python(prologue: @py_prologue, expression: @py_expr);
+ 
+HotAds_ImageExtension_WithAllAssetIds = SELECT AdExtensionItemId, AdExtensionId, MediaURL, DestintationUrl, OriginalMediaHeight, OriginalMediaWidth, AltText, AssetId AS AssetId1, AssetId2, AssetId3, AssetId4 AS AssetId4, "" AS AssetId6, "" AS AssetId7, "" AS AssetId8, "" AS AssetId9, "" AS AssetId10, "" AS AssetId11, "" AS AssetId12, "" AS AssetId13 FROM HotAds_ImageExtension_WithoutAssetId5
+      UNION ALL
+      SELECT AdExtensionItemId, AdExtensionId, MediaURL, DestintationUrl, OriginalMediaHeight, OriginalMediaWidth, AltText, AssetId AS AssetId1,  AssetId2, AssetId3, AssetId4, AssetId6, AssetId7, AssetId8, AssetId9, AssetId10, AssetId11, AssetId12, AssetId13 FROM HotAds_ImageExtension_WithAssetId5;
+
+// Flatten AssetIds
+HotAds_ImageExtension_FlatAssetIds = SELECT AdExtensionItemId,
+             AdExtensionId,
+             MediaURL,
+             DestintationUrl,
+             OriginalMediaHeight,
+             OriginalMediaWidth,
+             AltText,
+             AssetIds AS MergeAssetId
+      FROM HotAds_ImageExtension_WithAllAssetIds
+           CROSS APPLY new List<string>{AssetId1, AssetId2, AssetId3, AssetId4, AssetId6, AssetId7, AssetId8, AssetId9, AssetId10, AssetId11, AssetId12, AssetId13} AS AssetIds;
+HotAds_ImageExtension_FlatAssetIds = SELECT * FROM HotAds_ImageExtension_FlatAssetIds WHERE !String.IsNullOrEmpty(MergeAssetId);
+
+// New: 2025-11-10: filter display ads
+AccountAssetPair = 
+    SELECT  
+        AccountID AS AccountId, AdId, AssetId, AdAssetAssociationTypeId AS AssetAssociationTypeId
+        FROM 
+        ( 
+            VIEW @C2CMasterViewPath 
+            PARAMS 
+            ( 
+                ViewName = "AdAsset_Raw", 
+                ViewType = 1, 
+                DataMode = "PROD",
+                ViewMode = "PROD",
+                IncludeDeletedRecordsForType1Data = true 
+            ) 
+        ) WHERE IsSoftDeleted != true AND AdId != null AND AssetId != null
+        AND AdAssetAssociationTypeId == 80;
+
+HotAds_ImageExtension_FlatAssetIds =
+    SELECT *
+    FROM HotAds_ImageExtension_FlatAssetIds
+    LEFT ANTISEMIJOIN
+        AccountAssetPair
+        ON HotAds_ImageExtension_FlatAssetIds.MergeAssetId == AccountAssetPair.AssetId;
+
+// activate AssetId filtered by raw data
+AssetImages = SSTREAM SPARSE STREAMSET "/shares/bingAds.BI.OI/AdsOI/ObjectStoreDump/Images" PATTERN @"Assets_2025_11_05" + @"_%n.ss" RANGE __serialnum=["1", "5"]; 
+RawDataImageExtension = SELECT DISTINCT AssetId.ToString() AS AssetId,Base64Data FROM AssetImages;
+
+HotAds_ImageExtension_FlatAssetIds =
+    SELECT *
+    FROM HotAds_ImageExtension_FlatAssetIds
+    LEFT SEMIJOIN
+        RawDataImageExtension
+        ON HotAds_ImageExtension_FlatAssetIds.MergeAssetId == RawDataImageExtension.AssetId;
+
+HotAds_ImageExtension_FirstImage = SELECT AdExtensionItemId,
+             AdExtensionId,
+             MediaURL,
+             DestintationUrl,
+             OriginalMediaHeight,
+             OriginalMediaWidth,
+             AltText,
+             FIRST(MergeAssetId) AS AssetId FROM HotAds_ImageExtension_FlatAssetIds GROUP BY AdExtensionItemId, AdExtensionId,  MediaURL, DestintationUrl, OriginalMediaHeight, OriginalMediaWidth, AltText;
+
+
+OUTPUT TO SSTREAM @OutputSSPath WITH STREAMEXPIRY "90";
+// OUTPUT TO SSTREAM "/local/aether/_b/rauser3/be8127c6-8621-4ac5-bd99-a9f47412a6f3@@@Full_set_ImageExtension_MS@@@7b1836f9@@@11-7-2025_12-10-25_PM/FullSetImageExtensionMS/FullSetImageExtensionMS_05bc27f5-f387-4381-a93a-fd24b0a2815e.ss" WITH STREAMEXPIRY "2";
+// Stat =
+//     SELECT "HotAds_ImageExtension_FlatAssetIds" AS k,
+//            COUNT() AS n
+//     FROM HotAds_ImageExtension_FlatAssetIds
+//     UNION ALL
+//     SELECT "Base64 RawData" AS k,
+//            COUNT() AS n
+//     FROM RawDataImageExtension
+//     UNION
+//     SELECT "HotAds_ImageExtension_FirstImage" AS k,
+//            COUNT() AS n
+//     FROM HotAds_ImageExtension_FirstImage;
+// OUTPUT TO SSTREAM "/local/aether/_b/rauser3/be8127c6-8621-4ac5-bd99-a9f47412a6f3@@@Full_set_ImageExtension_MS@@@7b1836f9@@@11-7-2025_12-10-25_PM/Stat/Stat_1ddabf14-8d5a-4aad-a031-3274ca3fd36a.ss"  WITH STREAMEXPIRY "2";   
+
+#CS
+using Microsoft.SCOPE.Types;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+using ScopeRuntime;
+using System.IO.Compression;
+
+using Tools;
+
+public static string GetMd5String(string inputString)
+{
+    using (System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create())
+    {
+        byte[] inputBytes = System.Text.Encoding.UTF8.GetBytes(inputString);
+        byte[] hashBytes = md5.ComputeHash(inputBytes);
+ 
+        string hashCode = BitConverter.ToString(hashBytes).Replace("-", "");
+        return hashCode;
+    }
+}
+
+#ENDCS
+
+// Generated by ScopeStudio, version 3.1.0000.2
+

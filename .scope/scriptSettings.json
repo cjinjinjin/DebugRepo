@@ -11,6 +11,12 @@
             "clusterRun": {},
             "localRun": {},
             "codeBehindFiles": []
+        },
+        "AutoGenEvaluationSampling/imageextension.script": {
+            "account": "",
+            "clusterRun": {},
+            "localRun": {},
+            "codeBehindFiles": []
         }
     }
 }
