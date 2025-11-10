@@ -61,7 +61,7 @@ REFERENCE @"System.IO.Compression.FileSystem.dll";
 REFERENCE @"System.Drawing.dll";
 
 // Input Params
-#DECLARE RunDate DateTime = DateTime.Parse("2025-11-01");
+#DECLARE RunDate DateTime = DateTime.Parse("2025-11-02");
 #DECLARE OutputFolder string = "//local/user/jinjinchen/AdDemandMeasurement/FullExtension/";
 #DECLARE StreamExpiry string = "60";
 
@@ -105,7 +105,6 @@ AssetImages =
                    PATTERN @"Assets_"+@CurrentDataStrforImage + @"_%n.ss"
                    RANGE __serialnum = ["1", "5"];
 
-#DECLARE C2CMasterViewPath string = "/shares/adCenter.BICore.upload/prod/C2C/Views/MasterView/C2CMasterView.view"; 
 #DECLARE UnifiedLayerDemandView string = @"/shares/bingAds.BI.OI/AdsOI/DemandMetrics/Views/UnifiedLayerDemand.view"; 
 
 // Output Streams
@@ -336,7 +335,7 @@ FullExtensionItemAssets = SELECT
                             AssetId
                           FROM 
                           (
-                              SSTREAM "/local/user/jinjinchen/AdDemandMeasurement/FullExtension/2025/11/ImageExtension_20251109_195818.ss"
+                              SSTREAM "/local/user/jinjinchen/AdDemandMeasurement/2025/11/2025-11-05-ImageExtension.ss"
                           );
                           
 AdExtensionItemDataAccount =  
@@ -438,7 +437,7 @@ AccountsImages =
 AccountsImages =
     SELECT *,
            IF(AspectRatio >= 1.77, "WideImages", "TallImages") AS RatioType
-    FROM AccountsImages
+    FROM AccountsImages;
 
 OUTPUT TO SSTREAM @AllAccountsFile
     CLUSTERED BY AccountId
