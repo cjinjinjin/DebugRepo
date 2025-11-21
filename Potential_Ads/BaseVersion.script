@@ -358,6 +358,7 @@ InputCampaignWithoutImage = SELECT DISTINCT A.AccountId, A.CampaignId
     INNER JOIN
         Input_ImageAsset_PMAX_withoutUrl AS B
         ON A.AccountId == B.AccountId AND A.CampaignId == B.CampaignId;
+
 //OUTPUT TO SSTREAM @CampaignWithoutImage;
 
 Stat =
@@ -415,7 +416,7 @@ CampaignRegularBudget =
     FROM InputCampaignWithoutImage AS A
     INNER JOIN
     (
-        SELECT DISTINCT CampaignId, BudgetAmountUSD 
+        SELECT DISTINCT CampaignId.ToString() AS CampaignId, BudgetAmountUSD 
         FROM 
         ( 
             VIEW @UnifiedLayerDemandView 
@@ -428,9 +429,28 @@ CampaignRegularBudget =
         WHERE BudgetId  == 0
     ) AS B
     ON A.CampaignId == B.CampaignId;
+
+InputCampaignWithoutImageSharedBudget =
+    SELECT A.AccountId, A.CampaignId, BudgetId
+    FROM InputCampaignWithoutImage AS A
+    INNER JOIN
+    (
+        SELECT DISTINCT CampaignId.ToString() AS CampaignId, BudgetId 
+        FROM 
+        ( 
+            VIEW @UnifiedLayerDemandView 
+            PARAMS 
+            ( 
+                ViewName = "Campaigns", 
+                LogDate = @RunDate 
+            ) 
+        ) 
+        WHERE BudgetId  != 0
+    ) AS B
+    ON A.CampaignId == B.CampaignId;
 SharedBudget = 
     SELECT
-        *,
+        *.Except(AccountID), AccountID.ToString() AS AccountID,
         ROW_NUMBER() OVER (PARTITION BY BudgetId) AS RowNumber
     FROM
     (
@@ -438,8 +458,8 @@ SharedBudget =
         PARAMS
         (
             ViewName = "Budget_Raw",
-            ViewType = @SnapshotViewType,
-            RequestEndDateUtc = @RunDate.AddDays(1),
+            ViewType = 1,
+            RequestEndDateUtc = @RunDate,
             RequestEndHourUtc = 0
         )
     )
@@ -455,7 +475,7 @@ CampaignSharedBudget =
         L.CampaignId,
         L.BudgetId,
         (double)R.DailyBudgetAmt AS SharedBudget
-    FROM InputCampaignWithoutImage AS L
+    FROM InputCampaignWithoutImageSharedBudget AS L
         INNER JOIN SharedBudget AS R
             ON L.AccountId == R.AccountID AND L.BudgetId == R.BudgetId
     ;
@@ -470,6 +490,22 @@ CampaignBudget =
         LEFT OUTER JOIN CampaignSharedBudget AS B
             ON A.AccountId == B.AccountId AND A.CampaignId == B.CampaignId
     ;
+Input_ImageAsset_TA_withoutUrl_withBudget =
+    SELECT A.*
+    FROM Input_ImageAsset_TA_withoutUrl AS A
+    INNER JOIN
+        CampaignBudget AS B
+        ON A.AccountId == B.AccountId AND A.CampaignId == B.CampaignId
+    WHERE B.FinalBudget != null;
+
+Input_ImageAsset_PMAX_withoutUrl_withBudget =
+    SELECT A.*
+    FROM Input_ImageAsset_PMAX_withoutUrl AS A
+    INNER JOIN
+        CampaignBudget AS B
+        ON A.AccountId == B.AccountId AND A.CampaignId == B.CampaignId
+    WHERE B.FinalBudget != null;
+
 Stat =
     SELECT *
     FROM Stat
@@ -477,7 +513,14 @@ Stat =
     SELECT "#8 Campaigns Without Image and Budget" AS K,
            COUNT(DISTINCT CampaignId) AS V
     FROM CampaignBudget WHERE FinalBudget == null
-    ;
+    UNION ALL
+    SELECT "#8.1 AdId num Without Image and Budget" AS K,
+           COUNT(DISTINCT AdId) AS V
+    FROM Input_ImageAsset_TA_withoutUrl_withBudget
+    UNION ALL
+    SELECT "#8.2 AssetGroupId num Without Image and Budget" AS K,
+           COUNT(DISTINCT AssetGroupId) AS V
+    FROM Input_ImageAsset_PMAX_withoutUrl_withBudget;
 OUTPUT TO @StatFile USING DefaultTextOutputter(outputHeader: true);  
 
 
