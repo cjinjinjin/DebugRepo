@@ -6,6 +6,7 @@ USING Microsoft.Bing.HashUtil;
 #DECLARE RunDate DateTime = DateTime.Parse("2025-11-19");
 #DECLARE RunDateStr string = @RunDate.ToString("yyyy-MM-dd");
 #DECLARE CurrentDataStrforImage string = @RunDate.ToString("yyyy_MM_dd");
+#DECLARE NativeEligibleCampaigns string = "/shares/bingads.hm/NativeAds/RRI/Data/Demand/MSANEligibleCampaigns/" + @RunDate.ToString("yyyy/MM/dd") + "/NativeEligibleCampaigns.ss";
 #DECLARE OutputFolder string = "/local/user/jinjinchen/MSNPotentialAds/AdsImage/MZ/" + @RunDateStr;
 #DECLARE OutputFile string = string.Format("{0}/AdLevel_TA_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
 #DECLARE OutputFileImage string = string.Format("{0}/AdLevel_TA_Image_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
@@ -22,6 +23,7 @@ AssetImages =
 #DECLARE C2CMasterViewPath string = "/shares/adCenter.BICore.upload/prod/C2C/Views/MasterView/C2CMasterView.view"; 
 #DECLARE UACView string = @"/shares/bingads.platform.prod.indexgen/Data/publish/UAC/UAC.view"; 
 #DECLARE MonetizationView string = @"/shares/adCenter.BICore.SubjectArea/SubjectArea/Monetization/views/PROD/MonetizationFacts.view";
+#DECLARE UnifiedLayerDemandView string = "/shares/bingAds.BI.OI/AdsOI/DemandMetrics/Views/UnifiedLayerDemand.view"; 
 #DECLARE LimitedDays int = int.Parse("1");
 REFERENCE @"System.IO.Compression.dll";
 REFERENCE @"System.IO.Compression.FileSystem.dll";
@@ -33,7 +35,7 @@ NativeEligibleCampaigns =
            CampaignId.ToString() AS CampaignId
     FROM
     (
-        SSTREAM "/shares/bingads.hm/NativeAds/RRI/Data/Demand/MSANEligibleCampaigns/2025/11/18/NativeEligibleCampaigns.ss"
+        SSTREAM @NativeEligibleCampaigns
     );
 
 
@@ -147,24 +149,6 @@ Stat = SELECT "#1 Input Campaign" AS K,
            COUNT(DISTINCT CampaignId) AS V
     FROM Input_excludeImageExtension;
 
-//FullAds =
-//    SELECT *.Except(AccountId,CampaignId),
-//           AccountId.ToString() AS AccountId,
-//           CampaignId.ToString() AS CampaignId
-//    FROM
-//    (
-//        VIEW @UACView
-//        PARAMS
-//        (
-//            AdTypes = "EXTA|RSA|_PMAX|_UNIVAPP", // RSA & Exta & PMAx & DSA;Non MMA
-//            ViewOptions = @"{""OutputProc"":""TaFac""}",
-//            FilterByView = @"", //offline corpus 
-//            AdFeatures = @"All|-IsDeleted", // Active 
-//            OutputColumns = @"AccountId,CampaignId,AdId,ListingId,CampaignTypeId,AdTypeId,Keyword,ActualAdTitle,ActualAdDesc,ActualDestinationURL,ActualDisplayURL,TargetUrl,LanguageCodes,PublisherCountries"
-//        )
-//    )
-//    WHERE !string.IsNullOrEmpty(ActualAdTitle) AND !string.IsNullOrEmpty(ActualDestinationURL);
-
 MZ=
     SELECT DISTINCT
            AdvertiserAccountId.ToString() AS AccountId,
@@ -186,20 +170,7 @@ MZ=
      )
     WHERE FraudQualityBand > 1;
     ;
-//JointMZPerf=
-//    SELECT IF(MediumId IN (1, 3), "Search", "Audiance") AS Traffic,
-//           IF(MarketplaceClassificationId == 1, "Core", "Rest") AS Marketplace,
-//           *
-//    FROM MZ
-//    WHERE PublisherId == 17160724;  //MSN
-
-//JointMZPerf =
-//    SELECT *.Except(AssetId),
-//           AssetId,
-//           AssetId.ToString() AS AssetIdStr
-//    FROM JointMZPerf
-//    CROSS APPLY AssetIds.Split(';', ',') AS AssetId;
-
+    
 AggregateKeywords =
     SELECT DISTINCT B.*
     FROM Input_excludeImageExtension AS A
@@ -223,17 +194,14 @@ Stat =
     SELECT *
     FROM Stat
     UNION ALL
-    SELECT "#3 Join Corpus for features" AS K,
+    SELECT "#3 Join MZ for features" AS K,
            COUNT(DISTINCT CampaignId) AS V
     FROM AggregateKeywords
          UNION ALL
-       SELECT "#3.1 Join Corpus for features: Ad Level" AS K,
+       SELECT "#3.1 Join MZ for features: Ad Level" AS K,
               COUNT(DISTINCT AdId) AS V
     FROM AggregateKeywords;
-//    UNION ALL
-//         SELECT "#3.2 Join Corpus for features: AggregateKeywords" AS K,
-//                  COUNT(DISTINCT AdId) AS V
-//         FROM AggregateKeywords;
+
 
 //Start: MMA
 AccountAssetPair_TA = 
@@ -440,6 +408,76 @@ Stat =
     SELECT "#7.1 Image num of Pmax" AS K, COUNT(DISTINCT DemandAssetId) AS V
     FROM Input_ImageAsset_PMAX_withUrl;
 
+
+// UnifiedLayerDemandView: regular budget(specific for each campaign) 
+CampaignRegularBudget =
+    SELECT A.AccountId, A.CampaignId, BudgetAmountUSD
+    FROM InputCampaignWithoutImage AS A
+    INNER JOIN
+    (
+        SELECT DISTINCT CampaignId, BudgetAmountUSD 
+        FROM 
+        ( 
+            VIEW @UnifiedLayerDemandView 
+            PARAMS 
+            ( 
+                ViewName = "Campaigns", 
+                LogDate = @RunDate 
+            ) 
+        ) 
+        WHERE BudgetId  == 0
+    ) AS B
+    ON A.CampaignId == B.CampaignId;
+SharedBudget = 
+    SELECT
+        *,
+        ROW_NUMBER() OVER (PARTITION BY BudgetId) AS RowNumber
+    FROM
+    (
+        VIEW @C2CMasterViewPath
+        PARAMS
+        (
+            ViewName = "Budget_Raw",
+            ViewType = @SnapshotViewType,
+            RequestEndDateUtc = @RunDate.AddDays(1),
+            RequestEndHourUtc = 0
+        )
+    )
+    WHERE ALL
+    (
+        BudgetId > 0, // BudgetId > 0 means shared budget
+        NOT LifeCycleStatusId IN (0, 13, 27, 33, 47, 52, 75, 79, 85, 91, 94, 97, 103, 113, 118, 123, 143, 163, 185, 195, 205, 222, 230, 233, 238, 240, 243, 246, 249)
+    )
+    HAVING RowNumber == 1;
+CampaignSharedBudget =
+    SELECT
+        L.AccountId,
+        L.CampaignId,
+        L.BudgetId,
+        (double)R.DailyBudgetAmt AS SharedBudget
+    FROM InputCampaignWithoutImage AS L
+        INNER JOIN SharedBudget AS R
+            ON L.AccountId == R.AccountID AND L.BudgetId == R.BudgetId
+    ;
+CampaignBudget =
+    SELECT
+        A.AccountId,
+        A.CampaignId,
+        A.BudgetAmountUSD,
+        B.SharedBudget,
+        IF(A.BudgetAmountUSD != null, A.BudgetAmountUSD, B.SharedBudget) AS FinalBudget
+    FROM CampaignRegularBudget AS A
+        LEFT OUTER JOIN CampaignSharedBudget AS B
+            ON A.AccountId == B.AccountId AND A.CampaignId == B.CampaignId
+    ;
+Stat =
+    SELECT *
+    FROM Stat
+    UNION ALL
+    SELECT "#8 Campaigns Without Image and Budget" AS K,
+           COUNT(DISTINCT CampaignId) AS V
+    FROM CampaignBudget WHERE FinalBudget == null
+    ;
 OUTPUT TO @StatFile USING DefaultTextOutputter(outputHeader: true);  
 
 //AssetImages =
