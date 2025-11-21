@@ -17,6 +17,12 @@
             "clusterRun": {},
             "localRun": {},
             "codeBehindFiles": []
+        },
+        "Potential_Ads/baseversion.script": {
+            "account": "",
+            "clusterRun": {},
+            "localRun": {},
+            "codeBehindFiles": []
         }
     }
 }
