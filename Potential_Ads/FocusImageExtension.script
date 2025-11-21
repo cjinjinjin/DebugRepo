@@ -1,0 +1,520 @@
+REFERENCE "/shares/bingads.platform.prod.indexgen/Data/IG_runtime_resources/common/FrontEndUtil.dll";
+//RESOURCE "/shares/bingads.platform.prod.indexgen/Data/IG_runtime_resources/common/GetHashUtil.dll";
+REFERENCE "/shares/WebDataPlatform/local/Griffin/DLLs/Microsoft.Bing.HashUtil.dll";
+USING Microsoft.Bing.HashUtil;
+
+#DECLARE RunDate DateTime = DateTime.Parse("2025-11-19");
+#DECLARE RunDateStr string = @RunDate.ToString("yyyy-MM-dd");
+#DECLARE CurrentDataStrforImage string = @RunDate.ToString("yyyy_MM_dd");
+#DECLARE NativeEligibleCampaigns string = "/shares/bingads.hm/NativeAds/RRI/Data/Demand/MSANEligibleCampaigns/" + @RunDate.ToString("yyyy/MM/dd") + "/NativeEligibleCampaigns.ss";
+#DECLARE OutputFolder string = "/local/user/jinjinchen/MSNPotentialAds/AdsImage/FocusImageExtension/" + @RunDateStr;
+#DECLARE OutputFile string = string.Format("{0}/AdLevel_TA_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
+#DECLARE OutputFileImage string = string.Format("{0}/AdLevel_TA_Image_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
+#DECLARE OutputFile_Pmax string = string.Format("{0}/AdLevel_PMAX_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
+#DECLARE OutputFile_PmaxImage string = string.Format("{0}/AdLevel_PMAXImage_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
+#DECLARE CampaignWithoutImage string = string.Format("{0}/CampaignWithoutImage_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
+#DECLARE ExcludeExtesnionOutputFile string = string.Format("{0}/ExcludeExtesnionOutputFile_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
+#DECLARE KeywordOutputFile string = string.Format("{0}/AdLevel_Keyword_{1:yyyy-MM-dd}.ss", @OutputFolder, @RunDate);
+#DECLARE StatFile string = string.Format("{0}/AdLevel_Overall_{1:yyyy-MM-dd}.stat", @OutputFolder, @RunDate);
+AssetImages =
+    SSTREAM SPARSE STREAMSET "/shares/bingAds.BI.OI/AdsOI/ObjectStoreDump/Images"
+                   PATTERN @"Assets_"+@CurrentDataStrforImage + @"_%n.ss"
+                   RANGE __serialnum = ["1", "5"];
+#DECLARE C2CMasterViewPath string = "/shares/adCenter.BICore.upload/prod/C2C/Views/MasterView/C2CMasterView.view"; 
+#DECLARE UACView string = @"/shares/bingads.platform.prod.indexgen/Data/publish/UAC/UAC.view"; 
+#DECLARE MonetizationView string = @"/shares/adCenter.BICore.SubjectArea/SubjectArea/Monetization/views/PROD/MonetizationFacts.view";
+#DECLARE UnifiedLayerDemandView string = "/shares/bingAds.BI.OI/AdsOI/DemandMetrics/Views/UnifiedLayerDemand.view"; 
+#DECLARE LimitedDays int = int.Parse("1");
+REFERENCE @"System.IO.Compression.dll";
+REFERENCE @"System.IO.Compression.FileSystem.dll";
+REFERENCE @"System.Drawing.dll";
+
+NativeEligibleCampaigns =
+    SELECT *.Except(AccountId, CampaignId),
+           AccountId.ToString() AS AccountId,
+           CampaignId.ToString() AS CampaignId
+    FROM
+    (
+        SSTREAM @NativeEligibleCampaigns
+    );
+
+
+//Start: MMA
+AccountAssetPair_MMA = 
+    SELECT  DISTINCT
+        AccountID.ToString() AS AccountId, 
+        CampaignId.ToString() AS CampaignId, 
+        AdId.ToString() AS AdId, 
+        AssetId, 
+        AdAssetAssociationTypeId AS AssetAssociationTypeId
+        FROM 
+        ( 
+            VIEW @C2CMasterViewPath 
+            PARAMS 
+            ( 
+                ViewName = "AdAsset_Raw", 
+                ViewType = 1, 
+                DataMode = "PROD",
+                ViewMode = "PROD",
+                IncludeDeletedRecordsForType1Data = true 
+            ) 
+        ) WHERE LifeCycleStatusId == 71 AND IsSoftDeleted != true AND AdId != null AND AssetId != null
+        AND AdAssetAssociationTypeId IN (74,1); 
+ 
+ //Pmax
+AccountAssetPair_Pmax =
+    SELECT AccountId.ToString() AS AccountId,
+           CampaignId.ToString() AS CampaignId, 
+           IF(AssetAssociationTypeId IN(11, 32), "Headline", IF(AssetAssociationTypeId == 33, "LongHeadline", IF(AssetAssociationTypeId IN(12, 34), "Description", IF(AssetAssociationTypeId == 63, "BusinessName", IF(AssetAssociationTypeId == 1, "LandscapeImage", IF(AssetAssociationTypeId == 2, "SquareImage", IF(AssetAssociationTypeId == 3 OR AssetAssociationTypeId == 4, "Logo", "OtherSizeImage"))))))) AS AssetType
+
+    FROM
+    (
+        VIEW @C2CMasterViewPath
+        PARAMS
+        (
+            ViewName = "AssetGroupAssetAssociation_Raw",
+            ViewType = 1,
+            RequestEndDateUtc = @RunDate,
+            RequestEndHourUtc = 23
+        )
+    )
+    WHERE AssetAssociationTypeId IN(1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 31, 34, 35, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84)
+    ;
+AccountAssetPair_Pmax =
+    SELECT *
+    FROM AccountAssetPair_Pmax
+    WHERE AssetType NOT IN("Logo", "Headline", "LongHeadline", "Description", "BusinessName");
+
+// exclude MMA and Pmax and focus on campaign without image extension
+InputCampaignWithoutMMAPmax = SELECT DISTINCT A.AccountId, A.CampaignId
+    FROM NativeEligibleCampaigns AS A
+    LEFT ANTISEMIJOIN
+        AccountAssetPair_MMA AS B
+        ON A.AccountId == B.AccountId AND A.CampaignId == B.CampaignId
+    LEFT ANTISEMIJOIN
+        AccountAssetPair_Pmax AS C
+        ON A.AccountId == C.AccountId AND A.CampaignId == C.CampaignId;
+
+Stat =
+    SELECT "#1 Input Campaign Num: NativeEligibleCampaigns" AS K,
+           COUNT(DISTINCT CampaignId) AS V
+    FROM NativeEligibleCampaigns
+    UNION ALL
+    SELECT "#2 CampaignId Num: Exclude MMA and Pmax" AS K,
+           COUNT(DISTINCT CampaignId) AS V
+    FROM InputCampaignWithoutMMAPmax;
+
+// ImageExtension
+AdExtension =
+    SELECT AdExtensionTypeId,
+           AdExtensionId
+    FROM
+    (
+        VIEW @C2CMasterViewPath
+        PARAMS
+        (
+            ViewName = "AdExtension_Raw",
+            DataMode = "PROD",
+            ViewMode = "PROD",
+            ViewType = 1,
+            RequestEndDateUtc = @RunDate,
+            RequestEndHourUtc = 23
+        )
+    )
+    WHERE LifeCycleStatusId != 110 AND AdExtensionTypeId == 35; // for ImageExtension only
+
+AdExtensionAccountView =  
+            SELECT AccountId.ToString() AS AccountId,  
+                   AdExtensionId  
+            FROM  
+            (  
+                VIEW @C2CMasterViewPath  
+                PARAMS  
+                (  
+                      ViewName = "AdExtensionAccount_Raw",  
+                      ViewType=1,                
+                      RequestEndDateUtc= @RunDate,  
+                    RequestEndHourUtc = 23          
+                )  
+            )
+    WHERE LifeCycleStatusId != 110;
+AdExtensionAccountView =
+    SELECT A.*
+    FROM AdExtensionAccountView AS A
+    INNER JOIN
+        AdExtension AS B
+        ON A.AdExtensionId == B.AdExtensionId; // filter only ImageExtension Account
+
+AdExtensionCampaignView =  
+            SELECT AccountID.ToString() AS AccountId, CampaignId.ToString() AS CampaignId, 
+                   AdExtensionId  
+            FROM  
+            (  
+    VIEW @C2CMasterViewPath  
+            PARAMS   
+            (  
+                      ViewName = "AdExtensionCampaign_Raw",  
+                      ViewType=1,                
+                      RequestEndDateUtc= @RunDate,  
+                RequestEndHourUtc = 23 
+                )  
+            )
+    WHERE LifeCycleStatusId != 110;
+AdExtensionCampaignView =
+    SELECT A.*
+    FROM AdExtensionCampaignView AS A
+    INNER JOIN
+        AdExtension AS B
+        ON A.AdExtensionId == B.AdExtensionId; // filter only ImageExtension Campaign
+
+AdExtensionOrderView =  
+            SELECT AccountID.ToString() AS AccountId, CampaignId.ToString() AS CampaignId,  
+                   AdExtensionId  
+            FROM  
+            (  
+                VIEW @C2CMasterViewPath  
+                PARAMS  
+                (  
+                      ViewName = "AdExtensionOrder_Raw",  
+                      ViewType=1,                
+                      RequestEndDateUtc= @RunDate,  
+                    RequestEndHourUtc = 23  
+                )  
+            )
+    WHERE LifeCycleStatusId != 110; 
+AdExtensionOrderView =
+    SELECT A.*
+    FROM AdExtensionOrderView AS A
+    INNER JOIN
+        AdExtension AS B
+        ON A.AdExtensionId == B.AdExtensionId; // filter only ImageExtension Order
+
+//end: ImageAssets
+
+InputCampaignWithoutMMAPmaxImageExtension =
+    SELECT A.*
+    FROM InputCampaignWithoutMMAPmax AS A
+    LEFT ANTISEMIJOIN
+        AdExtensionAccountView AS B
+        ON A.AccountId == B.AccountId
+    LEFT ANTISEMIJOIN
+        AdExtensionCampaignView AS C
+        ON A.AccountId == C.AccountId AND A.CampaignId == C.CampaignId
+    LEFT ANTISEMIJOIN
+        AdExtensionOrderView AS D
+        ON A.AccountId == D.AccountId AND A.CampaignId == D.CampaignId;
+
+//OUTPUT TO SSTREAM @ExcludeExtesnionOutputFile;
+Stat = 
+    SELECT *
+    FROM Stat
+    UNION ALL
+    SELECT "#3 Campaign Num After Exclude Image Extension Campaign" AS K,
+           COUNT(DISTINCT CampaignId) AS V
+    FROM InputCampaignWithoutMMAPmaxImageExtension;
+
+// UnifiedLayerDemandView: regular budget(specific for each campaign) 
+InputCampaignWithoutMMAPmaxImage_RegularBudget =
+    SELECT A.AccountId, A.CampaignId, BudgetAmountUSD
+    FROM InputCampaignWithoutMMAPmaxImageExtension AS A
+    INNER JOIN
+    (
+        SELECT DISTINCT CampaignId.ToString() AS CampaignId, BudgetAmountUSD 
+        FROM 
+        ( 
+            VIEW @UnifiedLayerDemandView 
+            PARAMS 
+            ( 
+                ViewName = "Campaigns", 
+                LogDate = @RunDate 
+            ) 
+        ) 
+        WHERE BudgetId  == 0
+    ) AS B
+    ON A.CampaignId == B.CampaignId;
+
+InputCampaignWithoutMMAPmaxImage_SharedBudget =
+    SELECT A.AccountId, A.CampaignId, BudgetId
+    FROM InputCampaignWithoutMMAPmaxImageExtension AS A
+    INNER JOIN
+    (
+        SELECT DISTINCT CampaignId.ToString() AS CampaignId, BudgetId 
+        FROM 
+        ( 
+            VIEW @UnifiedLayerDemandView 
+            PARAMS 
+            ( 
+                ViewName = "Campaigns", 
+                LogDate = @RunDate 
+            ) 
+        ) 
+        WHERE BudgetId  != 0
+    ) AS B
+    ON A.CampaignId == B.CampaignId;
+SharedBudget = 
+    SELECT
+        *.Except(AccountID), AccountID.ToString() AS AccountID,
+        ROW_NUMBER() OVER (PARTITION BY BudgetId) AS RowNumber
+    FROM
+    (
+        VIEW @C2CMasterViewPath
+        PARAMS
+        (
+            ViewName = "Budget_Raw",
+            ViewType = 1,
+            RequestEndDateUtc = @RunDate,
+            RequestEndHourUtc = 0
+        )
+    )
+    WHERE ALL
+    (
+        BudgetId > 0, // BudgetId > 0 means shared budget
+        NOT LifeCycleStatusId IN (0, 13, 27, 33, 47, 52, 75, 79, 85, 91, 94, 97, 103, 113, 118, 123, 143, 163, 185, 195, 205, 222, 230, 233, 238, 240, 243, 246, 249)
+    )
+    HAVING RowNumber == 1;
+InputCampaignWithoutMMAPmaxImage_SharedBudget =
+    SELECT
+        L.AccountId,
+        L.CampaignId,
+        L.BudgetId,
+        (double)R.DailyBudgetAmt AS SharedBudget
+    FROM InputCampaignWithoutMMAPmaxImage_SharedBudget AS L
+        INNER JOIN SharedBudget AS R
+            ON L.AccountId == R.AccountID AND L.BudgetId == R.BudgetId
+    ;
+InputCampaignWithoutMMAPmaxImageExtensionBudget =
+    SELECT
+        A.AccountId,
+        A.CampaignId,
+        B.BudgetAmountUSD,
+        C.SharedBudget,
+        IF(B.BudgetAmountUSD != null, B.BudgetAmountUSD, C.SharedBudget) AS FinalBudget
+    FROM InputCampaignWithoutMMAPmaxImageExtension AS A 
+    LEFT OUTER JOIN InputCampaignWithoutMMAPmaxImage_RegularBudget AS B ON A.AccountId == B.AccountId AND A.CampaignId == B.CampaignId
+        LEFT OUTER JOIN InputCampaignWithoutMMAPmaxImage_SharedBudget AS C ON A.AccountId == C.AccountId AND A.CampaignId == C.CampaignId;
+    ;
+InputCampaignWithoutMMAPmaxImageExtension_HasBudget =
+    SELECT A.*
+    FROM InputCampaignWithoutMMAPmaxImageExtensionBudget 
+    WHERE FinalBudget != null;
+InputCampaignWithoutMMAPmaxImageExtension_NoBudget =
+    SELECT A.*
+    FROM InputCampaignWithoutMMAPmaxImageExtensionBudget 
+    WHERE FinalBudget == null;
+Stat =
+    SELECT *
+    FROM Stat
+    UNION ALL
+    SELECT "#4 Campaigns Num After Join Budget info" AS K,
+           COUNT(DISTINCT CampaignId) AS V
+    FROM InputCampaignWithoutMMAPmaxImageExtensionBudget
+    UNION ALL
+    SELECT "#4.1 Campaigns Num With Budget" AS K,
+           COUNT(DISTINCT CampaignId) AS V
+    FROM InputCampaignWithoutMMAPmaxImageExtension_HasBudget
+    UNION ALL
+    SELECT "#4.2 Campaigns Num Without Budget" AS K,
+           COUNT(DISTINCT CampaignId) AS V
+    FROM InputCampaignWithoutMMAPmaxImageExtension_NoBudget;
+
+
+MZ=
+    SELECT DISTINCT
+           AdvertiserAccountId.ToString() AS AccountId,
+           CampaignId.ToString() AS CampaignId,
+           AdId.ToString() AS AdId,
+           AdDisplayTypeId,
+           DomainType,
+           //(AdDisplayTypeId == 1 && DomainType == 1? "TextAd" : DomainType == 5? "DSA" : AdDisplayTypeId == 1024? "ExTA" : AdDisplayTypeId == 256? "AppInstall" : AdDisplayTypeId == 5? "ProductListingAd" : AdDisplayTypeId == 8192? "RSA" : "Unknown") AS AdTypeMV,
+           CampaignTypeId,
+           (double) SUM(ImpressionCnt) AS Impressions,
+           (double) SUM(AmountChargedUSDMonthlyExchangeRt) AS Spend
+    FROM
+    (
+        VIEW @MonetizationView
+        PARAMS
+        (
+            StartDateTimeUtc = @RunDate.AddDays(-@LimitedDays),
+            EndDateTimeUtc = @RunDate,
+            ReadPageViews = false,            
+            ReadAdImpressions = true,
+            ReadClicks = true,
+            ReadSessions = true,
+            ReadUETConversions = true,
+            CountUniqueConversions = true,
+            BillableStatus = "NonFraud" //NonFraud: FraudQualityBand > 1, to improve latency
+        )
+     )
+    WHERE FraudQualityBand > 1;
+    ;
+    
+CampaignHasBudget_AdId =
+    SELECT DISTINCT A.*, B.AdId
+    FROM InputCampaignWithoutMMAPmaxImageExtension_HasBudget AS A
+    INNER JOIN
+        MZ AS B
+        ON A.CampaignId == B.CampaignId AND A.AccountId == B.AccountId; // keyword aggrate to AdId level: ~6 images, campaign budget view monthly(youlin)
+
+Stat =
+    SELECT *
+    FROM Stat
+    UNION ALL
+    SELECT "5 Campaigns Num After Join MZ(1day) for features" AS K,
+           COUNT(DISTINCT CampaignId) AS V
+    FROM CampaignHasBudget_AdId
+    UNION ALL
+       SELECT "5.1 AdId Num After Join MZ(1day) for features" AS K,
+              COUNT(DISTINCT AdId) AS V
+       FROM CampaignHasBudget_AdId
+    UNION ALL
+         SELECT "5.2 AdId Num After Join MZ(1day) for features with Spend>0" AS K,
+                  COUNT(DISTINCT AdId) AS V
+         FROM CampaignHasBudget_AdId
+         WHERE Spend > 0
+    UNION ALL
+         SELECT "5.3 AdId Num After Join MZ(1day) for features with Impressions>0" AS K,
+                  COUNT(DISTINCT AdId) AS V
+         FROM CampaignHasBudget_AdId
+         WHERE Impressions > 0;
+         
+OUTPUT TO @StatFile USING DefaultTextOutputter(outputHeader: true);  
+
+
+#CS
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using ScopeRuntime;
+using System.IO;
+using System.Text;
+using Microsoft.SCOPE.Types;
+using System.Web;
+using System.Text.RegularExpressions;
+using System.IO.Compression;
+using System.Drawing.Imaging;
+using System.Drawing;
+
+public static class ImageUtils
+{
+    public static int[] GetSize(string base64string)
+    {
+        if (string.IsNullOrWhiteSpace(base64string))
+            return new int[] { 0, 0 };
+
+        try
+        {
+            // ????? "data:image/png;base64," ??
+            var commaIndex = base64string.IndexOf(',');
+            if (commaIndex > 0)
+                base64string = base64string.Substring(commaIndex + 1);
+
+        var bytes = Convert.FromBase64String(base64string);
+            if (bytes.Length == 0)
+                return new int[] { 0, 0 };
+
+        using (var stream = new MemoryStream(bytes))
+            using (var image = Image.FromStream(stream, useEmbeddedColorManagement: false, validateImageData: false))
+            {
+                return new int[] { image.Height, image.Width };
+            }
+        }
+        catch (FormatException)
+        {
+            // Base64 ????
+            return new int[] { 0, 0 };
+        }
+        catch (ArgumentException)
+        {
+            // ????????????
+            return new int[] { 0, 0 };
+        }
+        catch (Exception)
+        {
+            // ??????
+            return new int[] { 0, 0 };
+        }
+    }
+} 
+
+public class AggregateKeywordsByAdIdReducer : Reducer
+{
+    // 定义 Reducer 的输出 Schema
+    public override Schema Produces(string[] requestedColumns, string[] args, Schema input)
+    {
+        var schema = new Schema();
+        
+        // 1. 保留除了 ListingId 和 Keyword 之外的所有列（K AdId 也会被保留）
+        // 假设输入包含: <AdId, ListingId, Keyword, ...>
+        foreach (var col in input.Columns)
+        {
+            if (col.Name != "ListingId" && col.Name != "Keyword")
+            {
+                schema.Add(col);
+            }
+        }
+        
+        // 2. 添加聚合后的新列
+        // 存储 ListingId 对应的去重后的 Keyword 集合，以 "##!" 分隔
+        schema.Add(new ColumnInfo("AggregatedKeywords", typeof(string)));
+        
+        return schema;
+    }
+   
+    // Reducer 的核心逻辑
+    public override IEnumerable<Row> Reduce(RowSet input, Row outputRow, string[] args)
+    {
+        outputRow.Reset();
+        
+        var listingKeywords = new List<string>(); 
+        bool firstRead = true;
+        
+        // 确定需要复制的公共列（AdId 和其他非聚合列）的范围。
+        // 由于我们在 Produces 中移除了 ListingId 和 Keyword，
+        // 只需要复制到第一个聚合列 "AggregatedKeywords" 之前的所有列。
+        int commonColumnsEnd = outputRow.Schema.IndexOf("AggregatedKeywords");
+        
+        foreach (Row row in input.Rows)
+        {
+            // --- 复制公共列逻辑 ---
+            if (firstRead)
+            {
+                // 仅复制 AdId 和其他公共列（如 CampaignId 等）一次
+                for (int i = 0; i < commonColumnsEnd; i++)
+                {
+                    string colName = outputRow.Schema[i].Name;
+                    // 确保原始行包含这个列
+                    if (row.Schema.Contains(colName))
+                    {
+                        row[colName].CopyTo(outputRow[i]);
+                    }
+                }
+                firstRead = false;
+            }
+            
+            // --- 聚合逻辑 ---
+            
+            // 获取当前行的 ListingId 和 Keyword
+            string listingId = row["ListingId"].String;
+            string keyword = row["Keyword"].String;
+           
+            if (!string.IsNullOrEmpty(listingId) && !string.IsNullOrEmpty(keyword))
+            {
+                listingKeywords.Add(keyword);
+            }
+        }
+        
+        // --- 最终处理和输出 ---
+
+        // 使用 "##!" 分隔符连接所有去重后的 Keyword
+        string aggregatedKeywords = string.Join("##!", listingKeywords);
+        
+        // 设置新的聚合列的值
+        outputRow["AggregatedKeywords"].Set(aggregatedKeywords);
+        
+        // 产出聚合后的行
+        yield return outputRow;
+    }
+}
+
+#ENDCS
