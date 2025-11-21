@@ -294,11 +294,11 @@ InputCampaignWithoutMMAPmaxImageExtensionBudget =
         LEFT OUTER JOIN InputCampaignWithoutMMAPmaxImage_SharedBudget AS C ON A.AccountId == C.AccountId AND A.CampaignId == C.CampaignId;
     ;
 InputCampaignWithoutMMAPmaxImageExtension_HasBudget =
-    SELECT A.*
+    SELECT *
     FROM InputCampaignWithoutMMAPmaxImageExtensionBudget 
     WHERE FinalBudget != null;
 InputCampaignWithoutMMAPmaxImageExtension_NoBudget =
-    SELECT A.*
+    SELECT *
     FROM InputCampaignWithoutMMAPmaxImageExtensionBudget 
     WHERE FinalBudget == null;
 Stat =
@@ -325,6 +325,7 @@ MZ=
            AdId.ToString() AS AdId,
            AdDisplayTypeId,
            DomainType,
+           IF(PublisherId == 17160724, "MSN", "Others") AS PublisherMV,
            //(AdDisplayTypeId == 1 && DomainType == 1? "TextAd" : DomainType == 5? "DSA" : AdDisplayTypeId == 1024? "ExTA" : AdDisplayTypeId == 256? "AppInstall" : AdDisplayTypeId == 5? "ProductListingAd" : AdDisplayTypeId == 8192? "RSA" : "Unknown") AS AdTypeMV,
            CampaignTypeId,
            (double) SUM(ImpressionCnt) AS Impressions,
@@ -347,7 +348,17 @@ MZ=
      )
     WHERE FraudQualityBand > 1;
     ;
-    
+// PublisherId:
+//        17160724: 'MSN',
+//        162645330: 'Xandr 3p',
+//        250152235: 'Triple lift',
+//        251978541: 'Boost',
+//        251868273: 'Outbrain',
+//        160344049: 'Outlook',
+//        162613188: 'MCG',
+//        162666022: 'Union App',
+//        163898280: 'Bing News',
+
 CampaignHasBudget_AdId =
     SELECT DISTINCT A.*, B.AdId
     FROM InputCampaignWithoutMMAPmaxImageExtension_HasBudget AS A
@@ -375,8 +386,28 @@ Stat =
          SELECT "5.3 AdId Num After Join MZ(1day) for features with Impressions>0" AS K,
                   COUNT(DISTINCT AdId) AS V
          FROM CampaignHasBudget_AdId
-         WHERE Impressions > 0;
-         
+         WHERE Impressions > 0
+    UNION ALL
+         SELECT "5.4 AdId Num After Join MZ(1day) for features with MSN traffic" AS K,
+                  COUNT(DISTINCT AdId) AS V
+         FROM CampaignHasBudget_AdId
+         WHERE PublisherMV == "MSN"
+    UNION ALL
+         SELECT "5.5 AdId Num After Join MZ(1day) for features with non-MSN traffic" AS K,
+                  COUNT(DISTINCT AdId) AS V
+         FROM CampaignHasBudget_AdId
+         WHERE PublisherMV != "MSN"
+    UNION ALL
+         SELECT "5.6 AdId Num After Join MZ(1day) for features with MSN traffic and Spend > 0" AS K,
+                  COUNT(DISTINCT AdId) AS V
+         FROM CampaignHasBudget_AdId
+         WHERE PublisherMV == "MSN" AND Spend > 0
+    UNION ALL
+         SELECT "5.7 AdId Num After Join MZ(1day) for features with MSN traffic and Impressions > 0" AS K,
+                  COUNT(DISTINCT AdId) AS V
+         FROM CampaignHasBudget_AdId
+         WHERE PublisherMV == "MSN" AND Impressions > 0;
+
 OUTPUT TO @StatFile USING DefaultTextOutputter(outputHeader: true);  
 
 
