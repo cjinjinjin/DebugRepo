@@ -480,65 +480,6 @@ Stat =
     ;
 OUTPUT TO @StatFile USING DefaultTextOutputter(outputHeader: true);  
 
-//AssetImages =
-//    SELECT AssetId,
-//           Url, 
-//           Size[1] AS Width,
-//           Size[0] AS Height,
-//           1.0 * Size[1] / Size[0] AS AspectRatio
-//    FROM
-//    (
-//        SELECT  
-//               AssetId.ToString() AS AssetId,
-//               Url,
-//               ImageUtils.GetSize(Base64Data) AS Size
-//        FROM AssetImages WHERE Base64Data != null AND Base64Data != ""
-//    )
-//    HAVING Width != null AND Height != null AND Width > 0 AND Height > 0;  
-//
-//Input_WithImageInfo =
-//    SELECT A.*,
-//           B.Url,
-//           B.Width,
-//           B.Height,
-//           B.AspectRatio
-//    FROM Input_ImageAsset AS A
-//         INNER JOIN
-//         AssetImages AS B
-//        ON A.AssetId == B.AssetId;
-//
-//
-//OUTPUT TO SSTREAM @OutputFile;
-//
-//Stat =
-//    SELECT *
-//    FROM Stat
-//    UNION ALL
-//    SELECT "#5 With Image Info" AS K,
-//           COUNT(DISTINCT CampaignId) AS V
-//    FROM Input_WithImageInfo
-//    UNION ALL
-//    SELECT "#5.1 With Image Info of AdId level" AS K,
-//           COUNT(DISTINCT AdId) AS V
-//    FROM Input_WithImageInfo;
-//
-//Input_withoutImage =
-//    SELECT A.*
-//    FROM AggregateKeywords AS A
-//    LEFT ANTISEMIJOIN
-//        Input_WithImageInfo AS B
-//        ON A.AccountId == B.AccountId AND A.CampaignId == B.CampaignId;
-//
-//Stat =
-//    SELECT *
-//    FROM Stat
-//    UNION ALL
-//    SELECT "#6 Without Image Info" AS K,
-//           COUNT(DISTINCT CampaignId) AS V
-//    FROM Input_withoutImage
-//    ;
-//
-//OUTPUT TO @StatFile USING DefaultTextOutputter(outputHeader: true);   
 
 #CS
 
