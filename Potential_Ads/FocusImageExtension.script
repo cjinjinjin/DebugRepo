@@ -296,11 +296,11 @@ InputCampaignWithoutMMAPmaxImageExtensionBudget =
 InputCampaignWithoutMMAPmaxImageExtension_HasBudget =
     SELECT *
     FROM InputCampaignWithoutMMAPmaxImageExtensionBudget 
-    WHERE FinalBudget != null;
+    WHERE FinalBudget != null AND FinalBudget >= 10;
 InputCampaignWithoutMMAPmaxImageExtension_NoBudget =
     SELECT *
     FROM InputCampaignWithoutMMAPmaxImageExtensionBudget 
-    WHERE FinalBudget == null;
+    WHERE FinalBudget == null OR FinalBudget < 10;
 Stat =
     SELECT *
     FROM Stat
