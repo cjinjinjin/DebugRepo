@@ -141,11 +141,11 @@ Input_excludeImageExtension =
 
 //OUTPUT TO SSTREAM @ExcludeExtesnionOutputFile;
 
-Stat = SELECT "#1 Input Campaign" AS K,
+Stat = SELECT "#1 Input Campaign Num: NativeEligibleCampaigns" AS K,
            COUNT(DISTINCT CampaignId) AS V
     FROM NativeEligibleCampaigns
     UNION ALL
-    SELECT "#2 Exclude Image Extension Campaign" AS K,
+    SELECT "#2 Campaign Num After Exclude Image Extension Campaign" AS K,
            COUNT(DISTINCT CampaignId) AS V
     FROM Input_excludeImageExtension;
 
@@ -194,11 +194,11 @@ Stat =
     SELECT *
     FROM Stat
     UNION ALL
-    SELECT "#3 Join MZ for features" AS K,
+    SELECT "#3 Campaign Num: Join MZ(1day) for features" AS K,
            COUNT(DISTINCT CampaignId) AS V
     FROM AggregateKeywords
          UNION ALL
-       SELECT "#3.1 Join MZ for features: Ad Level" AS K,
+       SELECT "#3.1 AdId Num: Join MZ(1day) for features" AS K,
               COUNT(DISTINCT AdId) AS V
     FROM AggregateKeywords;
 
@@ -369,15 +369,15 @@ Stat =
            COUNT(DISTINCT CampaignId) AS V
     FROM Input_ImageAsset_TA
     UNION ALL
-        SELECT "#4.1 MMA: AdId Num With Image Asset" AS K,
+        SELECT "#4.1 MMA: AdId With Image Asset" AS K,
                 COUNT(DISTINCT AdId) AS V
         FROM Input_ImageAsset_TA
     UNION ALL
-        SELECT "#4.2 MMA: Campaigns With Image url" AS K,
+        SELECT "#4.2 MMA: AdId With Image url" AS K,
                 COUNT(DISTINCT AdId) AS V
         FROM Input_ImageAsset_TA_withUrl
     UNION ALL
-        SELECT "#4.3 MMA: AdId num without Image url" AS K,
+        SELECT "#4.3 MMA: AdId  without Image url" AS K,
                 COUNT(DISTINCT AdId) AS V
         FROM Input_ImageAsset_TA_withoutUrl
     UNION ALL
@@ -398,16 +398,20 @@ Stat =
         FROM Input_ImageAsset_PMAX_withoutUrl
     UNION ALL
     SELECT "#6 AdId num of MMA" AS K, COUNT(DISTINCT AdId) AS V
-    FROM Input_ImageAsset_TA
+    FROM Input_ImageAsset_TA_withUrl
     UNION ALL
     SELECT "#6.1 Image num of MMA" AS K, COUNT(DISTINCT DemandAssetId) AS V
     FROM Input_ImageAsset_TA_withUrl
     UNION ALL
     SELECT "#7 AssetGroupId num of Pmax" AS K, COUNT(DISTINCT AssetGroupId) AS V
-    FROM Input_ImageAsset_PMAX
+    FROM Input_ImageAsset_PMAX_withUrl
     UNION ALL
     SELECT "#7.1 Image num of Pmax" AS K, COUNT(DISTINCT DemandAssetId) AS V
-    FROM Input_ImageAsset_PMAX_withUrl;
+    FROM Input_ImageAsset_PMAX_withUrl
+    UNION ALL
+    SELECT "#8 Campaigns num Without MMA Image AND Without PMAX Image" AS K,
+           COUNT(DISTINCT CampaignId) AS V
+    FROM InputCampaignWithoutImage;
 
 
 // UnifiedLayerDemandView: regular budget(specific for each campaign) 
@@ -514,11 +518,11 @@ Stat =
            COUNT(DISTINCT CampaignId) AS V
     FROM CampaignBudget WHERE FinalBudget == null
     UNION ALL
-    SELECT "#8.1 AdId num Without Image and Budget" AS K,
+    SELECT "#8.1 AdId num for MMA Without Image and Budget" AS K,
            COUNT(DISTINCT AdId) AS V
     FROM Input_ImageAsset_TA_withoutUrl_withBudget
     UNION ALL
-    SELECT "#8.2 AssetGroupId num Without Image and Budget" AS K,
+    SELECT "#8.2 AssetGroupId num for PMAX Without Image and Budget" AS K,
            COUNT(DISTINCT AssetGroupId) AS V
     FROM Input_ImageAsset_PMAX_withoutUrl_withBudget;
 OUTPUT TO @StatFile USING DefaultTextOutputter(outputHeader: true);  
