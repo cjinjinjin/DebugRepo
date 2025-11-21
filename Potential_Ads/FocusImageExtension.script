@@ -360,7 +360,7 @@ MZ=
 //        163898280: 'Bing News',
 
 CampaignHasBudget_AdId =
-    SELECT DISTINCT A.*, B.AdId
+    SELECT DISTINCT A.*, B.PublisherMV, B.Impressions, B.Spend
     FROM InputCampaignWithoutMMAPmaxImageExtension_HasBudget AS A
     INNER JOIN
         MZ AS B
