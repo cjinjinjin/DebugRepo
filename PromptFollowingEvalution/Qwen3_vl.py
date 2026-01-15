@@ -5,6 +5,8 @@ from PIL import Image
 from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
 from qwen_vl_utils import process_vision_info
 import re
+from torch.distributed.tensor import distribute_tensor, Replicate
+from torch.distributed.device_mesh import init_device_mesh
 
 # ================= 环境配置 =================
 # 强制屏蔽分布式干扰，防止出现之前的 LOCAL_RANK KeyError
@@ -26,35 +28,38 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 processor = AutoProcessor.from_pretrained(MODEL_PATH, trust_remote_code=True)
 
 def batch_get_response(batch_messages):
-    """
-    自适应处理视觉和纯文本任务的 Processor 调用
-    """
-    # 1. 生成模板化的文本输入
     texts = [
         processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True)
         for msg in batch_messages
     ]
     
-    # 2. 尝试提取视觉信息
     image_inputs, video_inputs = process_vision_info(batch_messages)
     
-    # 3. 动态构建输入参数，这是解决错误的重点！
-    inputs_params = {
+    input_kwargs = {
         "text": texts,
         "padding": True,
         "return_tensors": "pt",
     }
-    
-    # 只有当真正存在图片数据时，才加入 images 参数
-    if image_inputs is not None and len(image_inputs) > 0:
-        inputs_params["images"] = image_inputs
-    if video_inputs is not None and len(video_inputs) > 0:
-        inputs_params["videos"] = video_inputs
+    if image_inputs:
+        input_kwargs["images"] = image_inputs
+    if video_inputs:
+        input_kwargs["videos"] = video_inputs
 
-    # 4. 将 inputs 移动到 GPU
-    inputs = processor(**inputs_params).to(model.device)
-    
-    # 5. 推理生成
+    inputs = processor(**input_kwargs).to(model.device)
+
+    # --- 修复 DTensor 冲突的关键代码 ---
+    # 检查模型是否使用了分布式张量并行 (TP)
+    # 如果 self_attn 的权重是 DTensor，则需要同步输入
+    first_layer_weight = model.model.layers[0].self_attn.q_proj.weight
+    if hasattr(first_layer_weight, "device_mesh"):
+        mesh = first_layer_weight.device_mesh
+        # 将 input_ids 等转换为 DTensor 并进行全复制 (Replicate) 策略
+        for k, v in inputs.items():
+            if isinstance(v, torch.Tensor):
+                # 这种转换能让输入张量与模型权重在同一个分布式网格中交互
+                inputs[k] = distribute_tensor(v, mesh, [Replicate()])
+    # -----------------------------------
+
     generated_ids = model.generate(**inputs, max_new_tokens=512)
     generated_ids_trimmed = [
         out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
