@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import torch
 from PIL import Image
@@ -5,109 +6,112 @@ from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
 from qwen_vl_utils import process_vision_info
 import re
 
-# ================= 配置区 =================
+# ================= 环境配置 =================
+# 强制屏蔽分布式干扰，防止出现之前的 LOCAL_RANK KeyError
+os.environ["LOCAL_RANK"] = "0" 
+
 MODEL_PATH = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-VL-8B-Instruct/"  # 确保路径正确
 INPUT_TSV = "test_input.tsv"
 OUTPUT_TSV = "output_results.tsv"
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+BATCH_SIZE = 4  # A100 (40G/80G) 可以适当调大，例如 4-8
 
 # ================= 加载模型 =================
-print(f"正在加载模型: {MODEL_PATH}...")
+print(f"正在加载模型至 A100...")
 model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-    MODEL_PATH, torch_dtype="auto", device_map="auto", trust_remote_code=True
+    MODEL_PATH, 
+    torch_dtype=torch.bfloat16, # A100 必用 bfloat16，速度快且省显存
+    device_map="auto", 
+    trust_remote_code=True
 )
 processor = AutoProcessor.from_pretrained(MODEL_PATH, trust_remote_code=True)
 
-def get_response(messages):
-    """通用的模型调用函数"""
-    text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    image_inputs, video_inputs = process_vision_info(messages)
+def batch_get_response(batch_messages):
+    """批量调用模型"""
+    texts = [
+        processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True)
+        for msg in batch_messages
+    ]
+    image_inputs, video_inputs = process_vision_info(batch_messages)
+    
     inputs = processor(
-        text=[text],
+        text=texts,
         images=image_inputs,
         videos=video_inputs,
         padding=True,
         return_tensors="pt",
-    ).to(DEVICE)
+    ).to(model.device) # 确保输入在模型所在的 GPU 上
     
     generated_ids = model.generate(**inputs, max_new_tokens=512)
+    # 裁剪掉输入部分的 tokens
     generated_ids_trimmed = [
         out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
     ]
-    return processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+    return processor.batch_decode(
+        generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+    )
 
-def parse_questions(text):
-    """从模型输出中提取12个问题"""
-    # 匹配 1. 2. 这种格式或换行符分割
-    lines = re.split(r'\d+\.', text)
-    questions = [q.strip() for q in lines if q.strip()]
-    return questions[:12] # 确保只取前12个
-
-# ================= 主程序 =================
+# ================= 主流程 =================
 def main():
-    # 1. 读取输入
     df = pd.read_csv(INPUT_TSV, sep='\t')
-    results = []
+    all_results = []
 
-    for index, row in df.iterrows():
-        img_id = row['id']
-        prompt = row['prompt']
-        img_path = row['Imagepath']
+    # 1. 批量生成问题
+    print(f"Step 1: 正在批量生成问题 (Batch Size: {BATCH_SIZE})...")
+    for i in range(0, len(df), BATCH_SIZE):
+        batch_df = df.iloc[i : i + BATCH_SIZE]
+        prompts = batch_df['prompt'].tolist()
         
-        print(f"正在处理 ID: {img_id}...")
-
-        # --- 第一次调用：基于 Prompt 生成 12 个问题 ---
-        msg_gen_q = [
-            {"role": "user", "content": f"基于以下描述，生成12个关于图像内容的单选题（答案只能是Yes或No）：\n描述：{prompt}\n请直接列出问题，不要说废话。"}
+        # 构造批量请求
+        batch_msgs = [
+            [{"role": "user", "content": f"基于描述生成12个Yes/No问题：{p}"}] 
+            for p in prompts
         ]
-        questions_raw = get_response(msg_gen_q)
-        questions = parse_questions(questions_raw)
+        responses = batch_get_response(batch_msgs)
         
-        # 确保生成了足够的问题
-        while len(questions) < 12:
-            questions.append("Is there something relevant in the image?")
+        # 解析并存入临时列表
+        for idx, resp in enumerate(responses):
+            questions = [q.strip() for q in re.split(r'\d+\.', resp) if q.strip()][:12]
+            while len(questions) < 12: questions.append("Is the image clear?")
+            
+            row = batch_df.iloc[idx].to_dict()
+            row['generated_questions'] = questions
+            all_results.append(row)
 
-        # --- 第二次调用：加载图片并回答这 12 个问题 ---
+    # 2. 批量回答问题 (VQA)
+    print(f"Step 2: 正在批量进行视觉问答...")
+    final_output = []
+    for item in all_results:
+        img_path = item['Imagepath']
+        questions = item['generated_questions']
+        
         ans_list = []
-        yes_count = 0
-        no_count = 0
+        yes_count, no_count = 0, 0
         
-        for i, q in enumerate(questions):
-            msg_vqa = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"image": img_path},
-                        {"text": f"Question: {q}\nPlease answer with only 'Yes' or 'No'."},
-                    ],
-                }
-            ]
-            answer = get_response(msg_vqa).strip().lower()
+        # 这里对单张图的 12 个问题也可以做 batch
+        vqa_msgs = [
+            [{
+                "role": "user",
+                "content": [{"image": img_path}, {"text": f"Question: {q}\nAnswer only Yes or No."}]
+            }] for q in questions
+        ]
+        
+        # 将 12 个问题作为一个 batch 喂给显卡
+        vqa_responses = batch_get_response(vqa_msgs)
+        
+        for q, a in zip(questions, vqa_responses):
+            clean_a = "yes" if "yes" in a.lower() else ("no" if "no" in a.lower() else "unknown")
+            if clean_a == "yes": yes_count += 1
+            elif clean_a == "no": no_count += 1
+            ans_list.append(f"Q: {q} | A: {clean_a}")
             
-            # 统计 Yes/No
-            clean_ans = "yes" if "yes" in answer else ("no" if "no" in answer else "unknown")
-            if clean_ans == "yes": yes_count += 1
-            elif clean_ans == "no": no_count += 1
-            
-            ans_list.append(f"Q{i+1}: {q} | A: {clean_ans}")
+        item['qa_details'] = " || ".join(ans_list)
+        item['yes_count'] = yes_count
+        item['no_count'] = no_count
+        final_output.append(item)
 
-        # 2. 整理结果
-        res_entry = {
-            "id": img_id,
-            "prompt": prompt,
-            "Imagepath": img_path,
-            "questions_and_answers": " || ".join(ans_list),
-            "yes_count": yes_count,
-            "no_count": no_count
-        }
-        results.append(res_entry)
-
-    # 3. 保存输出
-    output_df = pd.DataFrame(results)
-    output_df.to_csv(OUTPUT_TSV, sep='\t', index=False)
-    print(f"处理完成！结果已保存至 {OUTPUT_TSV}")
+    # 保存
+    pd.DataFrame(final_output).to_csv(OUTPUT_TSV, sep='\t', index=False)
+    print(f"全部任务完成！")
 
 if __name__ == "__main__":
     main()
-
-# pip install torch torchvision transformers accelerate pandas pillow qwen-vl-utils
