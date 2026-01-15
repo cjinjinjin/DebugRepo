@@ -25,28 +25,36 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 )
 processor = AutoProcessor.from_pretrained(MODEL_PATH, trust_remote_code=True)
 
-def batch_get_response(batch_messages, has_images=True):
+def batch_get_response(batch_messages):
     """
-    has_images: 如果是纯文本任务（Step 1），设为 False
+    自适应处理视觉和纯文本任务的 Processor 调用
     """
+    # 1. 生成模板化的文本输入
     texts = [
         processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True)
         for msg in batch_messages
     ]
     
-    input_kwargs = {
+    # 2. 尝试提取视觉信息
+    image_inputs, video_inputs = process_vision_info(batch_messages)
+    
+    # 3. 动态构建输入参数，这是解决错误的重点！
+    inputs_params = {
         "text": texts,
         "padding": True,
-        "return_tensors": "pt"
+        "return_tensors": "pt",
     }
-
-    if has_images:
-        image_inputs, video_inputs = process_vision_info(batch_messages)
-        input_kwargs["images"] = image_inputs
-        input_kwargs["videos"] = video_inputs
-
-    inputs = processor(**input_kwargs).to(model.device)
     
+    # 只有当真正存在图片数据时，才加入 images 参数
+    if image_inputs is not None and len(image_inputs) > 0:
+        inputs_params["images"] = image_inputs
+    if video_inputs is not None and len(video_inputs) > 0:
+        inputs_params["videos"] = video_inputs
+
+    # 4. 将 inputs 移动到 GPU
+    inputs = processor(**inputs_params).to(model.device)
+    
+    # 5. 推理生成
     generated_ids = model.generate(**inputs, max_new_tokens=512)
     generated_ids_trimmed = [
         out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
@@ -54,7 +62,6 @@ def batch_get_response(batch_messages, has_images=True):
     return processor.batch_decode(
         generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
     )
-
 # ================= 主流程 =================
 def main():
     df = pd.read_csv(INPUT_TSV, sep='\t')
