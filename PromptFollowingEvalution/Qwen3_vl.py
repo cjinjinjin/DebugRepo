@@ -25,24 +25,29 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 )
 processor = AutoProcessor.from_pretrained(MODEL_PATH, trust_remote_code=True)
 
-def batch_get_response(batch_messages):
-    """批量调用模型"""
+def batch_get_response(batch_messages, has_images=True):
+    """
+    has_images: 如果是纯文本任务（Step 1），设为 False
+    """
     texts = [
         processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True)
         for msg in batch_messages
     ]
-    image_inputs, video_inputs = process_vision_info(batch_messages)
     
-    inputs = processor(
-        text=texts,
-        images=image_inputs,
-        videos=video_inputs,
-        padding=True,
-        return_tensors="pt",
-    ).to(model.device) # 确保输入在模型所在的 GPU 上
+    input_kwargs = {
+        "text": texts,
+        "padding": True,
+        "return_tensors": "pt"
+    }
+
+    if has_images:
+        image_inputs, video_inputs = process_vision_info(batch_messages)
+        input_kwargs["images"] = image_inputs
+        input_kwargs["videos"] = video_inputs
+
+    inputs = processor(**input_kwargs).to(model.device)
     
     generated_ids = model.generate(**inputs, max_new_tokens=512)
-    # 裁剪掉输入部分的 tokens
     generated_ids_trimmed = [
         out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
     ]
