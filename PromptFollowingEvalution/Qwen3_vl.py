@@ -7,7 +7,7 @@ import re
 
 # ================= 配置区 =================
 MODEL_PATH = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-VL-8B-Instruct/"  # 确保路径正确
-INPUT_TSV = "input.tsv"
+INPUT_TSV = "test_input.tsv"
 OUTPUT_TSV = "output_results.tsv"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
