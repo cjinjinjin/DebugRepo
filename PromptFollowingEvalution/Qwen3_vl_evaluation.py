@@ -5,7 +5,7 @@ if not hasattr(torch, "compiler"):
     torch.compiler = MockCompiler()
 elif not hasattr(torch.compiler, "is_compiling"):
     torch.compiler.is_compiling = lambda: False
-import os
+import os, re
 import pandas as pd
 
 from tqdm import tqdm
@@ -17,9 +17,9 @@ accelerator = Accelerator()
 
 # ================= 配置 =================
 MODEL_PATH = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-VL-8B-Instruct/" 
-INPUT_TSV = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/AutoGen/PromptFollowing/super-realism-prompts-new_withId_quetions.retry.tsv"  # 格式: UrlHash \t Prompt \t Question
+INPUT_TSV = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/AutoGen/PromptFollowing/super-realism-prompts-new_withId_quetions.retry.tsv"
 OUTPUT_TSV = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/AutoGen/PromptFollowing/super-realism-prompts_Qwen3_vl_output_results.tsv"
-BATCH_SIZE = 48  # 每张显卡同时处理的问题数量，可根据显存调整
+BATCH_SIZE = 48  
 
 # ================= 加载模型 =================
 if accelerator.is_main_process:
@@ -35,10 +35,33 @@ model = Qwen3VLForConditionalGeneration.from_pretrained(
 processor = AutoProcessor.from_pretrained(MODEL_PATH)
 model = accelerator.prepare(model)
 
+# ================= 逻辑函数 =================
+
+def determine_label(raw_text):
+    """
+    判定逻辑：否定词优先，支持下划线替换，使用正则单词边界匹配
+    """
+    text = str(raw_text).lower().replace('_', ' ').strip()
+    
+    # 1. 判定否定 (Negative) - 优先级最高
+    no_patterns = [
+        r'\bno\b', r'\bnot\b', r'\bnever\b', r'\bwrong\b', 
+        r'\bincorrect\b', r'\bfalse\b', r'\bnone\b'
+    ]
+    if any(re.search(p, text) for p in no_patterns):
+        return 'no'
+    
+    # 2. 判定肯定 (Positive)
+    yes_patterns = [
+        r'\byes\b', r'\babsolute\b', r'\babsolutely\b', 
+        r'\bcorrect\b', r'\bright\b', r'\btrue\b'
+    ]
+    if any(re.search(p, text) for p in yes_patterns):
+        return 'yes'
+    
+    return 'unknown'
+
 def run_inference(msgs_batch):
-    """
-    msgs_batch: List[List[Dict]]
-    """
     inputs = processor.apply_chat_template(
         msgs_batch,
         tokenize=True,
@@ -48,17 +71,9 @@ def run_inference(msgs_batch):
         padding=True 
     ).to(accelerator.device)
 
-    if accelerator.is_main_process:
-        print(f"DEBUG: input_ids shape: {inputs.input_ids.shape}")
-    if "pixel_values" in inputs:
-        print(f"DEBUG: pixel_values shape: {inputs.pixel_values.shape}")
-    # 解码查看最终拼接的文本内容（包含特殊 Token）
-    full_text = processor.decode(inputs.input_ids[0])
-    # print(f"DEBUG: Final Prompt sent to model:\n{full_text}")
-
     generated_ids = accelerator.unwrap_model(model).generate(
         **inputs, 
-        max_new_tokens=10, # VQA只需回答Yes/No
+        max_new_tokens=10,
         do_sample=False 
     )
     
@@ -72,14 +87,12 @@ def run_inference(msgs_batch):
 # ================= 主程序 =================
 def main():
     try:
-        # 读取输入，显式指定分隔符为 tab
         full_df = pd.read_csv(INPUT_TSV, sep='\t', names=['UrlHash', 'Prompt', 'Question'], header=0)
     except Exception as e:
         if accelerator.is_main_process:
             print(f"读取文件失败: {e}")
         return
 
-    # 数据分片：多卡并行处理不同行
     my_df = full_df.iloc[accelerator.process_index :: accelerator.num_processes].copy()
     
     if accelerator.is_main_process:
@@ -88,96 +101,107 @@ def main():
     final_results = []
     buffer = []
 
-    # 遍历当前进程分配到的所有行
     for _, row in tqdm(my_df.iterrows(), total=len(my_df), disable=not accelerator.is_main_process):
         url_hash = row['UrlHash']
-        prompt = row['Prompt']
         question = row['Question']
-        image_path = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/ZImage/Official/super-realism-prompts1k_official_20260116-0314/" + str(url_hash) + "_ZImage_w1344_h768.png"
+        # 修正路径拼接
+        image_path = f"/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/ZImage/Official/super-realism-prompts1k_official_20260116-0314/{url_hash}_ZImage_w1344_h768.png"
+        
         if pd.isna(question) or str(question).strip() == "":
             continue
 
-        # 构造单条 VQA 消息
         msg = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "image": image_path}, # 假设UrlHash是图片路径
+                    {"type": "image", "image": image_path},
                     {"type": "text", "text": f"Question: {question}\nAnswer only 'Yes' or 'No'."},
                 ],
             }
         ]
         
-        buffer.append({
-            "msg": msg,
-            "row_data": row.to_dict()
-        })
+        buffer.append({"msg": msg, "row_data": row.to_dict()})
 
-        # 当 Buffer 达到 BATCH_SIZE 或者到数据末尾时，执行推理
         if len(buffer) == BATCH_SIZE:
             msgs_to_run = [b["msg"] for b in buffer]
             try:
                 batch_answers = run_inference(msgs_to_run)
-                print(f"Batch 推理成功，得到 {len(batch_answers)} 个答案。", batch_answers)
                 for idx, ans in enumerate(batch_answers):
-                    clean_ans = "yes" if "yes" in ans.lower() or ans.lower() == "absolute" else ("no" if "no" in ans.lower() else "unknown")
-                    # 合并原始数据和预测结果
                     res = buffer[idx]["row_data"]
-                    res["pred_answer"] = clean_ans
                     res["raw_output"] = ans.strip()
+                    res["pred_answer"] = determine_label(ans)
                     final_results.append(res)
             except Exception as e:
                 print(f"Batch 推理失败: {e}")
                 for b in buffer:
                     res = b["row_data"]
-                    res["pred_answer"] = "error"
                     res["raw_output"] = "error"
-            
-            buffer = [] # 清空缓冲
+                    res["pred_answer"] = "unknown"
+                    final_results.append(res)
+            buffer = []
 
-    # 处理最后剩余的 buffer
     if buffer:
-        msgs_to_run = [b["msg"] for b in buffer]
-        batch_answers = run_inference(msgs_to_run)
-        for idx, ans in enumerate(batch_answers):
-            clean_ans = "yes" if "yes" in ans.lower() else ("no" if "no" in ans.lower() else "unknown")
-            res = buffer[idx]["row_data"]
-            res["pred_answer"] = clean_ans
-            res["raw_output"] = ans.strip()
-            final_results.append(res)
+        try:
+            msgs_to_run = [b["msg"] for b in buffer]
+            batch_answers = run_inference(msgs_to_run)
+            for idx, ans in enumerate(batch_answers):
+                res = buffer[idx]["row_data"]
+                res["raw_output"] = ans.strip()
+                res["pred_answer"] = determine_label(ans)
+                final_results.append(res)
+        except Exception as e:
+            print(f"收尾 Batch 失败: {e}")
 
-    # --- 保存部分 ---
+    # --- 保存临时文件 ---
     process_output_file = OUTPUT_TSV.replace(".tsv", f"_rank_{accelerator.process_index}.tsv")
     pd.DataFrame(final_results).to_csv(process_output_file, sep='\t', index=False)
     
     accelerator.wait_for_everyone()
 
+    # --- 主进程合并与后处理统计 ---
     if accelerator.is_main_process:
         print("正在合并结果并生成统计报表...")
         all_dfs = []
         for i in range(accelerator.num_processes):
             fname = OUTPUT_TSV.replace(".tsv", f"_rank_{i}.tsv")
             if os.path.exists(fname):
-                all_dfs.append(pd.read_csv(fname, sep='\t'))
-                os.remove(fname)
+                try:
+                    part_df = pd.read_csv(fname, sep='\t')
+                    all_dfs.append(part_df)
+                    os.remove(fname)
+                except Exception as e:
+                    print(f"读取分片 {fname} 失败: {e}")
         
         if all_dfs:
             final_df = pd.concat(all_dfs, ignore_index=True)
-            # 保存每一行对应一个 Question 的明细结果
+            
+            # 确保统计所需的基础列
+            final_df['is_yes'] = (final_df['pred_answer'] == 'yes').astype(int)
+            final_df['is_no'] = (final_df['pred_answer'] == 'no').astype(int)
+            final_df['is_valid'] = final_df['pred_answer'].isin(['yes', 'no']).astype(int)
+
+            # 保存明细
             final_df.to_csv(OUTPUT_TSV, sep='\t', index=False)
             
-            # --- 统计逻辑 ---
-            final_df['is_yes'] = (final_df['pred_answer'] == 'yes').astype(int)
+            # --- 聚合统计逻辑 ---
             summary_df = final_df.groupby(['UrlHash', 'Prompt']).agg(
-                total_questions=('Question', 'count'),
-                yes_count=('is_yes', 'sum')
+                total_valid_questions=('is_valid', 'sum'),  # 分母：仅计入 yes/no
+                yes_count=('is_yes', 'sum'),
+                no_count=('is_no', 'sum'),
+                unknown_count=('pred_answer', lambda x: (x == 'unknown').sum())
             ).reset_index()
             
-            summary_df['score'] = summary_df['yes_count'] / summary_df['total_questions']
+            # 计算得分：yes / (yes + no)
+            summary_df['score'] = summary_df.apply(
+                lambda x: x['yes_count'] / x['total_valid_questions'] if x['total_valid_questions'] > 0 else 0, 
+                axis=1
+            )
             
             summary_filename = OUTPUT_TSV.replace(".tsv", "_summary.tsv")
             summary_df.to_csv(summary_filename, sep='\t', index=False)
-            print(f"统计完成！\n明细文件: {OUTPUT_TSV}\n统计文件: {summary_filename}")
+            
+            print(f"统计完成！\n明细文件: {OUTPUT_TSV}\n汇总文件: {summary_filename}")
+            print(f"逻辑说明：'absolute_no' 等否定组合已修正为 'no'；Score 仅根据有效回答计算。")
 
 if __name__ == "__main__":
     main()
