@@ -1,6 +1,13 @@
+import torch
+if not hasattr(torch, "compiler"):
+    class MockCompiler:
+        def is_compiling(self): return False
+    torch.compiler = MockCompiler()
+elif not hasattr(torch.compiler, "is_compiling"):
+    torch.compiler.is_compiling = lambda: False
 import os
 import pandas as pd
-import torch
+
 from tqdm import tqdm
 from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
 from accelerate import Accelerator
