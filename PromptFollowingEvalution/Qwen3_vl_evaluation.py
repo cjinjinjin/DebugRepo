@@ -41,6 +41,14 @@ def run_inference(msgs_batch):
         padding=True 
     ).to(accelerator.device)
 
+    if accelerator.is_main_process:
+        print(f"DEBUG: input_ids shape: {inputs.input_ids.shape}")
+    if "pixel_values" in inputs:
+        print(f"DEBUG: pixel_values shape: {inputs.pixel_values.shape}")
+    # 解码查看最终拼接的文本内容（包含特殊 Token）
+    full_text = processor.decode(inputs.input_ids[0])
+    print(f"DEBUG: Final Prompt sent to model:\n{full_text}")
+
     generated_ids = accelerator.unwrap_model(model).generate(
         **inputs, 
         max_new_tokens=10, # VQA只需回答Yes/No
