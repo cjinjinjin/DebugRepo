@@ -54,7 +54,7 @@ def run_inference(msgs_batch):
         print(f"DEBUG: pixel_values shape: {inputs.pixel_values.shape}")
     # 解码查看最终拼接的文本内容（包含特殊 Token）
     full_text = processor.decode(inputs.input_ids[0])
-    print(f"DEBUG: Final Prompt sent to model:\n{full_text}")
+    # print(f"DEBUG: Final Prompt sent to model:\n{full_text}")
 
     generated_ids = accelerator.unwrap_model(model).generate(
         **inputs, 
@@ -118,6 +118,7 @@ def main():
             msgs_to_run = [b["msg"] for b in buffer]
             try:
                 batch_answers = run_inference(msgs_to_run)
+                print(f"Batch 推理成功，得到 {len(batch_answers)} 个答案。", batch_answers)
                 for idx, ans in enumerate(batch_answers):
                     clean_ans = "yes" if "yes" in ans.lower() else ("no" if "no" in ans.lower() else "unknown")
                     # 合并原始数据和预测结果
