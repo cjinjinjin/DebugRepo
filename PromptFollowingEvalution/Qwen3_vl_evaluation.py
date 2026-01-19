@@ -120,7 +120,7 @@ def main():
                 batch_answers = run_inference(msgs_to_run)
                 print(f"Batch 推理成功，得到 {len(batch_answers)} 个答案。", batch_answers)
                 for idx, ans in enumerate(batch_answers):
-                    clean_ans = "yes" if "yes" in ans.lower() else ("no" if "no" in ans.lower() else "unknown")
+                    clean_ans = "yes" if "yes" in ans.lower() or ans.lower() == "absolute" else ("no" if "no" in ans.lower() else "unknown")
                     # 合并原始数据和预测结果
                     res = buffer[idx]["row_data"]
                     res["pred_answer"] = clean_ans
