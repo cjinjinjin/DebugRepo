@@ -141,7 +141,7 @@ def main():
         batch_answers = run_inference(msgs_to_run)
         for idx, ans in enumerate(batch_answers):
             clean_ans = "yes" if "yes" in ans.lower() else ("no" if "no" in ans.lower() else "unknown")
-            res = buffer[idx]d["row_data"]
+            res = buffer[idx]["row_data"]
             res["pred_answer"] = clean_ans
             res["raw_output"] = ans.strip()
             final_results.append(res)
