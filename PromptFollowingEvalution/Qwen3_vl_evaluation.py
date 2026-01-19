@@ -86,7 +86,7 @@ def main():
         url_hash = row['UrlHash']
         prompt = row['Prompt']
         question = row['Question']
-        image_path = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/ZImage/Official/super-realism-prompts1k_official_20260116-0314/" + str(url_hash) + "ZImage_w1344_h768.png"
+        image_path = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/ZImage/Official/super-realism-prompts1k_official_20260116-0314/" + str(url_hash) + "_ZImage_w1344_h768.png"
         if pd.isna(question) or str(question).strip() == "":
             continue
 
