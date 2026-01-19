@@ -157,52 +157,77 @@ def main():
     process_output_file = OUTPUT_TSV.replace(".tsv", f"_rank_{accelerator.process_index}.tsv")
     pd.DataFrame(final_results).to_csv(process_output_file, sep='\t', index=False)
     
+    # ================= 结果合并与统计 (仅在主进程执行) =================
     accelerator.wait_for_everyone()
 
-    # --- 主进程合并与后处理统计 ---
     if accelerator.is_main_process:
-        print("正在合并结果并生成统计报表...")
+        print("\n>>> 正在进行结果安全合并与报表生成...")
         all_dfs = []
+        
         for i in range(accelerator.num_processes):
             fname = OUTPUT_TSV.replace(".tsv", f"_rank_{i}.tsv")
-            if os.path.exists(fname):
-                try:
-                    part_df = pd.read_csv(fname, sep='\t')
+            
+            if not os.path.exists(fname):
+                print(f"警告: 找不到进程 {i} 的输出文件: {fname}")
+                continue
+                
+            # 检查文件大小，如果是 0 字节则跳过
+            if os.path.getsize(fname) == 0:
+                print(f"跳过空文件 (0 bytes): {fname}")
+                os.remove(fname)
+                continue
+                
+            try:
+                # 读取分片
+                part_df = pd.read_csv(fname, sep='\t')
+                if part_df is not None and not part_df.empty:
                     all_dfs.append(part_df)
-                    os.remove(fname)
-                except Exception as e:
-                    print(f"读取分片 {fname} 失败: {e}")
-        
+                    print(f"成功读取 Rank {i}: {len(part_df)} 条记录")
+                # 读取成功后删除临时文件
+                os.remove(fname)
+            except pd.errors.EmptyDataError:
+                print(f"跳过无数据文件: {fname}")
+                if os.path.exists(fname): os.remove(fname)
+            except Exception as e:
+                print(f"读取分片 {fname} 失败: {e}")
+
+        # --- 开始统计 ---
         if all_dfs:
             final_df = pd.concat(all_dfs, ignore_index=True)
             
-            # 确保统计所需的基础列
+            # 1. 基础明细清洗
             final_df['is_yes'] = (final_df['pred_answer'] == 'yes').astype(int)
             final_df['is_no'] = (final_df['pred_answer'] == 'no').astype(int)
             final_df['is_valid'] = final_df['pred_answer'].isin(['yes', 'no']).astype(int)
 
-            # 保存明细
+            # 保存最终明细 TSV
             final_df.to_csv(OUTPUT_TSV, sep='\t', index=False)
             
-            # --- 聚合统计逻辑 ---
+            # 2. 聚合生成 Summary
+            # 这里的 total_valid_questions 只统计 yes 和 no 的有效回答
             summary_df = final_df.groupby(['UrlHash', 'Prompt']).agg(
-                total_valid_questions=('is_valid', 'sum'),  # 分母：仅计入 yes/no
+                total_valid_questions=('is_valid', 'sum'),
                 yes_count=('is_yes', 'sum'),
                 no_count=('is_no', 'sum'),
                 unknown_count=('pred_answer', lambda x: (x == 'unknown').sum())
             ).reset_index()
             
             # 计算得分：yes / (yes + no)
-            summary_df['score'] = summary_df.apply(
-                lambda x: x['yes_count'] / x['total_valid_questions'] if x['total_valid_questions'] > 0 else 0, 
-                axis=1
-            )
+            # 使用 numpy.where 或 fillna 处理分母为 0 的情况
+            summary_df['score'] = 0.0
+            mask = summary_df['total_valid_questions'] > 0
+            summary_df.loc[mask, 'score'] = summary_df.loc[mask, 'yes_count'] / summary_df.loc[mask, 'total_valid_questions']
             
             summary_filename = OUTPUT_TSV.replace(".tsv", "_summary.tsv")
             summary_df.to_csv(summary_filename, sep='\t', index=False)
             
-            print(f"统计完成！\n明细文件: {OUTPUT_TSV}\n汇总文件: {summary_filename}")
-            print(f"逻辑说明：'absolute_no' 等否定组合已修正为 'no'；Score 仅根据有效回答计算。")
-
+            print("-" * 50)
+            print(f"任务圆满完成！")
+            print(f"总计合并记录: {len(final_df)} 条")
+            print(f"明细文件路径: {OUTPUT_TSV}")
+            print(f"统计文件路径: {summary_filename}")
+            print("-" * 50)
+        else:
+            print("错误：未能成功合并任何有效数据，请检查各进程推理日志。")
 if __name__ == "__main__":
     main()
