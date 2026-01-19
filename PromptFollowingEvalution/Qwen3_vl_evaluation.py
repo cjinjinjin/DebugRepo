@@ -58,7 +58,7 @@ def run_inference(msgs_batch):
 def main():
     try:
         # 读取输入，显式指定分隔符为 tab
-        full_df = pd.read_csv(INPUT_TSV, sep='\t')
+        full_df = pd.read_csv(INPUT_TSV, sep='\t', header_names=['UrlHash', 'Prompt', 'Question'])
     except Exception as e:
         if accelerator.is_main_process:
             print(f"读取文件失败: {e}")
