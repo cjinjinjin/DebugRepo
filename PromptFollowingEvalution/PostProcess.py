@@ -1,5 +1,5 @@
 import pandas as pd
-import os
+import os, re
 
 def post_process_refined(file_path):
     if not os.path.exists(file_path):
@@ -10,22 +10,23 @@ def post_process_refined(file_path):
 
     # 定义判定函数
     def determine_label(raw_text):
-        raw_text = str(raw_text).lower().strip()
+        text = str(raw_text).lower().replace('_', ' ').strip()
+        no_patterns = [
+            r'\bno\b', r'\bnot\b', r'\bnever\b', r'\bwrong\b', 
+            r'\bincorrect\b', r'\bfalse\b', r'\bnone\b'
+        ]
         
-        # 1. 判定是否为 Yes (包含 yes 或 absolute/absolutely, correct, right, true)
-        if any(k in raw_text for k in ['yes', 'absolute', 'absolutely', 'correct', 'right', 'true']):
-            # 排除类似 "no, not absolute" 的情况 (可选)
-            if 'no' in raw_text and raw_text.find('no') < raw_text.find('absolute'):
-                # 如果 'no' 出现在 'absolute' 之前，可能是否定
-                pass 
-            else:
-                return 'yes'
-        
-        # 2. 判定是否为 No (包含 no, not)
-        if any(k in raw_text for k in ['no', 'not']):
+        # 只要命中任何一个否定单词，就定性为 no
+        if any(re.search(p, text) for p in no_patterns):
             return 'no'
+        yes_patterns = [
+            r'\byes\b', r'\babsolute\b', r'\babsolutely\b', 
+            r'\bcorrect\b', r'\bright\b', r'\btrue\b'
+        ]
         
-        # 3. 其他情况均视为 unknown
+        if any(re.search(p, text) for p in yes_patterns):
+            return 'yes'
+        
         return 'unknown'
 
     # 应用判定逻辑
