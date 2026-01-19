@@ -19,7 +19,7 @@ accelerator = Accelerator()
 MODEL_PATH = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-VL-8B-Instruct/" 
 INPUT_TSV = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/AutoGen/PromptFollowing/super-realism-prompts-new_withId_quetions.retry.tsv"  # 格式: UrlHash \t Prompt \t Question
 OUTPUT_TSV = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/AutoGen/PromptFollowing/super-realism-prompts_Qwen3_vl_output_results.tsv"
-BATCH_SIZE = 12  # 每张显卡同时处理的问题数量，可根据显存调整
+BATCH_SIZE = 48  # 每张显卡同时处理的问题数量，可根据显存调整
 
 # ================= 加载模型 =================
 if accelerator.is_main_process:
@@ -141,7 +141,7 @@ def main():
         batch_answers = run_inference(msgs_to_run)
         for idx, ans in enumerate(batch_answers):
             clean_ans = "yes" if "yes" in ans.lower() else ("no" if "no" in ans.lower() else "unknown")
-            res = buffer[idx]["row_data"]
+            res = buffer[idx]d["row_data"]
             res["pred_answer"] = clean_ans
             res["raw_output"] = ans.strip()
             final_results.append(res)
