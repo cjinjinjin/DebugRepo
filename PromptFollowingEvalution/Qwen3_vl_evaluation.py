@@ -17,8 +17,8 @@ accelerator = Accelerator()
 
 # ================= 配置 =================
 MODEL_PATH = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-VL-8B-Instruct/" 
-INPUT_TSV = "/vc_data//shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/AutoGen/PromptFollowing/part1_super-realism-prompts-new_withId_quetions.tsv"
-OUTPUT_TSV = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/AutoGen/PromptFollowing/Qwen3vlOutput/part1_Qwen3_vl_output_results.tsv"
+INPUT_TSV = "/vc_data//shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/AutoGen/PromptFollowing/super-realism-prompts-new_withId_quetions.retry2.tsv"
+OUTPUT_TSV = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/AutoGen/PromptFollowing/Qwen3vlOutput/part2_Qwen3_vl_output_results.tsv"
 image_folder = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/ZImage/Official/super-realism-prompts1k_official_20260116-0314"
 BATCH_SIZE = 48  
 
