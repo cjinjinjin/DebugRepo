@@ -231,3 +231,5 @@ def main():
             print("错误：未能成功合并任何有效数据，请检查各进程推理日志。")
 if __name__ == "__main__":
     main()
+
+# CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 accelerate launch --multi_gpu --num_processes 8 Qwen3_vl_evaluation.py    
