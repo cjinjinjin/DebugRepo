@@ -233,3 +233,5 @@ if __name__ == "__main__":
     main()
 
 # CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 accelerate launch --multi_gpu --num_processes 8 Qwen3_vl_evaluation.py    
+# pip install transformers accelerate pandas pillow qwen-vl-utils
+# pip install flash-attn --no-build-isolation
