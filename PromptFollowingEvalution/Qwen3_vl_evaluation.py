@@ -17,9 +17,9 @@ accelerator = Accelerator()
 
 # ================= 配置 =================
 MODEL_PATH = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-VL-8B-Instruct/" 
-INPUT_TSV = "/vc_data//shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/AutoGen/PromptFollowing/super-realism-prompts-new_withId_quetions.retry2.tsv"
-OUTPUT_TSV = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/AutoGen/PromptFollowing/Qwen3vlOutput/part2_Qwen3_vl_output_results.tsv"
-image_folder = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/ZImage/Official/super-realism-prompts1k_official_20260116-0314"
+INPUT_TSV = "/vc_data//shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/BLIP3o/preprocess/occupation_ToyCaption_quetions.tsv"
+OUTPUT_TSV = "/vc_data//shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/BLIP3o/preprocess/occupation_ToyCaption_quetions_Qwen3_vl_output_results.tsv"
+image_folder = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/BLIP3o/occupation-NanoBanana/"
 BATCH_SIZE = 48  
 
 # ================= 加载模型 =================
@@ -103,10 +103,10 @@ def main():
     buffer = []
 
     for _, row in tqdm(my_df.iterrows(), total=len(my_df), disable=not accelerator.is_main_process):
-        url_hash = row['UrlHash']
+        url_hash = row['UrlHash'].split('/')[-1].split('.')[0]
         question = row['Question']
         # 修正路径拼接
-        image_path = f"{image_folder}/{url_hash}_ZImage_w1344_h768.png"
+        image_path = f"{image_folder}/{url_hash}.png"
         
         if pd.isna(question) or str(question).strip() == "":
             continue
