@@ -18,8 +18,8 @@ accelerator = Accelerator()
 # ================= 配置 =================
 MODEL_PATH = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-VL-8B-Instruct/" 
 INPUT_TSV = "/vc_data//shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/BLIP3o/preprocess/occupation_ToyCaption_quetions.tsv"
-OUTPUT_TSV = "/vc_data//shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/BLIP3o/preprocess/occupation_ToyCaption_quetions_Qwen3_vl_output_results.tsv"
-image_folder = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/BLIP3o/occupation-NanoBanana/"
+OUTPUT_TSV = "/vc_data//shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/BLIP3o/preprocess/occupation_ToyCaption_quetions_Qwen3_vl_output_results_ZImage.tsv"
+image_folder = "/vc_data//shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/ZImage/Official/occupation_ZImage_official_20260120-2248/"
 BATCH_SIZE = 48  
 
 # ================= 加载模型 =================
