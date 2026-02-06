@@ -36,11 +36,16 @@ model = Qwen3VLForConditionalGeneration.from_pretrained(
     trust_remote_code=True
 )
 processor = AutoProcessor.from_pretrained(MODEL_PATH)
-
+processor.tokenizer.padding_side = "left"
 # 获取 Yes 和 No 的 Token ID
 # 注意：Qwen 的处理通常会区分大小写。根据 Prompt "Answer only 'Yes' or 'No'"，我们取首字母大写的 ID
-YES_TOKEN_ID = processor.tokenizer.convert_tokens_to_ids("Yes")
-NO_TOKEN_ID = processor.tokenizer.convert_tokens_to_ids("No")
+ids_yes = processor.tokenizer(["Yes", " Yes"], add_special_tokens=False).input_ids
+ids_no = processor.tokenizer(["No", " No"], add_special_tokens=False).input_ids
+YES_IDS = [item for sublist in ids_yes for item in sublist]
+NO_IDS = [item for sublist in ids_no for item in sublist]
+if accelerator.is_main_process:
+    print(f"监控的 Yes Token IDs: {YES_IDS}")
+    print(f"监控的 No Token IDs: {NO_IDS}")
 
 model = accelerator.prepare(model)
 
@@ -66,10 +71,15 @@ def run_inference_logits(msgs_batch):
     # 2. 获取最后一个位置（即预测首个回答 Token 的位置）的 Logits
     # outputs.logits 形状: [batch, sequence_length, vocab_size]
     last_token_logits = outputs.logits[:, -1, :] 
-    
+    if getattr(run_inference_logits, "debug_once", True) and accelerator.is_main_process:
+        topk_vals, topk_indices = torch.topk(last_token_logits[0], 5)
+        decoded = processor.tokenizer.batch_decode(topk_indices.unsqueeze(-1))
+        print(f"\n[DEBUG] Top 5 predicted tokens for first sample: {decoded}")
+        print(f"[DEBUG] Top 5 logits: {topk_vals.cpu().numpy()}")
+        run_inference_logits.debug_once = False
     # 3. 提取 Yes 和 No 的原始分值
-    yes_logits = last_token_logits[:, YES_TOKEN_ID].float()
-    no_logits = last_token_logits[:, NO_TOKEN_ID].float()
+    yes_logits = last_token_logits[:, YES_IDS].max(dim=-1).values
+    no_logits = last_token_logits[:, NO_IDS].max(dim=-1).values
     
     # 4. 对这两者进行 Softmax，得到相对概率
     # 这样 yes_prob + no_prob = 1
@@ -104,10 +114,7 @@ def main():
         user_prompt = row['Prompt']
         image_path = row['FullLocalPath']
 
-        prompt = f"""
-            Does the image perfectly match the description: "{user_prompt}"?
-            Answer Yes or No.
-            Answer:"""
+        prompt = f"""Does the image perfectly match the description: "{user_prompt}"? Please answer with only "Yes" or "No"."""
         msg = [
             {
                 "role": "user",
