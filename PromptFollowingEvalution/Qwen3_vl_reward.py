@@ -39,10 +39,13 @@ processor = AutoProcessor.from_pretrained(MODEL_PATH)
 processor.tokenizer.padding_side = "left"
 # 获取 Yes 和 No 的 Token ID
 # 注意：Qwen 的处理通常会区分大小写。根据 Prompt "Answer only 'Yes' or 'No'"，我们取首字母大写的 ID
-ids_yes = processor.tokenizer(["Yes", " Yes"], add_special_tokens=False).input_ids
-ids_no = processor.tokenizer(["No", " No"], add_special_tokens=False).input_ids
-YES_IDS = [item for sublist in ids_yes for item in sublist]
-NO_IDS = [item for sublist in ids_no for item in sublist]
+yes_tokens = ["Yes", " Yes", "YES", "yes"]
+no_tokens = ["No", " No", "NO", "no", "Part", "Partial", "Almost"] # 把半对半错的也归为 No 侧
+
+ids_yes = [processor.tokenizer.convert_tokens_to_ids(t) for t in yes_tokens]
+ids_no = [processor.tokenizer.convert_tokens_to_ids(t) for t in no_tokens]
+YES_IDS = [i for i in ids_yes if i is not None]
+NO_IDS = [i for i in ids_no if i is not None]
 if accelerator.is_main_process:
     print(f"监控的 Yes Token IDs: {YES_IDS}")
     print(f"监控的 No Token IDs: {NO_IDS}")
