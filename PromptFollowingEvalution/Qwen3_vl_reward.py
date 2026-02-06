@@ -87,7 +87,7 @@ def run_inference_logits(msgs_batch):
     probs = torch.softmax(combined_logits, dim=-1)
     
     # 返回 Yes 的概率作为 Score
-    return probs[:, 0].cpu().numpy(), yes_logits.cpu().numpy(), no_logits.cpu().numpy()
+    return probs[:, 0].float().cpu().numpy(), yes_logits.float().cpu().numpy(), no_logits.float().cpu().numpy()
 
 # ================= 主程序 =================
 def main():
