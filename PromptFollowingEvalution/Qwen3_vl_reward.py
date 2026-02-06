@@ -75,7 +75,7 @@ def run_inference_logits(msgs_batch):
         topk_vals, topk_indices = torch.topk(last_token_logits[0], 5)
         decoded = processor.tokenizer.batch_decode(topk_indices.unsqueeze(-1))
         print(f"\n[DEBUG] Top 5 predicted tokens for first sample: {decoded}")
-        print(f"[DEBUG] Top 5 logits: {topk_vals.cpu().numpy()}")
+        print(f"[DEBUG] Top 5 logits: {topk_vals.float().cpu().numpy()}")
         run_inference_logits.debug_once = False
     # 3. 提取 Yes 和 No 的原始分值
     yes_logits = last_token_logits[:, YES_IDS].max(dim=-1).values
