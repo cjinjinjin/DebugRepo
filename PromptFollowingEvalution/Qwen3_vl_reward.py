@@ -12,15 +12,16 @@ import numpy as np
 from tqdm import tqdm
 from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
 from accelerate import Accelerator
+from sklearn.metrics import roc_auc_score
 
 # 1. 初始化 Accelerator
 accelerator = Accelerator()
 
 # ================= 配置 =================
 MODEL_PATH = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-VL-8B-Instruct/" 
-INPUT_TSV = "/vc_data//shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/BLIP3o/preprocess/occupation_ToyCaption_quetions.tsv"
-OUTPUT_TSV = "/vc_data//shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/BLIP3o/preprocess/occupation_ToyCaption_quetions_Qwen3_vl_logits.tsv"
-image_folder = "/vc_data//shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/ZImage/Official/occupation_ZImage_official_20260120-2248/"
+INPUT_TSV = "/vc_data//shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/AutoGen/PromptFollowing/UHRS_Task_BIC_evaluation_label_list_1223_processed_results.csv"
+OUTPUT_TSV = "/vc_data//shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/AutoGen/PromptFollowing/UHRS_Task_BIC_evaluation_label_list_1223_Qwen3_vl_8B_logits.tsv"
+image_folder = "/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Data/AutoGen/PromptFollowing/UHRS_Task_BIC_evaluation_label_list_1223/"
 BATCH_SIZE = 16  # 注意：Logits 模式显存占用略高于 Generate，如 OOM 可调小
 
 # ================= 加载模型 =================
@@ -81,14 +82,17 @@ def run_inference_logits(msgs_batch):
 # ================= 主程序 =================
 def main():
     try:
-        full_df = pd.read_csv(INPUT_TSV, sep='\t', names=['UrlHash', 'Prompt', 'Question'], header=0)
+        full_df = pd.read_csv(INPUT_TSV, sep='\t', header=0)
     except Exception as e:
         if accelerator.is_main_process:
             print(f"读取文件失败: {e}")
         return
 
     my_df = full_df.iloc[accelerator.process_index :: accelerator.num_processes].copy()
+    my_df['FullLocalPath'] = my_df['LocalPath'].apply(lambda x: os.path.join(image_folder, x))
     
+    # 过滤掉不存在的文件
+    my_df = my_df[my_df['FullLocalPath'].apply(os.path.exists)].copy()
     if accelerator.is_main_process:
         print(f"模式: Logits 提取 (Prob of 'Yes')")
         print(f"总行数: {len(full_df)}, 当前进程处理行数: {len(my_df)}")
@@ -97,19 +101,19 @@ def main():
     buffer = []
 
     for _, row in tqdm(my_df.iterrows(), total=len(my_df), disable=not accelerator.is_main_process):
-        url_hash = row['UrlHash'].split('/')[-1].split('.')[0]
-        question = row['Question']
-        image_path = f"{image_folder}/{url_hash}.png"
-        
-        if pd.isna(question) or str(question).strip() == "":
-            continue
+        user_prompt = row['Prompt']
+        image_path = row['FullLocalPath']
 
+        prompt = f"""
+            Does the image perfectly match the description: "{user_prompt}"?
+            Answer Yes or No.
+            Answer:"""
         msg = [
             {
                 "role": "user",
                 "content": [
                     {"type": "image", "image": image_path},
-                    {"type": "text", "text": f"Question: {question}\nAnswer only 'Yes' or 'No'."},
+                    {"type": "text", "text": prompt},
                 ],
             }
         ]
@@ -151,26 +155,38 @@ def main():
     accelerator.wait_for_everyone()
 
     if accelerator.is_main_process:
-        print("\n>>> 正在合并结果并计算 Reward Metrics...")
+        print("\n>>> 正在合并结果并计算 AUC 指标...")
         all_dfs = [pd.read_csv(OUTPUT_TSV.replace(".tsv", f"_rank_{i}.tsv"), sep='\t') 
-                   for i in range(accelerator.num_processes) if os.path.exists(OUTPUT_TSV.replace(".tsv", f"_rank_{i}.tsv"))]
+                   for i in range(accelerator.num_processes)]
+        final_df = pd.concat(all_dfs, ignore_index=True)
         
-        if all_dfs:
-            final_df = pd.concat(all_dfs, ignore_index=True)
-            final_df.to_csv(OUTPUT_TSV, sep='\t', index=False)
+        # --- 重点：计算 AUC ---
+        # 过滤出 Good 和 Bad 的行用于评估
+        eval_df = final_df[final_df['image4-promptFollowing'].isin(['Good', 'Bad', 'fair'])].copy()
+        
+        if len(eval_df) > 0:
+            # 映射标签：Good=1, Bad=0
+            y_true = eval_df['image4-promptFollowing'].map({'Good': 1, 'fair':1,'Bad': 0})
+            y_score = eval_df['yes_prob']
             
-            # 生成汇总表时，score 就是 yes_prob 的平均值
-            summary_df = final_df.groupby(['UrlHash', 'Prompt']).agg(
-                avg_yes_prob=('yes_prob', 'mean'),
-                question_count=('yes_prob', 'count')
-            ).reset_index()
-            
-            summary_filename = OUTPUT_TSV.replace(".tsv", "_summary.tsv")
-            summary_df.to_csv(summary_filename, sep='\t', index=False)
-            print(f"任务完成！连续得分(Probability)已保存。")
-            # 清理临时文件
-            for i in range(accelerator.num_processes):
-                os.remove(OUTPUT_TSV.replace(".tsv", f"_rank_{i}.tsv"))
+            try:
+                auc_value = roc_auc_score(y_true, y_score)
+                print("-" * 50)
+                print(f"评估完成！")
+                print(f"有效评估样本数 (Good+Bad): {len(eval_df)}")
+                print(f"Qwen3-VL Reward AUC: {auc_value:.4f}")
+                print("-" * 50)
+                
+                # 在文件名中记录 AUC
+                final_df.to_csv(OUTPUT_TSV, sep='\t', index=False)
+            except Exception as e:
+                print(f"AUC 计算失败 (可能缺少某一类样本): {e}")
+        else:
+            print("警告：未在 image4-promptFollowing 列中找到 'Good' 或 'Bad' 标签，无法计算 AUC。")
+
+        # 清理临时文件
+        for i in range(accelerator.num_processes):
+            os.remove(OUTPUT_TSV.replace(".tsv", f"_rank_{i}.tsv"))
 
 if __name__ == "__main__":
     main()
