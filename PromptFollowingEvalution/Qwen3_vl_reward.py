@@ -119,14 +119,14 @@ def run_inference_logits(msgs_batch):
     combined_logits = torch.stack([no_logits, partial_logits, yes_logits], dim=-1)
     weights = torch.tensor([0.0, 0.5, 1.0]).to(combined_logits.device)
     probs_weighted = torch.softmax(combined_logits, dim=-1)
-    yes_prob = (probs_weighted * weights).sum(dim=-1)
+    probs = (probs_weighted * weights).sum(dim=-1)
     
     # 方法2: 只用Yes和No，把Partial归入No（当前方法）
     # combined_logits = torch.stack([yes_logits, no_logits + partial_logits], dim=-1)
     # probs = torch.softmax(combined_logits, dim=-1)
     
     # 返回 Yes 的概率作为 Score
-    return probs[:, 0].float().cpu().numpy(), yes_logits.float().cpu().numpy(), no_logits.float().cpu().numpy()
+    return probs.float().cpu().numpy(), yes_logits.float().cpu().numpy(), no_logits.float().cpu().numpy()
 @torch.no_grad()
 def debug_generate(msgs_batch, num_samples=5):
     """
