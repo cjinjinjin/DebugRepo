@@ -37,19 +37,23 @@ model = Qwen3VLForConditionalGeneration.from_pretrained(
 )
 processor = AutoProcessor.from_pretrained(MODEL_PATH)
 processor.tokenizer.padding_side = "left"
-# 获取 Yes 和 No 的 Token ID
-# 注意：Qwen 的处理通常会区分大小写。根据 Prompt "Answer only 'Yes' or 'No'"，我们取首字母大写的 ID
-yes_tokens = ["Yes", " Yes", "YES", "yes"]
-no_tokens = ["No", " No", "NO", "no", "Part", "Partial", "Almost"] # 把半对半错的也归为 No 侧
+
+yes_tokens = ["Yes", " Yes", "yes", " yes", "YES", " YES", "Ġyes", "ĠYes"]
+no_tokens = ["No", " No", "no", " no", "NO", " NO", "Ġno", "ĠNo"]
+partial_tokens = ["Part", " Part", "Partial", " Partial", "Almost", " Almost"]
 
 ids_yes = [processor.tokenizer.convert_tokens_to_ids(t) for t in yes_tokens]
 ids_no = [processor.tokenizer.convert_tokens_to_ids(t) for t in no_tokens]
-YES_IDS = [i for i in ids_yes if i is not None]
-NO_IDS = [i for i in ids_no if i is not None]
+ids_partial = [processor.tokenizer.convert_tokens_to_ids(t) for t in partial_tokens]
+
+YES_IDS = [i for i in ids_yes if i is not None and i >= 0]
+NO_IDS = [i for i in ids_no if i is not None and i >= 0]
+PARTIAL_IDS = [i for i in ids_partial if i is not None and i >= 0]
+
 if accelerator.is_main_process:
     print(f"监控的 Yes Token IDs: {YES_IDS}")
     print(f"监控的 No Token IDs: {NO_IDS}")
-
+    print(f"监控的 Partial Token IDs: {PARTIAL_IDS}")
 model = accelerator.prepare(model)
 
 # ================= 逻辑函数 =================
@@ -109,10 +113,16 @@ def run_inference_logits(msgs_batch):
     # 3. 提取 Yes 和 No 的原始分值
     yes_logits = last_token_logits[:, YES_IDS].max(dim=-1).values
     no_logits = last_token_logits[:, NO_IDS].max(dim=-1).values
+    partial_logits = last_token_logits[:, PARTIAL_IDS].max(dim=-1).values if len(PARTIAL_IDS) > 0 else torch.zeros_like(yes_logits)
+
+    # 方法1: 将Partial视为0.5的Yes
+    # combined_logits = torch.stack([no_logits, partial_logits, yes_logits], dim=-1)
+    # weights = torch.tensor([0.0, 0.5, 1.0]).to(combined_logits.device)
+    # probs_weighted = torch.softmax(combined_logits, dim=-1)
+    # yes_prob = (probs_weighted * weights).sum(dim=-1)
     
-    # 4. 对这两者进行 Softmax，得到相对概率
-    # 这样 yes_prob + no_prob = 1
-    combined_logits = torch.stack([yes_logits, no_logits], dim=-1)
+    # 方法2: 只用Yes和No，把Partial归入No（当前方法）
+    combined_logits = torch.stack([yes_logits, no_logits + partial_logits], dim=-1)
     probs = torch.softmax(combined_logits, dim=-1)
     
     # 返回 Yes 的概率作为 Score
@@ -252,11 +262,11 @@ def main():
 
         # --- 重点：计算 AUC ---
         # 过滤出 Good 和 Bad 的行用于评估
-        eval_df = final_df[final_df['image4-promptFollowing'].isin(['Good', 'Bad'])].copy()
+        eval_df = final_df[final_df['image4-promptFollowing'].isin(['Good', 'Bad', 'fair'])].copy()
     
         if len(eval_df) > 0:
             # 映射标签：Good=1, Bad=0（已经没有fair了）
-            y_true = eval_df['image4-promptFollowing'].map({'Good': 1, 'Bad': 0})
+            y_true = eval_df['image4-promptFollowing'].map({'Good': 1, 'Bad': 0, 'fair': 0})
             y_score = eval_df['yes_prob']
             
             try:
