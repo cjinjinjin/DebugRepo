@@ -131,8 +131,11 @@ def debug_generate(msgs_batch, num_samples=5):
         padding=True 
     ).to(accelerator.device)
 
+    # 【修正】使用 unwrap_model 或 .module 访问原始模型
+    unwrapped_model = accelerator.unwrap_model(model)
+    
     # 使用 generate 生成文本
-    generated_ids = model.generate(
+    generated_ids = unwrapped_model.generate(
         **inputs,
         max_new_tokens=10,
         do_sample=False
