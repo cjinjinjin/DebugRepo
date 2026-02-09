@@ -242,61 +242,107 @@ def main():
     if accelerator.is_main_process:
         print("\n>>> 正在合并结果并计算 AUC 指标...")
         all_dfs = [pd.read_csv(OUTPUT_TSV.replace(".tsv", f"_rank_{i}.tsv"), sep='\t') 
-                   for i in range(accelerator.num_processes)]
+                for i in range(accelerator.num_processes)]
         final_df = pd.concat(all_dfs, ignore_index=True)
         
-        print("\n=== 诊断信息 ===")
-        print(f"Yes概率分布: min={final_df['yes_prob'].min():.3f}, "
+        # ========== 基础统计 ==========
+        print("\n=== 概率分布统计 ===")
+        print(f"整体yes_prob: min={final_df['yes_prob'].min():.3f}, "
             f"mean={final_df['yes_prob'].mean():.3f}, "
             f"max={final_df['yes_prob'].max():.3f}")
         
-        fair_probs = final_df[final_df['image4-promptFollowing']=='fair']['yes_prob']
-        print(f"Fair样本yes_prob均值: {fair_probs.mean():.3f}, std={fair_probs.std():.3f}")
-
         good_probs = final_df[final_df['image4-promptFollowing']=='Good']['yes_prob']
+        fair_probs = final_df[final_df['image4-promptFollowing']=='fair']['yes_prob']
         bad_probs = final_df[final_df['image4-promptFollowing']=='Bad']['yes_prob']
         
-        print(f"Good样本yes_prob均值: {good_probs.mean():.3f}")
-        print(f"Bad样本yes_prob均值: {bad_probs.mean():.3f}")
-        print(f"两者差距: {good_probs.mean() - bad_probs.mean():.3f}")
-
-        # --- 重点：计算 AUC ---
-        # 过滤出 Good 和 Bad 的行用于评估
-        eval_df = final_df[final_df['image4-promptFollowing'].isin(['Good', 'Bad', 'fair'])].copy()
-    
-        if len(eval_df) > 0:
-            # 映射标签：Good=1, Bad=0（已经没有fair了）
-            y_true = eval_df['image4-promptFollowing'].map({'Good': 1, 'Bad': 0, 'fair': 0})
-            y_score = eval_df['yes_prob']
-            
-            try:
-                auc_value = roc_auc_score(y_true, y_score)
-                print("-" * 50)
-                print(f"评估完成！")
-                print(f"总样本数: {len(final_df)}")
-                print(f"  - Good: {len(final_df[final_df['image4-promptFollowing']=='Good'])}")
-                print(f"  - Bad: {len(final_df[final_df['image4-promptFollowing']=='Bad'])}")
-                print(f"  - Fair: {len(final_df[final_df['image4-promptFollowing']=='fair'])}")
-                print(f"有效评估样本数 (Good+Bad): {len(eval_df)}")
-                print(f"Qwen3-VL Reward AUC: {auc_value:.4f}")
-                
-                # 【新增】分布诊断
-                good_probs = eval_df[eval_df['image4-promptFollowing']=='Good']['yes_prob']
-                bad_probs = eval_df[eval_df['image4-promptFollowing']=='Bad']['yes_prob']
-                print(f"\nGood样本 yes_prob: mean={good_probs.mean():.3f}, std={good_probs.std():.3f}")
-                print(f"Bad样本 yes_prob: mean={bad_probs.mean():.3f}, std={bad_probs.std():.3f}")
-                print(f"均值差距: {good_probs.mean() - bad_probs.mean():.3f}")
-                print("-" * 50)
-                
-                final_df.to_csv(OUTPUT_TSV, sep='\t', index=False)
-            except Exception as e:
-                print(f"AUC 计算失败: {e}")
-        else:
-            print("警告：未在 image4-promptFollowing 列中找到 'Good' 或 'Bad' 标签，无法计算 AUC。")
-
+        print(f"\nBad样本  (n={len(bad_probs):4d}): mean={bad_probs.mean():.3f}, std={bad_probs.std():.3f}")
+        print(f"Fair样本 (n={len(fair_probs):4d}): mean={fair_probs.mean():.3f}, std={fair_probs.std():.3f}")
+        print(f"Good样本 (n={len(good_probs):4d}): mean={good_probs.mean():.3f}, std={good_probs.std():.3f}")
+        print(f"\nGood-Bad差距: {good_probs.mean() - bad_probs.mean():.3f}")
+        print(f"Good-Fair差距: {good_probs.mean() - fair_probs.mean():.3f}")
+        print(f"Fair-Bad差距: {fair_probs.mean() - bad_probs.mean():.3f}")
+        
+        # ========== 评估1: 二分类AUC (Good vs Bad) - 主要指标 ==========
+        print("\n" + "=" * 60)
+        print("【评估1】二分类: Good vs Bad (排除Fair)")
+        print("=" * 60)
+        
+        eval_df_binary = final_df[final_df['image4-promptFollowing'].isin(['Good', 'Bad'])].copy()
+        y_true_binary = eval_df_binary['image4-promptFollowing'].map({'Good': 1, 'Bad': 0})
+        y_score_binary = eval_df_binary['yes_prob']
+        
+        auc_binary = roc_auc_score(y_true_binary, y_score_binary)
+        print(f"样本数: {len(eval_df_binary)} (Good: {sum(y_true_binary==1)}, Bad: {sum(y_true_binary==0)})")
+        print(f"⭐ AUC: {auc_binary:.4f}")
+        
+        # 错误分析
+        threshold = 0.5
+        false_neg = eval_df_binary[(eval_df_binary['image4-promptFollowing']=='Good') & 
+                                (eval_df_binary['yes_prob'] < threshold)]
+        false_pos = eval_df_binary[(eval_df_binary['image4-promptFollowing']=='Bad') & 
+                                (eval_df_binary['yes_prob'] > threshold)]
+        
+        good_count = sum(y_true_binary==1)
+        bad_count = sum(y_true_binary==0)
+        
+        print(f"\n以0.5为阈值的分类性能:")
+        print(f"  假阴性 (Good误判为Bad): {len(false_neg):3d} / {good_count} = {len(false_neg)/good_count*100:5.1f}%")
+        print(f"  假阳性 (Bad误判为Good): {len(false_pos):3d} / {bad_count} = {len(false_pos)/bad_count*100:5.1f}%")
+        print(f"  准确率: {(good_count + bad_count - len(false_neg) - len(false_pos)) / len(eval_df_binary) * 100:.1f}%")
+        
+        # ========== 评估2: 序数相关性 (Bad < Fair < Good) ==========
+        print("\n" + "=" * 60)
+        print("【评估2】三分类序数关系: Bad(0) < Fair(1) < Good(2)")
+        print("=" * 60)
+        
+        eval_df_3class = final_df[final_df['image4-promptFollowing'].isin(['Good', 'Bad', 'fair'])].copy()
+        y_true_ordinal = eval_df_3class['image4-promptFollowing'].map({'Bad': 0, 'fair': 1, 'Good': 2})
+        y_score_ordinal = eval_df_3class['yes_prob']
+        
+        print(f"样本数: {len(eval_df_3class)} (Bad: {sum(y_true_ordinal==0)}, Fair: {sum(y_true_ordinal==1)}, Good: {sum(y_true_ordinal==2)})")
+        
+        from scipy.stats import spearmanr, kendalltau
+        spearman_corr, spearman_p = spearmanr(y_true_ordinal, y_score_ordinal)
+        kendall_corr, kendall_p = kendalltau(y_true_ordinal, y_score_ordinal)
+        
+        print(f"⭐ Spearman相关系数: {spearman_corr:.4f} (p={spearman_p:.2e})")
+        print(f"⭐ Kendall's Tau:    {kendall_corr:.4f} (p={kendall_p:.2e})")
+        
+        # Fair样本的预测分布
+        fair_as_bad = sum((eval_df_3class['image4-promptFollowing']=='fair') & 
+                        (eval_df_3class['yes_prob'] < 0.33))
+        fair_as_neutral = sum((eval_df_3class['image4-promptFollowing']=='fair') & 
+                            (eval_df_3class['yes_prob'] >= 0.33) & 
+                            (eval_df_3class['yes_prob'] <= 0.67))
+        fair_as_good = sum((eval_df_3class['image4-promptFollowing']=='fair') & 
+                        (eval_df_3class['yes_prob'] > 0.67))
+        fair_total = sum(y_true_ordinal==1)
+        
+        print(f"\nFair样本的预测分布:")
+        print(f"  倾向Bad  (prob<0.33): {fair_as_bad:3d} / {fair_total} = {fair_as_bad/fair_total*100:5.1f}%")
+        print(f"  中立     (0.33-0.67): {fair_as_neutral:3d} / {fair_total} = {fair_as_neutral/fair_total*100:5.1f}%")
+        print(f"  倾向Good (prob>0.67): {fair_as_good:3d} / {fair_total} = {fair_as_good/fair_total*100:5.1f}%")
+        
+        # ========== 保存错误样本 ==========
+        print("\n" + "=" * 60)
+        if len(false_neg) > 0:
+            fn_file = OUTPUT_TSV.replace('.tsv', '_false_negative.csv')
+            false_neg.nsmallest(20, 'yes_prob')[['Prompt', 'LocalPath', 'yes_prob', 'yes_logit', 'no_logit']].to_csv(fn_file, index=False)
+            print(f"✓ 已保存 {min(20, len(false_neg))} 个假阴性样本 → {fn_file}")
+        
+        if len(false_pos) > 0:
+            fp_file = OUTPUT_TSV.replace('.tsv', '_false_positive.csv')
+            false_pos.nlargest(20, 'yes_prob')[['Prompt', 'LocalPath', 'yes_prob', 'yes_logit', 'no_logit']].to_csv(fp_file, index=False)
+            print(f"✓ 已保存 {min(20, len(false_pos))} 个假阳性样本 → {fp_file}")
+        
+        print("=" * 60)
+        
+        # 保存完整结果
+        final_df.to_csv(OUTPUT_TSV, sep='\t', index=False)
+        
         # 清理临时文件
         for i in range(accelerator.num_processes):
-            os.remove(OUTPUT_TSV.replace(".tsv", f"_rank_{i}.tsv")) 
+            os.remove(OUTPUT_TSV.replace(".tsv", f"_rank_{i}.tsv"))
 
 if __name__ == "__main__":
     main()
