@@ -73,13 +73,43 @@ def run_inference_logits(msgs_batch):
     
     # 2. 获取最后一个位置（即预测首个回答 Token 的位置）的 Logits
     # outputs.logits 形状: [batch, sequence_length, vocab_size]
+    decoded = processor.batch_decode(outputs, skip_special_tokens=True)
+    print(f"Actual generated: {decoded}")
+
     last_token_logits = outputs.logits[:, -1, :] 
-    if getattr(run_inference_logits, "debug_once", True) and accelerator.is_main_process:
-        topk_vals, topk_indices = torch.topk(last_token_logits[0], 5)
-        decoded = processor.tokenizer.batch_decode(topk_indices.unsqueeze(-1))
-        print(f"\n[DEBUG] Top 5 predicted tokens for first sample: {decoded}")
-        print(f"[DEBUG] Top 5 logits: {topk_vals.float().cpu().numpy()}")
-        run_inference_logits.debug_once = False
+    
+    # ===== 新增：调试实际最常出现的token =====
+    if not hasattr(run_inference_logits, "debug_count"):
+        run_inference_logits.debug_count = 0
+        run_inference_logits.top_tokens_collection = []
+    
+    if run_inference_logits.debug_count < 100 and accelerator.is_main_process:
+        # 获取batch中每个样本的top-5 tokens
+        topk_vals, topk_indices = torch.topk(last_token_logits, 5, dim=-1)
+        for idx in range(topk_indices.shape[0]):
+            if run_inference_logits.debug_count >= 100:
+                break
+            tokens = topk_indices[idx].cpu().tolist()
+            decoded = processor.tokenizer.convert_ids_to_tokens(tokens)
+            run_inference_logits.top_tokens_collection.append(decoded[0])  # 收集top-1
+            
+            if run_inference_logits.debug_count < 5:  # 只打印前5个详细信息
+                print(f"\n[Sample {run_inference_logits.debug_count}] Top-5 tokens: {decoded}")
+                print(f"  Logits: {topk_vals[idx].float().cpu().numpy()}")
+            
+            run_inference_logits.debug_count += 1
+    
+    # 在收集完100个样本后打印统计
+    if run_inference_logits.debug_count == 100 and accelerator.is_main_process:
+        from collections import Counter
+        token_freq = Counter(run_inference_logits.top_tokens_collection)
+        print("\n" + "="*50)
+        print("前100个样本的Top-1 Token频率统计:")
+        for token, count in token_freq.most_common(10):
+            print(f"  '{token}': {count}次 ({count/100*100:.1f}%)")
+        print("="*50 + "\n")
+        run_inference_logits.debug_count += 1  # 防止重复打印
+
     # 3. 提取 Yes 和 No 的原始分值
     yes_logits = last_token_logits[:, YES_IDS].max(dim=-1).values
     no_logits = last_token_logits[:, NO_IDS].max(dim=-1).values
@@ -117,7 +147,8 @@ def main():
         user_prompt = row['Prompt']
         image_path = row['FullLocalPath']
 
-        prompt = f"""Does the image perfectly match the description: "{user_prompt}"? Please answer with only "Yes" or "No"."""
+        prompt = f"""Examine if the image accurately represents: "{user_prompt}".
+        Check if all major elements are present and correctly depicted. Answer only "Yes" or "No"."""
         msg = [
             {
                 "role": "user",
@@ -170,33 +201,55 @@ def main():
                    for i in range(accelerator.num_processes)]
         final_df = pd.concat(all_dfs, ignore_index=True)
         
+        print("\n=== 诊断信息 ===")
+        print(f"Yes概率分布: min={final_df['yes_prob'].min():.3f}, "
+            f"mean={final_df['yes_prob'].mean():.3f}, "
+            f"max={final_df['yes_prob'].max():.3f}")
+        
+        good_probs = final_df[final_df['image4-promptFollowing']=='Good']['yes_prob']
+        bad_probs = final_df[final_df['image4-promptFollowing']=='Bad']['yes_prob']
+        
+        print(f"Good样本yes_prob均值: {good_probs.mean():.3f}")
+        print(f"Bad样本yes_prob均值: {bad_probs.mean():.3f}")
+        print(f"两者差距: {good_probs.mean() - bad_probs.mean():.3f}")
+
         # --- 重点：计算 AUC ---
         # 过滤出 Good 和 Bad 的行用于评估
-        eval_df = final_df[final_df['image4-promptFollowing'].isin(['Good', 'Bad', 'fair'])].copy()
-        
+        eval_df = final_df[final_df['image4-promptFollowing'].isin(['Good', 'Bad'])].copy()
+    
         if len(eval_df) > 0:
-            # 映射标签：Good=1, Bad=0
-            y_true = eval_df['image4-promptFollowing'].map({'Good': 1, 'fair':1,'Bad': 0})
+            # 映射标签：Good=1, Bad=0（已经没有fair了）
+            y_true = eval_df['image4-promptFollowing'].map({'Good': 1, 'Bad': 0})
             y_score = eval_df['yes_prob']
             
             try:
                 auc_value = roc_auc_score(y_true, y_score)
                 print("-" * 50)
                 print(f"评估完成！")
+                print(f"总样本数: {len(final_df)}")
+                print(f"  - Good: {len(final_df[final_df['image4-promptFollowing']=='Good'])}")
+                print(f"  - Bad: {len(final_df[final_df['image4-promptFollowing']=='Bad'])}")
+                print(f"  - Fair: {len(final_df[final_df['image4-promptFollowing']=='fair'])}")
                 print(f"有效评估样本数 (Good+Bad): {len(eval_df)}")
                 print(f"Qwen3-VL Reward AUC: {auc_value:.4f}")
+                
+                # 【新增】分布诊断
+                good_probs = eval_df[eval_df['image4-promptFollowing']=='Good']['yes_prob']
+                bad_probs = eval_df[eval_df['image4-promptFollowing']=='Bad']['yes_prob']
+                print(f"\nGood样本 yes_prob: mean={good_probs.mean():.3f}, std={good_probs.std():.3f}")
+                print(f"Bad样本 yes_prob: mean={bad_probs.mean():.3f}, std={bad_probs.std():.3f}")
+                print(f"均值差距: {good_probs.mean() - bad_probs.mean():.3f}")
                 print("-" * 50)
                 
-                # 在文件名中记录 AUC
                 final_df.to_csv(OUTPUT_TSV, sep='\t', index=False)
             except Exception as e:
-                print(f"AUC 计算失败 (可能缺少某一类样本): {e}")
+                print(f"AUC 计算失败: {e}")
         else:
             print("警告：未在 image4-promptFollowing 列中找到 'Good' 或 'Bad' 标签，无法计算 AUC。")
 
         # 清理临时文件
         for i in range(accelerator.num_processes):
-            os.remove(OUTPUT_TSV.replace(".tsv", f"_rank_{i}.tsv"))
+            os.remove(OUTPUT_TSV.replace(".tsv", f"_rank_{i}.tsv")) 
 
 if __name__ == "__main__":
     main()
