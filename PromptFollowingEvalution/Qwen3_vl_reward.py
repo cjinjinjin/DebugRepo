@@ -176,8 +176,9 @@ def main():
         user_prompt = row['Prompt']
         image_path = row['FullLocalPath']
 
-        prompt = f"""Examine if the image accurately represents: "{user_prompt}".
-        Check if all major elements are present and correctly depicted. Answer only "Yes" or "No"."""
+        prompt = f"""Does this image match the description: "{user_prompt}"?
+            Consider: Are the key objects present? Is the scene/composition correct? Are visual details accurate?
+            Answer only "Yes" or "No"."""
         msg = [
             {
                 "role": "user",
@@ -239,6 +240,9 @@ def main():
             f"mean={final_df['yes_prob'].mean():.3f}, "
             f"max={final_df['yes_prob'].max():.3f}")
         
+        fair_probs = final_df[final_df['image4-promptFollowing']=='fair']['yes_prob']
+        print(f"Fair样本yes_prob均值: {fair_probs.mean():.3f}, std={fair_probs.std():.3f}")
+
         good_probs = final_df[final_df['image4-promptFollowing']=='Good']['yes_prob']
         bad_probs = final_df[final_df['image4-promptFollowing']=='Bad']['yes_prob']
         
