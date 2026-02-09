@@ -71,11 +71,7 @@ def run_inference_logits(msgs_batch):
     # 1. 正向传播获取 Logits
     outputs = model(**inputs)
     
-    # 2. 获取最后一个位置（即预测首个回答 Token 的位置）的 Logits
-    # outputs.logits 形状: [batch, sequence_length, vocab_size]
-    decoded = processor.batch_decode(outputs, skip_special_tokens=True)
-    print(f"Actual generated: {decoded}")
-
+    # 2. 获取最后一个位置的 Logits
     last_token_logits = outputs.logits[:, -1, :] 
     
     # ===== 新增：调试实际最常出现的token =====
@@ -121,6 +117,36 @@ def run_inference_logits(msgs_batch):
     
     # 返回 Yes 的概率作为 Score
     return probs[:, 0].float().cpu().numpy(), yes_logits.float().cpu().numpy(), no_logits.float().cpu().numpy()
+@torch.no_grad()
+def debug_generate(msgs_batch, num_samples=5):
+    """
+    【可选】用于调试：看模型实际会生成什么文本
+    """
+    inputs = processor.apply_chat_template(
+        msgs_batch[:num_samples],  # 只看前几个样本
+        tokenize=True,
+        add_generation_prompt=True,
+        return_dict=True,
+        return_tensors="pt",
+        padding=True 
+    ).to(accelerator.device)
+
+    # 使用 generate 生成文本
+    generated_ids = model.generate(
+        **inputs,
+        max_new_tokens=10,
+        do_sample=False
+    )
+    
+    # 只decode新生成的部分
+    input_len = inputs['input_ids'].shape[1]
+    generated_text = processor.batch_decode(
+        generated_ids[:, input_len:], 
+        skip_special_tokens=True
+    )
+    
+    for i, text in enumerate(generated_text):
+        print(f"[Generate Sample {i}]: '{text}'")
 
 # ================= 主程序 =================
 def main():
@@ -164,6 +190,10 @@ def main():
         if len(buffer) == BATCH_SIZE:
             msgs_to_run = [b["msg"] for b in buffer]
             try:
+                if not hasattr(main, "debug_generated") and accelerator.is_main_process:
+                    print("\n>>> 调试：查看实际生成文本...")
+                    debug_generate(msgs_to_run, num_samples=3)
+                    main.debug_generated = True
                 yes_probs, y_logits, n_logits = run_inference_logits(msgs_to_run)
                 for idx, prob in enumerate(yes_probs):
                     res = buffer[idx]["row_data"]
