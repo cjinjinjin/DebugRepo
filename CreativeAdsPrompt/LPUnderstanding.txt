@@ -64,3 +64,8 @@ Input:
 - BestSnippet_CB: '{BestSnippet_CB}'
 - MetaDescription_CB: '{MetaDescription_CB}'
 - PrimaryContentNoTitleNoHeading: '{PrimaryContentNoTitleNoHeading}'
+
+Additional domain knowledge context (use as supplementary reference only; LP fields above always take priority):
+<DomainKnowledgeContext>
+{RAGContext}
+</DomainKnowledgeContext>
