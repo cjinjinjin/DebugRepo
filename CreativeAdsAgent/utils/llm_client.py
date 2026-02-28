@@ -20,11 +20,16 @@ def _get_client():
 
 
 def fill_template(template_path: str, variables: dict) -> str:
-    """Read a .txt prompt template and replace {PlaceholderName} with values."""
+    """Read a .txt prompt template and replace {PlaceholderName} with values.
+
+    Uses literal string replacement so LP content containing { or } characters
+    does not cause format errors.
+    """
     with open(template_path, "r", encoding="utf-8") as f:
         template = f.read()
     for key, value in variables.items():
-        template = template.replace(f"{{{key}}}", str(value) if value else "")
+        safe_value = str(value) if value else ""
+        template = template.replace(f"{{{key}}}", safe_value)
     return template
 
 

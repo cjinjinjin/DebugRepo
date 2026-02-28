@@ -7,6 +7,7 @@ Usage:
 """
 import json
 import os
+import time
 import numpy as np
 
 
@@ -51,8 +52,18 @@ def build_index(config=None):
     batch_size = 100
     for i in range(0, len(texts), batch_size):
         batch = texts[i : i + batch_size]
-        vecs = embed_batch(batch)
-        all_vectors.extend(vecs)
+        for attempt in range(3):
+            try:
+                vecs = embed_batch(batch)
+                all_vectors.extend(vecs)
+                break
+            except Exception as e:
+                wait = 2 ** attempt
+                print(f"  [KB Builder] Embedding batch {i//batch_size + 1} failed: {e}. Retrying in {wait}s...")
+                time.sleep(wait)
+        else:
+            print(f"  [KB Builder] ERROR: Batch {i//batch_size + 1} failed after 3 attempts. Aborting.")
+            return
         print(f"  Embedded {min(i + batch_size, len(texts))} / {len(texts)}")
 
     vectors_np = np.array(all_vectors, dtype=np.float32)

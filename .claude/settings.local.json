@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip show openai faiss-cpu trafilatura playwright beautifulsoup4 python-dotenv rich numpy)",
+      "Bash(python -c \"import openai; print\\(''openai ok''\\)\")",
+      "Bash(python -c \"import faiss; print\\(''faiss ok''\\)\")",
+      "Bash(python -c \"import trafilatura; print\\(''trafilatura ok''\\)\")",
+      "Bash(python -c \"import rich; print\\(''rich ok''\\)\")",
+      "Bash(py --version)",
+      "Bash(py -c \"import openai; print\\(''openai'', openai.__version__\\)\")",
+      "Bash(py -c \"import faiss; print\\(''faiss ok''\\)\")",
+      "Bash(py -c \"import trafilatura; print\\(''trafilatura ok''\\)\")",
+      "Bash(py -c \"import rich; print\\(''rich ok''\\)\")"
+    ]
+  }
+}

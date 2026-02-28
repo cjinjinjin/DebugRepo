@@ -1,7 +1,9 @@
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 from utils.llm_client import fill_template, call_llm
 from utils.xml_parser import parse_refine_prompt
+
+_REFINE_TIMEOUT_S = 60  # per-prompt timeout in seconds
 
 
 class ImagePromptRefinerAgent:
@@ -42,11 +44,15 @@ class ImagePromptRefinerAgent:
                 pool.submit(refine_one, i, p): i
                 for i, p in enumerate(raw_prompts)
             }
-            for future in as_completed(futures):
+            for future in as_completed(futures, timeout=_REFINE_TIMEOUT_S * len(raw_prompts)):
                 try:
-                    idx, refined = future.result()
+                    idx, refined = future.result(timeout=_REFINE_TIMEOUT_S)
                     results[idx] = refined
                     print(f"  [Refiner {idx+1}] Done.")
+                except TimeoutError:
+                    idx = futures[future]
+                    print(f"  [Refiner {idx+1}] Timed out after {_REFINE_TIMEOUT_S}s. Using raw prompt.")
+                    results[idx] = raw_prompts[idx]
                 except Exception as e:
                     idx = futures[future]
                     print(f"  [Refiner {idx+1}] Error: {e}. Using raw prompt.")
