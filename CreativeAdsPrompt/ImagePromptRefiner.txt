@@ -12,7 +12,7 @@ Follow these rules strictly:
 6. Describe the overall scene and mood naturally; avoid over-specifying body parts, limb positions, or fine details that are hard for image models to render accurately.
 7. Convert quality-related terms (e.g., 'high quality', 'professional lighting') into concrete visual descriptions — lighting behavior, visible textures, natural colors, realistic depth.
 8. Output only the rewritten prompt.
-9. STRICT LENGTH LIMIT: The rewritten prompt MUST be between 40 and 70 words. Count carefully. Do not exceed 70 words.
+9. STRICT LENGTH LIMIT: The rewritten prompt MUST be between 50 and 70 words. Count carefully. Do not exceed 70 words.
 
 OUTPUT FORMAT:
 <RefinePrompt>
