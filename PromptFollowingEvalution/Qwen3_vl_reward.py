@@ -69,38 +69,37 @@ def run_inference_logits(msgs_batch):
         add_generation_prompt=True,
         return_dict=True,
         return_tensors="pt",
-        padding=True 
+        padding=True
     ).to(accelerator.device)
 
     # 1. 正向传播获取 Logits
     outputs = model(**inputs)
 
-    # 2. 获取最后 K 个位置的 Logits，取 Yes/No 各位置最大值
-    # 模型有时先输出 "Yes," 再接续生成，logit 高峰不一定在 -1 位置
-    _K = 4
-    last_k_logits = outputs.logits[:, -_K:, :]  # (batch, K, vocab)
+    # 2. 获取最后一个位置的 Logits
+    last_token_logits = outputs.logits[:, -1, :]
 
-    # ===== 调试：观察各位置 top-1 token（只对最后一个 batch 打印一次）=====
+    # ===== 新增：调试实际最常出现的token =====
     if not hasattr(run_inference_logits, "debug_count"):
         run_inference_logits.debug_count = 0
         run_inference_logits.top_tokens_collection = []
 
     if run_inference_logits.debug_count < 100 and accelerator.is_main_process:
-        # 仍用 -1 位置做 debug 观察（与之前一致）
-        topk_vals, topk_indices = torch.topk(last_k_logits[:, -1, :], 5, dim=-1)
+        # 获取batch中每个样本的top-5 tokens
+        topk_vals, topk_indices = torch.topk(last_token_logits, 5, dim=-1)
         for idx in range(topk_indices.shape[0]):
             if run_inference_logits.debug_count >= 100:
                 break
             tokens = topk_indices[idx].cpu().tolist()
             decoded = processor.tokenizer.convert_ids_to_tokens(tokens)
-            run_inference_logits.top_tokens_collection.append(decoded[0])
+            run_inference_logits.top_tokens_collection.append(decoded[0])  # 收集top-1
 
-            if run_inference_logits.debug_count < 5:
+            if run_inference_logits.debug_count < 5:  # 只打印前5个详细信息
                 print(f"\n[Sample {run_inference_logits.debug_count}] Top-5 tokens: {decoded}")
                 print(f"  Logits: {topk_vals[idx].float().cpu().numpy()}")
 
             run_inference_logits.debug_count += 1
 
+    # 在收集完100个样本后打印统计
     if run_inference_logits.debug_count == 100 and accelerator.is_main_process:
         from collections import Counter
         token_freq = Counter(run_inference_logits.top_tokens_collection)
@@ -109,25 +108,23 @@ def run_inference_logits(msgs_batch):
         for token, count in token_freq.most_common(10):
             print(f"  '{token}': {count}次 ({count/100*100:.1f}%)")
         print("="*50 + "\n")
-        run_inference_logits.debug_count += 1
+        run_inference_logits.debug_count += 1  # 防止重复打印
 
-    # 3. 在最后 K 个位置上分别提取 Yes/No/Partial logit，取各自最大值
-    # last_k_logits: (batch, K, vocab) → per-token scores: (batch, K) → max over K → (batch,)
-    yes_logits   = last_k_logits[:, :, YES_IDS].max(dim=-1).values.max(dim=-1).values
-    no_logits    = last_k_logits[:, :, NO_IDS].max(dim=-1).values.max(dim=-1).values
-    partial_logits = (last_k_logits[:, :, PARTIAL_IDS].max(dim=-1).values.max(dim=-1).values
-                      if len(PARTIAL_IDS) > 0 else torch.zeros_like(yes_logits))
+    # 3. 提取 Yes 和 No 的原始分值
+    yes_logits = last_token_logits[:, YES_IDS].max(dim=-1).values
+    no_logits = last_token_logits[:, NO_IDS].max(dim=-1).values
+    partial_logits = last_token_logits[:, PARTIAL_IDS].max(dim=-1).values if len(PARTIAL_IDS) > 0 else torch.zeros_like(yes_logits)
 
     # 方法1: 将Partial视为0.5的Yes
     combined_logits = torch.stack([no_logits, partial_logits, yes_logits], dim=-1)
     weights = torch.tensor([0.0, 0.5, 1.0]).to(combined_logits.device)
     probs_weighted = torch.softmax(combined_logits, dim=-1)
     probs = (probs_weighted * weights).sum(dim=-1)
-    
+
     # 方法2: 只用Yes和No，把Partial归入No（当前方法）
     # combined_logits = torch.stack([yes_logits, no_logits + partial_logits], dim=-1)
     # probs = torch.softmax(combined_logits, dim=-1)
-    
+
     # 返回 Yes 的概率作为 Score
     return probs.float().cpu().numpy(), yes_logits.float().cpu().numpy(), no_logits.float().cpu().numpy()
 @torch.no_grad()
