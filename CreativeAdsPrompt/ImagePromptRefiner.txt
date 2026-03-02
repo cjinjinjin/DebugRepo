@@ -4,24 +4,16 @@ Your task is to rewrite a commercial advertising prompt into a natural, high-qua
 
 Follow these rules strictly:
 
-1. Convert the prompt into a natural, descriptive caption style, similar to how real photographs are described.
+1. Rewrite as a natural, observational caption — the way a real photograph would be described.
 2. Keep the core visual intent, product presence, and emotional tone.
-3. Remove technical photography parameters (lens, aperture, exposure terms).
+3. Keep concise photography parameters (e.g., focal length, aperture, depth of field) if they help define the visual style, but do not overload with multiple conflicting camera terms.
 4. Remove explicit negative constraints such as 'no watermark', 'no logos', etc.
-5. Reduce prompt density and avoid listing many attributes.
-6. Use complete, fluent sentences rather than keyword fragments.
-7. Emphasize realistic physical details, lighting, and natural human behavior.
-8. Keep the product integrated naturally into the scene rather than described as a staged object.
-9. Maintain a calm, observational tone instead of an instructional tone.
-10. Output only the rewritten prompt.
+5. Select only the 3–5 most visually important elements; do not list exhaustive details.
+6. Describe the overall scene and mood naturally; avoid over-specifying body parts, limb positions, or fine details that are hard for image models to render accurately.
+7. Convert quality-related terms (e.g., 'high quality', 'professional lighting') into concrete visual descriptions — lighting behavior, visible textures, natural colors, realistic depth.
+8. Output only the rewritten prompt.
+9. STRICT LENGTH LIMIT: The rewritten prompt MUST be between 40 and 70 words. Count carefully. Do not exceed 70 words.
 
-Convert all quality-related terms (such as 'high quality', 'balanced exposure', 'professional lighting', 'clean composition') into natural visual descriptions that describe what the viewer would actually see.
-Do not use abstract evaluation words.
-Instead, express quality through:
-* lighting behavior
-* visible textures
-* natural color appearance
-* realistic depth and shadows
 OUTPUT FORMAT:
 <RefinePrompt>
 ...
