@@ -10,7 +10,8 @@
       "Bash(py -c \"import openai; print\\(''openai'', openai.__version__\\)\")",
       "Bash(py -c \"import faiss; print\\(''faiss ok''\\)\")",
       "Bash(py -c \"import trafilatura; print\\(''trafilatura ok''\\)\")",
-      "Bash(py -c \"import rich; print\\(''rich ok''\\)\")"
+      "Bash(py -c \"import rich; print\\(''rich ok''\\)\")",
+      "Bash(python3 -m json.tool)"
     ]
   }
 }
