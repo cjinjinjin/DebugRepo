@@ -29,8 +29,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 # ============================================================
 CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES \
 swift sft \
-    --model_type        qwen3-vl-8b-instruct \
-    --model_id_or_path  $MODEL_PATH \
+    --model             $MODEL_PATH \
     --dataset           $TRAIN_DATA \
     --val_dataset       $VAL_DATA \
     --train_type        lora \
