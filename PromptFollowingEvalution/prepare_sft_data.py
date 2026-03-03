@@ -79,8 +79,23 @@ def build_conversation(prompt: str, image_path: str, answer: str) -> dict:
 
 def main(args):
     # ---------- 读取数据 ----------
-    sep = "\t" if args.input_csv.endswith(".tsv") else ","
-    df = pd.read_csv(args.input_csv, sep=sep)
+    # 自动探测分隔符：先用 tab 试，不行再用逗号，最后用 python engine 兜底
+    for sep, engine in [("\t", "c"), (",", "c"), (",", "python")]:
+        try:
+            df = pd.read_csv(
+                args.input_csv,
+                sep=sep,
+                engine=engine,
+                on_bad_lines="warn" if engine == "python" else "error",
+            )
+            if len(df.columns) > 1:
+                print(f"读取成功 (sep={'TAB' if sep == chr(9) else sep}, engine={engine})")
+                print(f"列名: {list(df.columns)}")
+                break
+        except Exception:
+            continue
+    else:
+        raise RuntimeError("无法解析输入文件，请检查分隔符或文件格式")
     print(f"原始数据行数: {len(df)}")
 
     # ---------- 过滤 ----------
