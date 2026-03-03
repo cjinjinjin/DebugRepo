@@ -35,7 +35,7 @@ swift sft \
     --train_type        lora \
     --lora_rank         8 \
     --lora_alpha        16 \
-    --lora_target_modules all-linear \
+    --lora_target_modules "all-linear" \
     --freeze_vit        true \
     --num_train_epochs  5 \
     --per_device_train_batch_size  2 \
@@ -57,8 +57,7 @@ swift sft \
     --logging_steps     10 \
     --output_dir        $OUTPUT_DIR \
     --report_to         tensorboard \
-    --lazy_tokenize     true \
-    --dataset_test_ratio 0.0
+    --lazy_tokenize     true
 
 # ============================================================
 # 说明
