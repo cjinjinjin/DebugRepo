@@ -35,7 +35,6 @@ swift sft \
     --train_type        lora \
     --lora_rank         8 \
     --lora_alpha        16 \
-    --lora_target_modules "all-linear" \
     --freeze_vit        true \
     --num_train_epochs  5 \
     --per_device_train_batch_size  2 \
