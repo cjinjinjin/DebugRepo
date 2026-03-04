@@ -157,7 +157,7 @@ def main():
         return
 
     my_df = full_df.iloc[accelerator.process_index :: accelerator.num_processes].copy()
-    my_df['FullLocalPath'] = my_df['LocalPath'].apply(lambda x: os.path.join(image_folder, x))
+    my_df['FullLocalPath'] = my_df['full_image_path']
     my_df = my_df[my_df['FullLocalPath'].apply(os.path.exists)].copy()
 
     if accelerator.is_main_process:
@@ -285,7 +285,7 @@ def main():
         print("\n" + "=" * 60)
         if len(false_neg) > 0:
             fn_file = OUTPUT_TSV.replace('.tsv', '_false_negative.csv')
-            false_neg.nsmallest(20, 'yes_prob')[['Prompt', 'LocalPath', 'yes_prob', 'yes_logit', 'no_logit']].to_csv(fn_file, index=False)
+            false_neg.nsmallest(20, 'yes_prob')[['Prompt', 'full_image_path', 'yes_prob', 'yes_logit', 'no_logit']].to_csv(fn_file, index=False)
             print(f"✓ 已保存 {min(20, len(false_neg))} 个假阴性样本 → {fn_file}")
 
         if len(false_pos) > 0:
