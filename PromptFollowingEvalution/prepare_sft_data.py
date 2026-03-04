@@ -128,29 +128,50 @@ def main(args):
 
     print(f"\n总样本数: {len(records)}")
 
-    # ---------- 划分 train / val ----------
-    train_records, val_records = train_test_split(
+    # ---------- 划分 train / val / test ----------
+    labels = [r["messages"][1]["content"] for r in records]
+
+    # 先切出 test（不参与训练，用于最终评测）
+    trainval_records, test_records, trainval_labels, _ = train_test_split(
         records,
+        labels,
+        test_size=args.test_ratio,
+        random_state=42,
+        stratify=labels,
+    )
+    # 再从 trainval 中切出 val
+    train_records, val_records = train_test_split(
+        trainval_records,
         test_size=args.val_ratio,
         random_state=42,
-        # 按 answer 分层
-        stratify=[r["messages"][1]["content"] for r in records],
+        stratify=trainval_labels,
     )
-    print(f"Train: {len(train_records)}, Val: {len(val_records)}")
+    print(f"Train: {len(train_records)}, Val: {len(val_records)}, Test: {len(test_records)}")
 
     # ---------- 保存 ----------
     os.makedirs(args.output_dir, exist_ok=True)
     train_path = os.path.join(args.output_dir, "train.json")
-    val_path = os.path.join(args.output_dir, "val.json")
+    val_path   = os.path.join(args.output_dir, "val.json")
+    test_path  = os.path.join(args.output_dir, "test.json")
 
     with open(train_path, "w", encoding="utf-8") as f:
         json.dump(train_records, f, ensure_ascii=False, indent=2)
     with open(val_path, "w", encoding="utf-8") as f:
         json.dump(val_records, f, ensure_ascii=False, indent=2)
+    with open(test_path, "w", encoding="utf-8") as f:
+        json.dump(test_records, f, ensure_ascii=False, indent=2)
+
+    # 同时保存 test 的原始 CSV 行（含标签），方便 reward 评测脚本直接读取
+    test_indices = [records.index(r) for r in test_records]
+    df.iloc[test_indices].to_csv(
+        os.path.join(args.output_dir, "test_labels.csv"), index=False
+    )
 
     print(f"\n已保存:")
-    print(f"  Train -> {train_path}")
-    print(f"  Val   -> {val_path}")
+    print(f"  Train       -> {train_path}")
+    print(f"  Val         -> {val_path}")
+    print(f"  Test        -> {test_path}")
+    print(f"  Test labels -> {os.path.join(args.output_dir, 'test_labels.csv')}")
 
     # ---------- 打印 1 条示例 ----------
     print("\n=== 示例样本 ===")
@@ -163,7 +184,10 @@ if __name__ == "__main__":
     parser.add_argument("--image_folder", default=DEFAULT_IMAGE_FOLDER)
     parser.add_argument("--output_dir", default=DEFAULT_OUTPUT_DIR)
     parser.add_argument(
-        "--val_ratio", type=float, default=0.05, help="验证集比例 (default: 0.05)"
+        "--val_ratio", type=float, default=0.05, help="验证集比例，从 trainval 中再切 (default: 0.05)"
+    )
+    parser.add_argument(
+        "--test_ratio", type=float, default=0.10, help="测试集比例，从全量数据中先切 (default: 0.10)"
     )
     args = parser.parse_args()
     main(args)

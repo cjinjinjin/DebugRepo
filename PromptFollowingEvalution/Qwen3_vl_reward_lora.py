@@ -10,8 +10,8 @@ import os, re
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+from swift import Swift
 from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
-from peft import PeftModel
 from accelerate import Accelerator
 from sklearn.metrics import roc_auc_score
 
@@ -38,7 +38,7 @@ model = Qwen3VLForConditionalGeneration.from_pretrained(
     device_map={"": accelerator.process_index},
     trust_remote_code=True
 )
-model = PeftModel.from_pretrained(model, LORA_PATH)
+model = Swift.from_pretrained(model, LORA_PATH)
 model = model.merge_and_unload()
 
 processor = AutoProcessor.from_pretrained(MODEL_PATH)
