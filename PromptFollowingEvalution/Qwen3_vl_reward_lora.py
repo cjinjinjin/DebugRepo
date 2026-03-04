@@ -150,7 +150,7 @@ def debug_generate(msgs_batch, num_samples=5):
 # ================= 主程序 =================
 def main():
     try:
-        full_df = pd.read_csv(INPUT_TSV, sep='\t', header=0)
+        full_df = pd.read_csv(INPUT_TSV, sep=',', header=0)
     except Exception as e:
         if accelerator.is_main_process:
             print(f"读取文件失败: {e}")
