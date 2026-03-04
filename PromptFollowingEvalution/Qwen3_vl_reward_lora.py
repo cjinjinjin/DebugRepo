@@ -61,6 +61,13 @@ if accelerator.is_main_process:
     print(f"监控的 No Token IDs: {NO_IDS}")
     print(f"监控的 Partial Token IDs: {PARTIAL_IDS}")
 
+# 验证 LoRA merge 是否真的生效（对比 base 模型第一层 q_proj 的期望值）
+_w = dict(model.named_parameters())
+_key = [k for k in _w if 'language_model' in k and 'q_proj' in k][0]
+_checksum = _w[_key].data.float().mean().item()
+if accelerator.is_main_process:
+    print(f"[LoRA验证] {_key} mean={_checksum:.8f}  (base应为约-0.00001, merged应不同)")
+
 model = accelerator.prepare(model)
 
 # ================= 逻辑函数 =================
