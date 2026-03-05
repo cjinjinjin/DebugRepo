@@ -22,7 +22,7 @@ NPROC_PER_NODE=8 swift sft \
     --output_dir                  ${OUTPUT_DIR} \
     --bf16                        true \
     --gradient_checkpointing      true \
-    --quantization_bit            4 \
+    --deepspeed                   default \
     --save_steps                  100 \
     --eval_steps                  100 \
     --logging_steps               10
