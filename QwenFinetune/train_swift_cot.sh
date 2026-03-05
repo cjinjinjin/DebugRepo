@@ -4,14 +4,14 @@ MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/Rich
 DATA_DIR="./data"
 OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot"
 
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 swift sft \
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
+NPROC_PER_NODE=8 swift sft \
     --model        ${MODEL_PATH} \
     --dataset      ${DATA_DIR}/sft_train_cot.jsonl \
     --val_dataset  ${DATA_DIR}/sft_eval_cot.jsonl \
     --train_type   lora \
     --lora_rank    64 \
     --lora_alpha   128 \
-    --lora_target_modules all-linear \
     --num_train_epochs            3 \
     --per_device_train_batch_size 2 \
     --gradient_accumulation_steps 8 \
@@ -24,5 +24,4 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 swift sft \
     --gradient_checkpointing      true \
     --save_steps                  100 \
     --eval_steps                  100 \
-    --logging_steps               10 \
-    --nproc_per_node              8
+    --logging_steps               10
