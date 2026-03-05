@@ -13,8 +13,8 @@ NPROC_PER_NODE=8 swift sft \
     --lora_rank    64 \
     --lora_alpha   128 \
     --num_train_epochs            3 \
-    --per_device_train_batch_size 2 \
-    --gradient_accumulation_steps 8 \
+    --per_device_train_batch_size 1 \
+    --gradient_accumulation_steps 16 \
     --learning_rate               1e-4 \
     --lr_scheduler_type           cosine \
     --warmup_ratio                0.05 \
@@ -22,6 +22,7 @@ NPROC_PER_NODE=8 swift sft \
     --output_dir                  ${OUTPUT_DIR} \
     --bf16                        true \
     --gradient_checkpointing      true \
+    --quantization_bit            4 \
     --save_steps                  100 \
     --eval_steps                  100 \
     --logging_steps               10
