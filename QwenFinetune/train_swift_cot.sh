@@ -5,7 +5,10 @@ DATA_DIR="./data"
 OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot"
 
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
-NPROC_PER_NODE=8 swift sft \
+NPROC_PER_NODE=8 \
+NCCL_TIMEOUT=3600 \
+TORCH_NCCL_BLOCKING_WAIT=0 \
+swift sft \
     --model        ${MODEL_PATH} \
     --dataset      ${DATA_DIR}/sft_train_cot.jsonl \
     --val_dataset  ${DATA_DIR}/sft_eval_cot.jsonl \
@@ -22,6 +25,7 @@ NPROC_PER_NODE=8 swift sft \
     --output_dir                  ${OUTPUT_DIR} \
     --bf16                        true \
     --gradient_checkpointing      true \
+    --deepspeed                   ./ds_zero3.json \
     --save_steps                  100 \
     --eval_steps                  100 \
     --logging_steps               10
