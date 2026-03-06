@@ -6,8 +6,10 @@ OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/Rich
 
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
 NPROC_PER_NODE=8 \
-NCCL_TIMEOUT=3600 \
-TORCH_NCCL_BLOCKING_WAIT=0 \
+NCCL_TIMEOUT=7200 \
+NCCL_DEBUG=WARN \
+TORCH_NCCL_BLOCKING_WAIT=1 \
+TORCH_NCCL_ASYNC_ERROR_HANDLING=1 \
 swift sft \
     --model        ${MODEL_PATH} \
     --dataset      ${DATA_DIR}/sft_train_cot.jsonl \
@@ -25,8 +27,6 @@ swift sft \
     --output_dir                  ${OUTPUT_DIR} \
     --bf16                        true \
     --gradient_checkpointing      true \
-    --quant_method                bnb \
-    --quant_bits                  4 \
     --deepspeed                   ./ds_zero3.json \
     --save_steps                  100 \
     --eval_steps                  100 \
