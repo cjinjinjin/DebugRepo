@@ -19,7 +19,7 @@ swift sft \
     --lora_alpha   128 \
     --num_train_epochs            3 \
     --per_device_train_batch_size 1 \
-    --gradient_accumulation_steps 16 \
+    --gradient_accumulation_steps 4 \
     --learning_rate               1e-4 \
     --lr_scheduler_type           cosine \
     --warmup_ratio                0.05 \
@@ -28,6 +28,6 @@ swift sft \
     --bf16                        true \
     --gradient_checkpointing      true \
     --deepspeed                   ./ds_zero3.json \
-    --save_steps                  100 \
-    --eval_steps                  100 \
+    --save_steps                  10 \
+    --eval_steps                  10 \
     --logging_steps               10
