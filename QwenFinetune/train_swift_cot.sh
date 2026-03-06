@@ -21,10 +21,12 @@ swift sft \
     --learning_rate               1e-4 \
     --lr_scheduler_type           cosine \
     --warmup_ratio                0.05 \
-    --max_length                  2048 \
+    --max_length                  4096 \
     --output_dir                  ${OUTPUT_DIR} \
     --bf16                        true \
     --gradient_checkpointing      true \
+    --quant_method                bnb \
+    --quant_bits                  4 \
     --deepspeed                   ./ds_zero3.json \
     --save_steps                  100 \
     --eval_steps                  100 \
