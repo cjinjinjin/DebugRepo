@@ -3,15 +3,23 @@ Offline evaluation of the fine-tuned model's generated prompts.
 
 Metrics:
   1. Format compliance  — all 5 <PromptN> tags present and within 150 words
-  2. Keyword coverage   — LP title/heading keywords appear (semantic alignment)
-  3. Quality classifier — re-use the VLM-based reward from the existing pipeline
+  2. CoT compliance     — <think> block present with all required fields
+                          (ProductType / SpecificProduct / Category /
+                           VisualAnchors / LifestyleVibe / CoreValueSignals)
+  3. Keyword coverage   — LP title/heading keywords appear (semantic alignment)
+  4. Quality classifier — re-use the VLM-based reward from the existing pipeline
                           (optional; requires ZImage or cached generated images)
-  4. CLIP/SigLIP score  — prompt-image semantic similarity (if images are available)
+  5. CLIP/SigLIP score  — prompt-image semantic similarity (if images are available)
 
 Usage:
   # Evaluate generated prompts (text-only, no images needed)
   python evaluate.py \
       --generated_file results/generated_prompts.jsonl \
+      --report_file    results/eval_report.json
+
+  # Evaluate swift infer output directly (auto-detected by "response" field)
+  python evaluate.py \
+      --generated_file results/eval_swift_output.jsonl \
       --report_file    results/eval_report.json
 
   # Also run VLM image quality check (requires image paths in generated_file)
@@ -30,8 +38,82 @@ from typing import Optional
 
 
 # ---------------------------------------------------------------------------
+# Swift infer output adapter
+# ---------------------------------------------------------------------------
+
+def extract_raw_output(record: dict) -> tuple[str, list[str], dict]:
+    """
+    Normalise a record to (raw_output, generated_prompts, lp_fields).
+
+    Supports two formats:
+      - inference.py output: keys "raw_output", "generated_prompts", "lp_fields"
+      - swift infer output:  keys "response" (and optionally "messages" for lp_fields)
+    """
+    if "raw_output" in record:
+        raw = record.get("raw_output", "")
+        prompts = record.get("generated_prompts", [])
+        lp_fields = record.get("lp_fields", {})
+        return raw, prompts, lp_fields
+
+    # swift infer format
+    raw = record.get("response", "")
+    prompts = []
+    for i in range(1, 6):
+        m = re.search(rf"<Prompt{i}>(.*?)</Prompt{i}>", raw, re.DOTALL)
+        if m:
+            prompts.append(m.group(1).strip())
+
+    # Try to recover lp_fields from the user message in "messages"
+    lp_fields: dict = {}
+    messages = record.get("messages", [])
+    for msg in messages:
+        if msg.get("role") == "user":
+            content = msg.get("content", "")
+            # Extract simple key: value lines like "- Document Title: ..."
+            for line in content.splitlines():
+                line = line.lstrip("- ").strip()
+                if ": " in line:
+                    k, v = line.split(": ", 1)
+                    lp_fields[k.strip()] = v.strip()
+            break
+
+    return raw, prompts, lp_fields
+
+
+# ---------------------------------------------------------------------------
 # Text-based metrics
 # ---------------------------------------------------------------------------
+
+def check_cot_compliance(raw_output: str) -> dict:
+    """
+    Check that the <think> block is present and contains all required CoT fields.
+    Required fields: ProductType, SpecificProduct, Category,
+                     VisualAnchors, LifestyleVibe, CoreValueSignals
+    """
+    COT_FIELDS = [
+        "ProductType",
+        "SpecificProduct",
+        "Category",
+        "VisualAnchors",
+        "LifestyleVibe",
+        "CoreValueSignals",
+    ]
+    think_match = re.search(r"<think>(.*?)</think>", raw_output, re.DOTALL)
+    if not think_match:
+        return {
+            "think_block_present": False,
+            "fields_present": {f: False for f in COT_FIELDS},
+            "all_fields_present": False,
+        }
+
+    think_content = think_match.group(1)
+    fields_present = {f: (f + ":") in think_content for f in COT_FIELDS}
+    return {
+        "think_block_present": True,
+        "fields_present": fields_present,
+        "all_fields_present": all(fields_present.values()),
+    }
+
 
 def check_format_compliance(raw_output: str) -> dict:
     """Check that the model output contains all 5 <PromptN>...</PromptN> tags."""
@@ -172,20 +254,21 @@ def evaluate_file(generated_file: str, eval_images: bool = False) -> dict:
                 records.append(json.loads(line))
 
     format_scores = []
+    cot_scores = []
     quality_scores = []
     coverage_scores = []
     vlm_scores = []
 
     for record in records:
-        raw_output = record.get("raw_output", "")
-        prompts = record.get("generated_prompts", [])
-        lp_fields = record.get("lp_fields", {})
+        raw_output, prompts, lp_fields = extract_raw_output(record)
 
         fmt = check_format_compliance(raw_output)
+        cot = check_cot_compliance(raw_output)
         qual = check_quality_constraints(prompts)
         cov = check_keyword_coverage(prompts, lp_fields)
 
         format_scores.append(fmt)
+        cot_scores.append(cot)
         quality_scores.append(qual)
         coverage_scores.append(cov)
 
@@ -201,6 +284,10 @@ def evaluate_file(generated_file: str, eval_images: bool = False) -> dict:
             "all_5_tags_present_rate": sum(f["all_tags_present"] for f in format_scores) / n,
             "avg_prompts_within_150_words": sum(f["prompts_within_150_words"] for f in format_scores) / n,
             "avg_word_count": sum(f["avg_word_count"] for f in format_scores) / n,
+        },
+        "cot": {
+            "think_block_present_rate": sum(c["think_block_present"] for c in cot_scores) / n,
+            "all_fields_present_rate": sum(c["all_fields_present"] for c in cot_scores) / n,
         },
         "quality_constraints": {
             "avg_prompts_with_constraints": sum(q["prompts_with_quality_constraints"] for q in quality_scores) / n,
@@ -233,6 +320,11 @@ def print_report(report: dict) -> None:
     print(f"  All 5 tags present:       {fmt['all_5_tags_present_rate']:.1%}")
     print(f"  Prompts within 150 words: {fmt['avg_prompts_within_150_words']:.1f} / 5")
     print(f"  Avg word count per prompt: {fmt['avg_word_count']:.1f}")
+
+    print("\n[CoT Compliance]")
+    cot = report["cot"]
+    print(f"  <think> block present:    {cot['think_block_present_rate']:.1%}")
+    print(f"  All 6 CoT fields present: {cot['all_fields_present_rate']:.1%}")
 
     print("\n[Quality Constraints]")
     qc = report["quality_constraints"]
