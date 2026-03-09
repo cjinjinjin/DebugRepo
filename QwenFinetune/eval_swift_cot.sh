@@ -32,7 +32,7 @@ NPROC_PER_NODE=8 \
 swift infer \
     --model        "${MODEL_PATH}" \
     --adapters     "${ADAPTER_PATH}" \
-    --val_dataset  "${DATA_DIR}/sft_eval_cot.jsonl" \
+    --dataset      "${DATA_DIR}/sft_eval_cot.jsonl" \
     --max_length   4096 \
     --bf16         true \
     --result_path  "${RESULT_FILE}"
@@ -40,8 +40,32 @@ swift infer \
 echo ""
 echo "Inference done. Running evaluate.py ..."
 
+# ── Locate the actual output file ────────────────────────────────────────────
+# swift infer may ignore --result_path and write to its own output dir.
+# Search for the most recently modified .jsonl under common locations.
+if [ ! -f "${RESULT_FILE}" ]; then
+    echo "[WARN] ${RESULT_FILE} not found. Searching for swift output ..."
+    FOUND=$(find . /tmp ~/ms-image-quality-filters-aether-module-main \
+        -name "*.jsonl" -newer "${DATA_DIR}/sft_eval_cot.jsonl" \
+        -not -path "*/data/*" \
+        2>/dev/null | head -5)
+    echo "Candidate files:"
+    echo "${FOUND}"
+    # Pick the most recently modified one
+    LATEST=$(find . /tmp ~/ms-image-quality-filters-aether-module-main \
+        -name "*.jsonl" -newer "${DATA_DIR}/sft_eval_cot.jsonl" \
+        -not -path "*/data/*" \
+        2>/dev/null | xargs ls -t 2>/dev/null | head -1)
+    if [ -n "${LATEST}" ]; then
+        echo "[INFO] Using: ${LATEST}"
+        RESULT_FILE="${LATEST}"
+    else
+        echo "[ERROR] No swift output file found. Check swift infer logs above."
+        exit 1
+    fi
+fi
+
 # ── Step 2: evaluation ───────────────────────────────────────────────────────
-# Base text-only evaluation (always runs):
 EVAL_ARGS="--generated_file ${RESULT_FILE} --report_file ${REPORT_FILE} --gt_file ${DATA_DIR}/sft_eval_cot.jsonl"
 
 # Uncomment to enable LLM-as-Judge (requires OPENAI_API_KEY):
