@@ -40,10 +40,16 @@ swift infer \
 echo ""
 echo "Inference done. Running evaluate.py ..."
 
-# ── Step 2: text-based evaluation ────────────────────────────────────────────
-python evaluate.py \
-    --generated_file "${RESULT_FILE}" \
-    --report_file    "${REPORT_FILE}"
+# ── Step 2: evaluation ───────────────────────────────────────────────────────
+# Base text-only evaluation (always runs):
+EVAL_ARGS="--generated_file ${RESULT_FILE} --report_file ${REPORT_FILE} --gt_file ${DATA_DIR}/sft_eval_cot.jsonl"
+
+# Uncomment to enable LLM-as-Judge (requires OPENAI_API_KEY):
+# export OPENAI_API_KEY="your-key-here"
+# export OPENAI_API_BASE="https://api.openai.com/v1"   # or Azure endpoint
+# EVAL_ARGS="${EVAL_ARGS} --llm_judge --llm_model gpt-4o"
+
+python evaluate.py ${EVAL_ARGS}
 
 echo ""
 echo "Report saved to ${REPORT_FILE}"
