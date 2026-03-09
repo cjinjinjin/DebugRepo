@@ -34,7 +34,7 @@ swift infer \
     --adapters     "${ADAPTER_PATH}" \
     --dataset      "${DATA_DIR}/sft_eval_cot.jsonl" \
     --max_length   4096 \
-    --bf16         true \
+    --dtype        bfloat16 \
     --result_path  "${RESULT_FILE}"
 
 echo ""
@@ -57,7 +57,7 @@ if [ ! -f "${RESULT_FILE}" ]; then
         -name "*.jsonl" -newer "${DATA_DIR}/sft_eval_cot.jsonl" \
         -not -path "*/data/*" \
         -not -name "sft_*.jsonl" \
-        2>/dev/null | xargs ls -t 2>/dev/null | head -1)
+        2>/dev/null | xargs -r ls -t 2>/dev/null | head -1)
     if [ -n "${LATEST}" ]; then
         echo "[INFO] Using: ${LATEST}"
         RESULT_FILE="${LATEST}"
