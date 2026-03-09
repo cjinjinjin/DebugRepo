@@ -48,6 +48,7 @@ if [ ! -f "${RESULT_FILE}" ]; then
     FOUND=$(find . /tmp ~/ms-image-quality-filters-aether-module-main \
         -name "*.jsonl" -newer "${DATA_DIR}/sft_eval_cot.jsonl" \
         -not -path "*/data/*" \
+        -not -name "sft_*.jsonl" \
         2>/dev/null | head -5)
     echo "Candidate files:"
     echo "${FOUND}"
@@ -55,6 +56,7 @@ if [ ! -f "${RESULT_FILE}" ]; then
     LATEST=$(find . /tmp ~/ms-image-quality-filters-aether-module-main \
         -name "*.jsonl" -newer "${DATA_DIR}/sft_eval_cot.jsonl" \
         -not -path "*/data/*" \
+        -not -name "sft_*.jsonl" \
         2>/dev/null | xargs ls -t 2>/dev/null | head -1)
     if [ -n "${LATEST}" ]; then
         echo "[INFO] Using: ${LATEST}"
