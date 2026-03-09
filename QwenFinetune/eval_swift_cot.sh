@@ -32,9 +32,11 @@ NPROC_PER_NODE=8 \
 swift infer \
     --model        "${MODEL_PATH}" \
     --adapters     "${ADAPTER_PATH}" \
-    --dataset      "${DATA_DIR}/sft_eval_cot.jsonl" \
+    --val_dataset  "${DATA_DIR}/sft_eval_cot.jsonl" \
     --max_length   4096 \
     --dtype        bfloat16 \
+    --eval_human   false \
+    --stream       false \
     --result_path  "${RESULT_FILE}"
 
 echo ""
