@@ -27,16 +27,15 @@ echo "Output   : ${RESULT_FILE}"
 echo "============================================"
 
 # ── Step 1: batch inference ──────────────────────────────────────────────────
+# Note: swift infer does not support DDP (multi-GPU) for batch dataset inference.
+# Use single-GPU with tensor parallelism instead.
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
-NPROC_PER_NODE=8 \
 swift infer \
     --model        "${MODEL_PATH}" \
     --adapters     "${ADAPTER_PATH}" \
     --val_dataset  "${DATA_DIR}/sft_eval_cot.jsonl" \
     --max_length   4096 \
-    --dtype        bfloat16 \
-    --eval_human   false \
-    --stream       false \
+    --tp            8 \
     --result_path  "${RESULT_FILE}"
 
 echo ""
