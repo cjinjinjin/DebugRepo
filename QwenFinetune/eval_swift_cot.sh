@@ -27,17 +27,18 @@ echo "Output   : ${RESULT_FILE}"
 echo "============================================"
 
 # ── Step 1: batch inference ──────────────────────────────────────────────────
-# Single process (no DDP) to avoid eval_human/stream conflict.
-# Qwen3-30B-A3B is an MoE model; fits on a single 8-GPU node via device_map=auto.
+# Use vLLM backend with tensor parallelism across all 8 GPUs for ~10-20x speedup.
+# Qwen3-30B-A3B is an MoE model; tensor_parallel_size=8 spreads it across all cards.
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
 swift infer \
-    --model           "${MODEL_PATH}" \
-    --adapters        "${ADAPTER_PATH}" \
-    --val_dataset     "${DATA_DIR}/sft_eval_cot.jsonl" \
-    --max_length      4096 \
-    --infer_backend   transformers \
-    --max_batch_size  4 \
-    --result_path     "${RESULT_FILE}"
+    --model                "${MODEL_PATH}" \
+    --adapters             "${ADAPTER_PATH}" \
+    --val_dataset          "${DATA_DIR}/sft_eval_cot.jsonl" \
+    --max_length           4096 \
+    --infer_backend        vllm \
+    --max_batch_size       32 \
+    --tensor_parallel_size 8 \
+    --result_path          "${RESULT_FILE}"
 
 echo ""
 echo "Inference done. Running evaluate.py ..."
