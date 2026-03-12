@@ -40,6 +40,7 @@ PYTHONPATH="${HOME}/vllm_pkgs:${PYTHONPATH}" \
     --infer_backend                vllm \
     --max_batch_size               32 \
     --vllm_tensor_parallel_size    8 \
+    --vllm_enforce_eager           \
     --result_path                  "${RESULT_FILE}"
 
 echo ""
