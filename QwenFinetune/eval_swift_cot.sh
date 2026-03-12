@@ -32,7 +32,19 @@ echo "============================================"
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
 PYTHONNOUSERSITE=1 \
 PYTHONPATH="${HOME}/vllm_pkgs:${PYTHONPATH}" \
-/opt/conda/envs/ptca/bin/python3.10 -m swift.cli.infer \
+VLLM_WORKER_MULTIPROC_METHOD=spawn \
+/opt/conda/envs/ptca/bin/python3.10 -c "
+import sys
+# Block broken flash_attn before vllm imports it
+import unittest.mock as mock
+sys.modules['flash_attn'] = mock.MagicMock()
+sys.modules['flash_attn.flash_attn_interface'] = mock.MagicMock()
+sys.modules['flash_attn.ops'] = mock.MagicMock()
+sys.modules['flash_attn.ops.triton'] = mock.MagicMock()
+sys.modules['flash_attn.ops.triton.rotary'] = mock.MagicMock()
+from swift.cli.infer import infer_main
+infer_main()
+" -- \
     --model                        "${MODEL_PATH}" \
     --adapters                     "${ADAPTER_PATH}" \
     --val_dataset                  "${DATA_DIR}/sft_eval_cot.jsonl" \
