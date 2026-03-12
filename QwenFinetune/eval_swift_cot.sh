@@ -30,6 +30,7 @@ echo "============================================"
 # Use vLLM backend with tensor parallelism across all 8 GPUs for ~10-20x speedup.
 # Qwen3-30B-A3B is an MoE model; vllm_tensor_parallel_size=8 shards across all cards.
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
+PYTHONNOUSERSITE=1 \
 swift infer \
     --model                        "${MODEL_PATH}" \
     --adapters                     "${ADAPTER_PATH}" \
@@ -78,7 +79,7 @@ EVAL_ARGS="--generated_file ${RESULT_FILE} --report_file ${REPORT_FILE} --gt_fil
 # export OPENAI_API_BASE="https://api.openai.com/v1"   # or Azure endpoint
 # EVAL_ARGS="${EVAL_ARGS} --llm_judge --llm_model gpt-4o"
 
-python evaluate.py ${EVAL_ARGS}
+PYTHONNOUSERSITE=1 python evaluate.py ${EVAL_ARGS}
 
 echo ""
 echo "Report saved to ${REPORT_FILE}"
