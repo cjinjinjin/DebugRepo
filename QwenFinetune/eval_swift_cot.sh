@@ -31,7 +31,8 @@ echo "============================================"
 # Qwen3-30B-A3B is an MoE model; vllm_tensor_parallel_size=8 shards across all cards.
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
 PYTHONNOUSERSITE=1 \
-swift infer \
+PYTHONPATH="${HOME}/vllm_pkgs:${PYTHONPATH}" \
+/opt/conda/envs/ptca/bin/python3.10 -m swift.cli.infer \
     --model                        "${MODEL_PATH}" \
     --adapters                     "${ADAPTER_PATH}" \
     --val_dataset                  "${DATA_DIR}/sft_eval_cot.jsonl" \
