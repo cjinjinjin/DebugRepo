@@ -27,20 +27,17 @@ echo "Output   : ${RESULT_FILE}"
 echo "============================================"
 
 # ── Step 1: batch inference ──────────────────────────────────────────────────
-# Use vLLM backend with tensor parallelism across all 8 GPUs for ~10-20x speedup.
-# Qwen3-30B-A3B is an MoE model; vllm_tensor_parallel_size=8 shards across all cards.
+# transformers backend (vLLM requires CUDA 12, this machine has CUDA 11.8)
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
 PYTHONNOUSERSITE=1 \
-PYTHONPATH="${HOME}/vllm_pkgs:${PYTHONPATH}" \
+PYTHONPATH="${HOME}/scipy_fix:${PYTHONPATH}" \
 /opt/conda/envs/ptca/bin/python3.10 -m swift.cli.infer \
     --model                        "${MODEL_PATH}" \
     --adapters                     "${ADAPTER_PATH}" \
     --val_dataset                  "${DATA_DIR}/sft_eval_cot.jsonl" \
     --max_length                   4096 \
-    --infer_backend                vllm \
-    --max_batch_size               32 \
-    --vllm_tensor_parallel_size    8 \
-    --vllm_enforce_eager           \
+    --infer_backend                transformers \
+    --max_batch_size               4 \
     --result_path                  "${RESULT_FILE}"
 
 echo ""
