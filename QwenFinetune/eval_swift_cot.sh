@@ -27,17 +27,17 @@ echo "Output   : ${RESULT_FILE}"
 echo "============================================"
 
 # ── Step 1: batch inference ──────────────────────────────────────────────────
-# transformers backend (vLLM requires CUDA 12, this machine has CUDA 11.8)
+# vLLM backend with tensor parallelism across all 8 GPUs.
+# Using isolated conda env 'vllm_infer' (torch cu124 + vllm 0.8.5 + swift 4.0.1)
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
-PYTHONNOUSERSITE=1 \
-PYTHONPATH="${HOME}/scipy_fix:${PYTHONPATH}" \
-/opt/conda/envs/ptca/bin/python3.10 -m swift.cli.infer \
+/opt/conda/envs/vllm_infer/bin/python3.10 -m swift.cli.infer \
     --model                        "${MODEL_PATH}" \
     --adapters                     "${ADAPTER_PATH}" \
     --val_dataset                  "${DATA_DIR}/sft_eval_cot.jsonl" \
     --max_length                   4096 \
-    --infer_backend                transformers \
-    --max_batch_size               4 \
+    --infer_backend                vllm \
+    --max_batch_size               32 \
+    --vllm_tensor_parallel_size    8 \
     --result_path                  "${RESULT_FILE}"
 
 echo ""
@@ -78,7 +78,7 @@ EVAL_ARGS="--generated_file ${RESULT_FILE} --report_file ${REPORT_FILE} --gt_fil
 # export OPENAI_API_BASE="https://api.openai.com/v1"   # or Azure endpoint
 # EVAL_ARGS="${EVAL_ARGS} --llm_judge --llm_model gpt-4o"
 
-PYTHONNOUSERSITE=1 python evaluate.py ${EVAL_ARGS}
+/opt/conda/envs/vllm_infer/bin/python3.10 evaluate.py ${EVAL_ARGS}
 
 echo ""
 echo "Report saved to ${REPORT_FILE}"
