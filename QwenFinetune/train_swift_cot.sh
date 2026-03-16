@@ -17,7 +17,7 @@ swift sft \
     --train_type   lora \
     --lora_rank    64 \
     --lora_alpha   128 \
-    --num_train_epochs            3 \
+    --num_train_epochs            10 \
     --per_device_train_batch_size 4 \
     --gradient_accumulation_steps 4 \
     --learning_rate               1e-4 \
