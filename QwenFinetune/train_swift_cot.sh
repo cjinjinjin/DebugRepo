@@ -23,7 +23,7 @@ swift sft \
     --learning_rate               1e-4 \
     --lr_scheduler_type           cosine \
     --warmup_ratio                0.05 \
-    --max_length                  4096 \
+    --max_length                  8192 \
     --output_dir                  ${OUTPUT_DIR} \
     --bf16                        true \
     --gradient_checkpointing      true \

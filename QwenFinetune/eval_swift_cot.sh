@@ -27,23 +27,57 @@ echo "Output   : ${RESULT_FILE}"
 echo "============================================"
 
 # ── Step 1: batch inference ──────────────────────────────────────────────────
+# vLLM backend with tensor parallelism across all 8 GPUs.
+# Using isolated conda env 'vllm_infer' (torch cu124 + vllm 0.8.5 + swift 4.0.1)
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
-NPROC_PER_NODE=8 \
-swift infer \
-    --model        "${MODEL_PATH}" \
-    --adapters     "${ADAPTER_PATH}" \
-    --val_dataset  "${DATA_DIR}/sft_eval_cot.jsonl" \
-    --max_length   4096 \
-    --bf16         true \
-    --result_path  "${RESULT_FILE}"
+/home/aiscuser/.conda/envs/vllm_infer/bin/python3.10 -m swift.cli.infer \
+    --model                        "./merged_model" \
+    --val_dataset                  "${DATA_DIR}/sft_eval_cot.jsonl" \
+    --max_length                   8192 \
+    --infer_backend                vllm \
+    --max_batch_size               32 \
+    --vllm_tensor_parallel_size    8 \
+    --result_path                  "${RESULT_FILE}"
 
 echo ""
 echo "Inference done. Running evaluate.py ..."
 
-# ── Step 2: text-based evaluation ────────────────────────────────────────────
-python evaluate.py \
-    --generated_file "${RESULT_FILE}" \
-    --report_file    "${REPORT_FILE}"
+# ── Locate the actual output file ────────────────────────────────────────────
+# swift infer may ignore --result_path and write to its own output dir.
+# Search for the most recently modified .jsonl under common locations.
+if [ ! -f "${RESULT_FILE}" ]; then
+    echo "[WARN] ${RESULT_FILE} not found. Searching for swift output ..."
+    FOUND=$(find . /tmp ~/ms-image-quality-filters-aether-module-main \
+        -name "*.jsonl" -newer "${DATA_DIR}/sft_eval_cot.jsonl" \
+        -not -path "*/data/*" \
+        -not -name "sft_*.jsonl" \
+        2>/dev/null | head -5)
+    echo "Candidate files:"
+    echo "${FOUND}"
+    # Pick the most recently modified one
+    LATEST=$(find . /tmp ~/ms-image-quality-filters-aether-module-main \
+        -name "*.jsonl" -newer "${DATA_DIR}/sft_eval_cot.jsonl" \
+        -not -path "*/data/*" \
+        -not -name "sft_*.jsonl" \
+        2>/dev/null | xargs -r ls -t 2>/dev/null | head -1)
+    if [ -n "${LATEST}" ]; then
+        echo "[INFO] Using: ${LATEST}"
+        RESULT_FILE="${LATEST}"
+    else
+        echo "[ERROR] No swift output file found. Check swift infer logs above."
+        exit 1
+    fi
+fi
+
+# ── Step 2: evaluation ───────────────────────────────────────────────────────
+EVAL_ARGS="--generated_file ${RESULT_FILE} --report_file ${REPORT_FILE} --gt_file ${DATA_DIR}/sft_eval_cot.jsonl"
+
+# Uncomment to enable LLM-as-Judge (requires OPENAI_API_KEY):
+# export OPENAI_API_KEY="your-key-here"
+# export OPENAI_API_BASE="https://api.openai.com/v1"   # or Azure endpoint
+# EVAL_ARGS="${EVAL_ARGS} --llm_judge --llm_model gpt-4o"
+
+/home/aiscuser/.conda/envs/vllm_infer/bin/python3.10 evaluate.py ${EVAL_ARGS}
 
 echo ""
 echo "Report saved to ${REPORT_FILE}"
