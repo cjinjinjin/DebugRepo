@@ -87,11 +87,37 @@ def extract_raw_output(record: dict) -> tuple[str, list[str], dict]:
     for msg in messages:
         if msg.get("role") == "user":
             content = msg.get("content", "")
-            for line in content.splitlines():
-                line = line.lstrip("- ").strip()
-                if ": " in line:
-                    k, v = line.split(": ", 1)
-                    lp_fields[k.strip()] = v.strip()
+            lines = content.splitlines()
+            # Format: "[Field Name]\nvalue" (bracket-style)
+            bracket_map = {
+                "Document Title": "DocumentTitle",
+                "Heading": "Heading",
+                "Title (CB)": "Title_CB",
+                "Best Snippet (CB)": "BestSnippet_CB",
+                "Visual Title": "VisualTitle",
+            }
+            i = 0
+            while i < len(lines):
+                line = lines[i].strip()
+                m = re.match(r"^\[(.+?)\]$", line)
+                if m and m.group(1) in bracket_map:
+                    key = bracket_map[m.group(1)]
+                    # Collect following non-empty, non-bracket lines as value
+                    val_lines = []
+                    j = i + 1
+                    while j < len(lines) and not re.match(r"^\[.+\]$", lines[j].strip()):
+                        if lines[j].strip():
+                            val_lines.append(lines[j].strip())
+                        j += 1
+                    lp_fields[key] = " ".join(val_lines)
+                    i = j
+                else:
+                    # Fallback: "key: value" inline format
+                    line = line.lstrip("- ")
+                    if ": " in line:
+                        k, v = line.split(": ", 1)
+                        lp_fields[k.strip()] = v.strip()
+                    i += 1
             break
 
     return raw, prompts, lp_fields
