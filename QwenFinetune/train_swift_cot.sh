@@ -2,7 +2,7 @@
 
 MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-30B-A3B"
 DATA_DIR="./data"
-OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot"
+OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot_8192"
 
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
 NPROC_PER_NODE=8 \
@@ -17,7 +17,7 @@ swift sft \
     --train_type   lora \
     --lora_rank    64 \
     --lora_alpha   128 \
-    --num_train_epochs            3 \
+    --num_train_epochs            10 \
     --per_device_train_batch_size 4 \
     --gradient_accumulation_steps 4 \
     --learning_rate               1e-4 \
