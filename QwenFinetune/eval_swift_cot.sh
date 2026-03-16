@@ -33,7 +33,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
 /home/aiscuser/.conda/envs/vllm_infer/bin/python3.10 -m swift.cli.infer \
     --model                        "./merged_model" \
     --val_dataset                  "${DATA_DIR}/sft_eval_cot.jsonl" \
-    --max_length                   4096 \
+    --max_length                   8192 \
     --infer_backend                vllm \
     --max_batch_size               32 \
     --vllm_tensor_parallel_size    8 \
