@@ -4,6 +4,7 @@ MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/Rich
 DATA_DIR="./data"
 OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot_8192"
 
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
 NPROC_PER_NODE=8 \
 NCCL_TIMEOUT=7200 \
@@ -18,8 +19,8 @@ swift sft \
     --lora_rank    64 \
     --lora_alpha   128 \
     --num_train_epochs            10 \
-    --per_device_train_batch_size 4 \
-    --gradient_accumulation_steps 4 \
+    --per_device_train_batch_size 2 \
+    --gradient_accumulation_steps 8 \
     --learning_rate               1e-4 \
     --lr_scheduler_type           cosine \
     --warmup_ratio                0.05 \
