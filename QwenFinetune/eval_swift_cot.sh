@@ -101,3 +101,13 @@ EVAL_ARGS="--generated_file ${RESULT_FILE} --report_file ${REPORT_FILE} --gt_fil
 
 echo ""
 echo "Report saved to ${REPORT_FILE}"
+
+# ── Step 4: extract prompts for t2i model ────────────────────────────────────
+T2I_FILE="${RESULTS_DIR}/prompts_for_t2i.jsonl"
+
+/home/aiscuser/.conda/envs/vllm_infer/bin/python3.10 extract_prompts_for_t2i.py \
+    --infer_file  "${RESULT_FILE}" \
+    --gt_file     "${DATA_DIR}/sft_eval_cot.jsonl" \
+    --output_file "${T2I_FILE}"
+
+echo "T2I prompts saved to ${T2I_FILE}"
