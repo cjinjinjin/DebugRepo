@@ -12,7 +12,10 @@
       "Bash(py -c \"import trafilatura; print\\(''trafilatura ok''\\)\")",
       "Bash(py -c \"import rich; print\\(''rich ok''\\)\")",
       "Bash(python3 -m json.tool)",
-      "Bash(python3 -c \":*)"
+      "Bash(python3 -c \":*)",
+      "Bash(python3 prepare_dpo_random1k.py)",
+      "Bash(ls *.tsv)",
+      "Bash(python3 prepare_dpo_refine.py)"
     ]
   }
 }
