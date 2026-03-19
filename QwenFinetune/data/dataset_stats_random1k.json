@@ -1,0 +1,23 @@
+{
+  "new_samples_built": 880,
+  "new_skipped": {
+    "no_lp": 0,
+    "no_good": 120,
+    "lt5_unique": 0
+  },
+  "existing_dedup": {
+    "train_before": 245,
+    "train_after": 245,
+    "eval_before": 22,
+    "eval_after": 22
+  },
+  "final": {
+    "train": 833,
+    "eval": 87
+  },
+  "label_dist": {
+    "good": 2731,
+    "fair": 995,
+    "bad": 1274
+  }
+}
