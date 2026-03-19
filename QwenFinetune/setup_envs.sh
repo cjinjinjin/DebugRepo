@@ -18,12 +18,20 @@ set -e
 
 # ── Detect conda prefix ───────────────────────────────────────────────────────
 # Machines may have conda at /opt/conda or /home/aiscuser/.conda; detect both.
-if   [ -d "/opt/conda/envs" ];             then CONDA_ENVS_ROOT="/opt/conda/envs"
-elif [ -d "/home/aiscuser/.conda/envs" ];  then CONDA_ENVS_ROOT="/home/aiscuser/.conda/envs"
-elif [ -d "${HOME}/.conda/envs" ];         then CONDA_ENVS_ROOT="${HOME}/.conda/envs"
-else
-    echo "[ERROR] Cannot find conda envs directory. Is conda installed?"
-    exit 1
+# Prefer the envs directory that conda actually uses (from conda info).
+# Fall back to well-known paths only if conda is not on PATH.
+if command -v conda &>/dev/null; then
+    CONDA_ENVS_ROOT="$(conda info --json 2>/dev/null \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)['envs_dirs'][0])" 2>/dev/null)"
+fi
+if [ -z "${CONDA_ENVS_ROOT}" ] || [ ! -d "${CONDA_ENVS_ROOT}" ]; then
+    if   [ -d "${HOME}/.conda/envs" ];         then CONDA_ENVS_ROOT="${HOME}/.conda/envs"
+    elif [ -d "/home/aiscuser/.conda/envs" ];  then CONDA_ENVS_ROOT="/home/aiscuser/.conda/envs"
+    elif [ -d "/opt/conda/envs" ];             then CONDA_ENVS_ROOT="/opt/conda/envs"
+    else
+        echo "[ERROR] Cannot find conda envs directory. Is conda installed?"
+        exit 1
+    fi
 fi
 echo "[INFO] Using conda envs root: ${CONDA_ENVS_ROOT}"
 
