@@ -11,7 +11,7 @@
 # If no checkpoint_dir is given, ADAPTER_PATH below is used.
 
 MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-30B-A3B"
-ADAPTER_PATH="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot_8192/v1-20260317-031740/checkpoint-30}"
+ADAPTER_PATH="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot_8192/v1-20260317-031740/checkpoint-10}"
 MERGED_MODEL_PATH="${ADAPTER_PATH}/merged_model"
 DATA_DIR="./data"
 RESULTS_DIR="${ADAPTER_PATH}/eval_results"
