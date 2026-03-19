@@ -118,6 +118,6 @@ esac
 echo ""
 echo "============================================"
 echo "All done. Next steps:"
-echo "  Inference : conda activate vllm_infer  && bash eval_swift_cot.sh"
-echo "  Training  : conda activate swift_train && bash train_swift_cot.sh"
+echo "  Inference : conda init bash && exec bash && conda activate vllm_infer  && bash eval_swift_cot.sh"
+echo "  Training  : conda init bash && exec bash && conda activate swift_train && bash train_swift_cot.sh"
 echo "============================================"
