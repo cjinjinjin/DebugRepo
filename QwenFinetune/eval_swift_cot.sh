@@ -103,7 +103,7 @@ echo ""
 echo "Report saved to ${REPORT_FILE}"
 
 # ── Step 4: extract prompts for t2i model ────────────────────────────────────
-T2I_FILE="${RESULTS_DIR}/prompts_for_t2i.jsonl"
+T2I_FILE="${RESULTS_DIR}/prompts_for_t2i.txt"
 
 /home/aiscuser/.conda/envs/vllm_infer/bin/python3.10 extract_prompts_for_t2i.py \
     --infer_file  "${RESULT_FILE}" \

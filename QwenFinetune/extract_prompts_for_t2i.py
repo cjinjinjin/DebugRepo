@@ -1,28 +1,20 @@
 """
 Extract individual prompts from swift infer output AND ground-truth,
-align with gt metadata, and write a unified JSONL for t2i model consumption.
+align with gt metadata, and write a unified TSV (.txt) for t2i model consumption.
 
 Input:
   --infer_file  : swift infer output JSONL  (has "response" field)
   --gt_file     : sft_eval_cot.jsonl        (has "id", "url_hash", "lp_url", "messages" fields)
-  --output_file : output JSONL for t2i model
+  --output_file : output TSV (.txt) for t2i model
 
-Output format (one line per prompt):
-  {
-    "id": "Internal100100_original",
-    "url_hash": "Internal100100",
-    "lp_url": "https://...",
-    "prompt_index": 1,
-    "prompt_id": "Internal100100_original_p1_model",   # or _gt
-    "source": "model",                                  # "model" | "gt"
-    "prompt": "..."
-  }
+Output format: tab-separated, first line is header
+  id\turl_hash\tlp_url\tprompt_index\tprompt_id\tsource\tprompt
 
 Usage:
   python extract_prompts_for_t2i.py \\
       --infer_file  /path/to/checkpoint-30/eval_results/eval_swift_output.jsonl \\
       --gt_file     ./data/sft_eval_cot.jsonl \\
-      --output_file /path/to/checkpoint-30/eval_results/prompts_for_t2i.jsonl
+      --output_file /path/to/checkpoint-30/eval_results/prompts_for_t2i.txt
 """
 
 import argparse
@@ -30,6 +22,8 @@ import json
 import re
 import sys
 from pathlib import Path
+
+COLUMNS = ["id", "url_hash", "lp_url", "prompt_index", "prompt_id", "source", "prompt"]
 
 
 def load_jsonl(path: str) -> list[dict]:
@@ -48,24 +42,25 @@ def extract_prompts(response: str) -> dict[int, str]:
     for i in range(1, 6):
         m = re.search(rf"<Prompt{i}>(.*?)</Prompt{i}>", response, re.DOTALL)
         if m:
-            prompts[i] = m.group(1).strip()
+            # collapse newlines/tabs inside prompt text to keep TSV valid
+            prompts[i] = re.sub(r"[\t\n\r]+", " ", m.group(1).strip())
     return prompts
 
 
 def write_prompts(out_f, rec_id, url_hash, lp_url, prompts, source):
-    """Write one row per prompt to out_f. Returns number of rows written."""
+    """Write one TSV row per prompt. Returns number of rows written."""
     count = 0
     for prompt_idx, prompt_text in sorted(prompts.items()):
-        row = {
-            "id":           rec_id,
-            "url_hash":     url_hash,
-            "lp_url":       lp_url,
-            "prompt_index": prompt_idx,
-            "prompt_id":    f"{rec_id}_p{prompt_idx}_{source}",
-            "source":       source,
-            "prompt":       prompt_text,
-        }
-        out_f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        row = [
+            rec_id,
+            url_hash,
+            lp_url,
+            str(prompt_idx),
+            f"{rec_id}_p{prompt_idx}_{source}",
+            source,
+            prompt_text,
+        ]
+        out_f.write("\t".join(row) + "\n")
         count += 1
     return count
 
@@ -74,7 +69,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--infer_file",  required=True, help="swift infer output JSONL")
     parser.add_argument("--gt_file",     required=True, help="sft_eval_cot.jsonl with id/url_hash")
-    parser.add_argument("--output_file", required=True, help="output JSONL for t2i model")
+    parser.add_argument("--output_file", required=True, help="output TSV (.txt) for t2i model")
     args = parser.parse_args()
 
     infer_records = load_jsonl(args.infer_file)
@@ -90,6 +85,9 @@ def main():
     missing_gt  = 0
 
     with open(output_path, "w", encoding="utf-8") as out_f:
+
+        # header
+        out_f.write("\t".join(COLUMNS) + "\n")
 
         # ── Model outputs ────────────────────────────────────────────────────
         for idx, record in enumerate(infer_records):
@@ -122,7 +120,6 @@ def main():
             url_hash = gt.get("url_hash", "")
             lp_url   = gt.get("lp_url", "")
 
-            # GT prompts live in the last assistant message
             messages = gt.get("messages", [])
             gt_response = ""
             for msg in reversed(messages):
