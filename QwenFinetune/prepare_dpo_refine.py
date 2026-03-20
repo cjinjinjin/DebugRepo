@@ -334,6 +334,8 @@ def build_dpo_pair(
     cot_block    = build_cot_block(anchor_row)
     user_message = build_user_message(lp)
 
+    user_turn = {"role": "user", "content": user_message}
+
     return {
         "id":                 f"{url_hash}_dpo_refine",
         "url_hash":           url_hash,
@@ -343,10 +345,11 @@ def build_dpo_pair(
         "chosen_bad_count":   chosen_bad_count,
         "rejected_bad_count": actual_rejected_bad,
         "system":             SYSTEM_PROMPT_COT,
-        "conversation":       [{"role": "user", "content": user_message}],
-        "chosen":             [{"role": "assistant",
+        "chosen":             [user_turn,
+                               {"role": "assistant",
                                 "content": build_response(cot_block, chosen)}],
-        "rejected":           [{"role": "assistant",
+        "rejected":           [user_turn,
+                               {"role": "assistant",
                                 "content": build_response(cot_block, rejected)}],
     }
 
