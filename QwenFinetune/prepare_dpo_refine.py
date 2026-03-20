@@ -345,10 +345,10 @@ def build_dpo_pair(
         "chosen_bad_count":   chosen_bad_count,
         "rejected_bad_count": actual_rejected_bad,
         "system":             SYSTEM_PROMPT_COT,
-        "chosen":             [user_turn,
+        "messages":           [user_turn,
                                {"role": "assistant",
                                 "content": build_response(cot_block, chosen)}],
-        "rejected":           [user_turn,
+        "rejected_messages":  [user_turn,
                                {"role": "assistant",
                                 "content": build_response(cot_block, rejected)}],
     }
