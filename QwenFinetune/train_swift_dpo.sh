@@ -21,7 +21,7 @@ swift rlhf \
     --train_type    lora \
     --lora_rank     64 \
     --lora_alpha    128 \
-    --num_train_epochs            5 \
+    --num_train_epochs            50 \
     --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 8 \
     --learning_rate               5e-5 \
