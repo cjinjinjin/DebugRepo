@@ -1,0 +1,17 @@
+{
+  "total_pairs": 82,
+  "train": 74,
+  "eval": 8,
+  "skipped": {
+    "no_lp": 0,
+    "ineligible": 118
+  },
+  "chosen_bad_dist": {
+    "0": 77,
+    "1": 5
+  },
+  "rejected_bad_dist": {
+    "1": 77,
+    "2": 5
+  }
+}

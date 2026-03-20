@@ -11,7 +11,7 @@
 # If no checkpoint_dir is given, ADAPTER_PATH below is used.
 
 MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-30B-A3B"
-ADAPTER_PATH="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot_8192/v1-20260317-031740/checkpoint-30}"
+ADAPTER_PATH="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot_8192_v2/v0-20260319-083851/checkpoint-50}"
 MERGED_MODEL_PATH="${ADAPTER_PATH}/merged_model"
 DATA_DIR="./data"
 RESULTS_DIR="${ADAPTER_PATH}/eval_results"
@@ -101,3 +101,13 @@ EVAL_ARGS="--generated_file ${RESULT_FILE} --report_file ${REPORT_FILE} --gt_fil
 
 echo ""
 echo "Report saved to ${REPORT_FILE}"
+
+# ── Step 4: extract prompts for t2i model ────────────────────────────────────
+T2I_FILE="${RESULTS_DIR}/prompts_for_t2i.txt"
+
+/home/aiscuser/.conda/envs/vllm_infer/bin/python3.10 extract_prompts_for_t2i.py \
+    --infer_file  "${RESULT_FILE}" \
+    --gt_file     "${DATA_DIR}/sft_eval_cot.jsonl" \
+    --output_file "${T2I_FILE}"
+
+echo "T2I prompts saved to ${T2I_FILE}"
