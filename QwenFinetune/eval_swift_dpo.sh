@@ -12,7 +12,7 @@
 
 MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-30B-A3B"
 # NOTE: training log shows best_model_checkpoint = checkpoint-5, use that by default
-ADAPTER_PATH="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_dpo_lora_cot_refine/v3-20260320-155846/checkpoint-5}"
+ADAPTER_PATH="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_dpo_lora_cot_refine/v3-20260320-155846/checkpoint-50}"
 MERGED_MODEL_PATH="${ADAPTER_PATH}/merged_model"
 DATA_DIR="./data"
 EVAL_DATA="${DATA_DIR}/dpo_refine_eval_cot.jsonl"
