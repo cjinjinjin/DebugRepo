@@ -2,14 +2,17 @@
   "new_samples_built": 880,
   "new_skipped": {
     "no_lp": 0,
-    "no_good": 120,
-    "lt5_unique": 0
+    "no_good_only": 120,
+    "lt5_unique_only": 0,
+    "lt5_unique+no_good": 0,
+    "any_lt5_unique": 0,
+    "any_no_good": 120
   },
   "existing_dedup": {
-    "train_before": 245,
-    "train_after": 245,
-    "eval_before": 22,
-    "eval_after": 22
+    "train_before": 833,
+    "train_after": 833,
+    "eval_before": 87,
+    "eval_after": 87
   },
   "final": {
     "train": 833,

@@ -286,7 +286,8 @@ def build_sft_sample(
     url_hash: str,
     prompt_rows_for_lp: list[dict],
     label_lookup: dict,
-) -> dict | None:
+) -> "dict | str":
+    """Return the sample dict on success, or a skip-reason string on failure."""
     tag_order  = ["Prompt1", "Prompt2", "Prompt3", "Prompt4", "Prompt5"]
     row_by_tag = {r["Tag"]: r for r in prompt_rows_for_lp}
     anchor_row = prompt_rows_for_lp[0] if prompt_rows_for_lp else {}
@@ -324,11 +325,18 @@ def build_sft_sample(
                 seen.add(p)
 
     # Must have 5 unique total and at least MIN_GOOD_FAIR from good+fair
-    if len(final_prompts) < 5:
-        return None
-    n_good_fair = sum(1 for p in final_prompts if p in set(good_prompts) | set(fair_prompts))
-    if n_good_fair < MIN_GOOD_FAIR:
-        return None
+    gf_set = set(good_prompts) | set(fair_prompts)
+    n_good_fair_final = sum(1 for p in final_prompts if p in gf_set)
+
+    has_lt5  = len(final_prompts) < 5
+    has_lt_gf = n_good_fair_final < MIN_GOOD_FAIR
+
+    if has_lt5 and has_lt_gf:
+        return "lt5_unique+no_good"
+    if has_lt5:
+        return "lt5_unique"
+    if has_lt_gf:
+        return "no_good"
 
     prompts_block = "\n".join(
         f"<Prompt{i}>{p.strip()}</Prompt{i}>" for i, p in enumerate(final_prompts, 1)
@@ -413,10 +421,11 @@ def main():
 
     # ── Build new SFT samples ────────────────────────────────────────────────
     print("Building new SFT samples ...")
-    new_samples     = []
-    skipped_no_lp   = 0
-    skipped_no_good = 0
-    skipped_dup     = 0
+    new_samples        = []
+    skipped_no_lp      = 0
+    skipped_no_good    = 0   # only no_good (prompts were unique enough)
+    skipped_dup        = 0   # only lt5_unique (good+fair was sufficient)
+    skipped_both       = 0   # both lt5_unique AND no_good
 
     for url_hash, lp_rows in prompts_by_hash.items():
         lp_url = hash_to_url.get(url_hash, "")
@@ -425,22 +434,25 @@ def main():
             skipped_no_lp += 1
             continue
 
-        sample = build_sft_sample(lp, url_hash, lp_rows, label_lookup)
-        if sample is None:
-            all_labels = [label_lookup.get(f"{url_hash}_{r['Tag']}", {}).get("label") for r in lp_rows]
-            n_gf = sum(1 for l in all_labels if l in ("good", "fair"))
-            if n_gf < MIN_GOOD_FAIR:
+        result = build_sft_sample(lp, url_hash, lp_rows, label_lookup)
+        if isinstance(result, str):
+            if result == "lt5_unique+no_good":
+                skipped_both += 1
+            elif result == "no_good":
                 skipped_no_good += 1
-            else:
+            else:  # "lt5_unique"
                 skipped_dup += 1
             continue
 
-        new_samples.append(sample)
+        new_samples.append(result)
 
-    print(f"  New samples built:      {len(new_samples)}")
-    print(f"  Skipped (no LP):               {skipped_no_lp}")
-    print(f"  Skipped (<{MIN_GOOD_FAIR} good+fair):      {skipped_no_good}")
-    print(f"  Skipped (can't fill 5 unique): {skipped_dup}")
+    print(f"  New samples built:                    {len(new_samples)}")
+    print(f"  Skipped (no LP):                      {skipped_no_lp}")
+    print(f"  Skipped (<{MIN_GOOD_FAIR} good+fair only):         {skipped_no_good}")
+    print(f"  Skipped (can't fill 5 unique only):   {skipped_dup}")
+    print(f"  Skipped (both conditions):            {skipped_both}")
+    print(f"  --- any prompt-dup issue (dup+both):  {skipped_dup + skipped_both}")
+    print(f"  --- any good+fair issue (no_good+both): {skipped_no_good + skipped_both}")
 
     # ── Load existing data ───────────────────────────────────────────────────
     print("\nLoading existing data ...")
@@ -487,9 +499,12 @@ def main():
     stats = {
         "new_samples_built": len(new_samples),
         "new_skipped": {
-            "no_lp": skipped_no_lp,
-            "no_good": skipped_no_good,
-            "lt5_unique": skipped_dup,
+            "no_lp":              skipped_no_lp,
+            "no_good_only":       skipped_no_good,
+            "lt5_unique_only":    skipped_dup,
+            "lt5_unique+no_good": skipped_both,
+            "any_lt5_unique":     skipped_dup + skipped_both,
+            "any_no_good":        skipped_no_good + skipped_both,
         },
         "existing_dedup": {
             "train_before": len(existing_train), "train_after": len(clean_train),

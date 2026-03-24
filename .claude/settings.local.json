@@ -17,7 +17,10 @@
       "Bash(ls *.tsv)",
       "Bash(python3 prepare_dpo_refine.py)",
       "Read(//opt/conda/envs/vllm_infer/**)",
-      "Read(//c/Users/jinjinchen/.conda/envs/vllm_infer/**)"
+      "Read(//c/Users/jinjinchen/.conda/envs/vllm_infer/**)",
+      "Bash(for f:*)",
+      "Bash(do)",
+      "Bash(done)"
     ]
   }
 }
