@@ -24,7 +24,7 @@ echo "============================================"
 echo "Model    : ${MODEL_PATH}"
 echo "Adapter  : ${ADAPTER_PATH}"
 echo "Merged   : ${MERGED_MODEL_PATH}"
-echo "Val data : ${DATA_DIR}/sft_eval_cot.jsonl"
+echo "Val data : ${DATA_DIR}/dpo_refine_eval_cot.jsonl"
 echo "Output   : ${RESULT_FILE}"
 echo "============================================"
 
@@ -52,7 +52,7 @@ fi
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
 /home/aiscuser/.conda/envs/vllm_infer/bin/python3.10 -m swift.cli.infer \
     --model                        "${MERGED_MODEL_PATH}" \
-    --val_dataset                  "${DATA_DIR}/sft_eval_cot.jsonl" \
+    --val_dataset                  "${DATA_DIR}/dpo_refine_eval_cot.jsonl" \
     --max_length                   8192 \
     --infer_backend                vllm \
     --max_batch_size               32 \
@@ -68,7 +68,7 @@ echo "Inference done. Running evaluate.py ..."
 if [ ! -f "${RESULT_FILE}" ]; then
     echo "[WARN] ${RESULT_FILE} not found. Searching for swift output ..."
     FOUND=$(find . /tmp ~/ms-image-quality-filters-aether-module-main \
-        -name "*.jsonl" -newer "${DATA_DIR}/sft_eval_cot.jsonl" \
+        -name "*.jsonl" -newer "${DATA_DIR}/dpo_refine_eval_cot.jsonl" \
         -not -path "*/data/*" \
         -not -name "sft_*.jsonl" \
         2>/dev/null | head -5)
@@ -76,7 +76,7 @@ if [ ! -f "${RESULT_FILE}" ]; then
     echo "${FOUND}"
     # Pick the most recently modified one
     LATEST=$(find . /tmp ~/ms-image-quality-filters-aether-module-main \
-        -name "*.jsonl" -newer "${DATA_DIR}/sft_eval_cot.jsonl" \
+        -name "*.jsonl" -newer "${DATA_DIR}/dpo_refine_eval_cot.jsonl" \
         -not -path "*/data/*" \
         -not -name "sft_*.jsonl" \
         2>/dev/null | xargs -r ls -t 2>/dev/null | head -1)
@@ -90,7 +90,7 @@ if [ ! -f "${RESULT_FILE}" ]; then
 fi
 
 # ── Step 3: evaluation ───────────────────────────────────────────────────────
-EVAL_ARGS="--generated_file ${RESULT_FILE} --report_file ${REPORT_FILE} --gt_file ${DATA_DIR}/sft_eval_cot.jsonl"
+EVAL_ARGS="--generated_file ${RESULT_FILE} --report_file ${REPORT_FILE} --gt_file ${DATA_DIR}/dpo_refine_eval_cot.jsonl"
 
 # Uncomment to enable LLM-as-Judge (requires OPENAI_API_KEY):
 # export OPENAI_API_KEY="your-key-here"
@@ -107,7 +107,7 @@ T2I_FILE="${RESULTS_DIR}/prompts_for_t2i.txt"
 
 /home/aiscuser/.conda/envs/vllm_infer/bin/python3.10 extract_prompts_for_t2i.py \
     --infer_file  "${RESULT_FILE}" \
-    --gt_file     "${DATA_DIR}/sft_eval_cot.jsonl" \
+    --gt_file     "${DATA_DIR}/dpo_refine_eval_cot.jsonl" \
     --output_file "${T2I_FILE}"
 
 echo "T2I prompts saved to ${T2I_FILE}"
