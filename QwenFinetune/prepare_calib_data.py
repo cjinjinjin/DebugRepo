@@ -160,7 +160,40 @@ def load_public_records(n: int, seed: int) -> list[dict]:
     Sample n records from wikitext-2-raw-v1 (test split).
     Each article is wrapped as a user question + assistant answer turn
     so the model sees realistic assistant-style text during calibration.
+
+    Offline / mirror support:
+      - Set HF_DATASETS_OFFLINE=1 to use local cache only
+      - Set HF_ENDPOINT=https://hf-mirror.com to use a mirror
+      - Set WIKITEXT_CACHE_DIR=/path/to/local/wikitext to load from a
+        pre-downloaded directory (plain .txt files, one passage per line)
     """
+    import os
+
+    # ── Fallback: local plain-text cache ─────────────────────────────────────
+    local_cache = os.environ.get("WIKITEXT_CACHE_DIR", "")
+    if local_cache and Path(local_cache).exists():
+        print(f"[public]   loading wikitext from local cache: {local_cache}")
+        passages = []
+        for txt_file in sorted(Path(local_cache).glob("*.txt")):
+            for line in txt_file.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if len(line.split()) >= 50:
+                    passages.append(line)
+        random.seed(seed)
+        random.shuffle(passages)
+        records = []
+        for passage in passages[:n]:
+            records.append({
+                "messages": [
+                    {"role": "system",    "content": WIKITEXT_SYSTEM},
+                    {"role": "user",      "content": f"Summarize the following passage:\n\n{passage}"},
+                    {"role": "assistant", "content": passage[:500]},
+                ]
+            })
+        print(f"[public]   sampled {len(records)} passages from local cache")
+        return records
+
+    # ── HuggingFace (online or offline cache) ─────────────────────────────────
     try:
         from datasets import load_dataset
     except ImportError:
@@ -168,8 +201,21 @@ def load_public_records(n: int, seed: int) -> list[dict]:
         print("       Install with: pip install datasets")
         return []
 
+    # Allow mirror via env var (e.g. HF_ENDPOINT=https://hf-mirror.com)
+    hf_endpoint = os.environ.get("HF_ENDPOINT", "")
+    if hf_endpoint:
+        print(f"[public]   using HF mirror: {hf_endpoint}")
+
     print("[public]   loading wikitext-2-raw-v1 ...")
-    ds = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
+    try:
+        ds = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
+    except Exception as e:
+        print(f"[WARN] Failed to load wikitext from HuggingFace: {e}")
+        print("       Tips:")
+        print("         1. Set HF_ENDPOINT=https://hf-mirror.com to use a mirror")
+        print("         2. Pre-download and set WIKITEXT_CACHE_DIR=/path/to/local/wikitext")
+        print("         3. Set HF_DATASETS_OFFLINE=1 if dataset is already cached")
+        return []
 
     # Filter out empty / header lines, then chunk into ~300-word passages
     passages = []
