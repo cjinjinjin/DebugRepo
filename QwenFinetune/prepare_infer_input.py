@@ -77,24 +77,26 @@ SYSTEM_PROMPT_COT = (
 
 def build_user_message(row: dict) -> str:
     field_labels = [
-        ("LPURL",                          "Landing Page URL"),
-        ("DocumentTitle",                  "Document Title"),
-        ("VisualTitle",                    "Visual Title"),
-        ("Heading",                        "Heading"),
-        ("Title_CB",                       "Title (CB)"),
-        ("VisualTitle_CB",                 "Visual Title (CB)"),
-        ("Heading_CB",                     "Heading (CB)"),
-        ("BestSnippet_CB",                 "Best Snippet (CB)"),
-        ("MetaDescription_CB",             "Meta Description"),
-        ("PrimaryContentNoTitleNoHeading", "Page Content"),
+        ("LPURL",                          "Landing Page URL",  None),
+        ("DocumentTitle",                  "Document Title",    200),
+        ("VisualTitle",                    "Visual Title",      200),
+        ("Heading",                        "Heading",           400),
+        ("Title_CB",                       "Title (CB)",        200),
+        ("VisualTitle_CB",                 "Visual Title (CB)", 200),
+        ("Heading_CB",                     "Heading (CB)",      200),
+        ("BestSnippet_CB",                 "Best Snippet (CB)", 400),
+        ("MetaDescription_CB",             "Meta Description",  300),
+        ("PrimaryContentNoTitleNoHeading", "Page Content",      800),
     ]
     parts = [
         "Generate 5 image generation prompts for a Native Ad based on the "
         "following landing page information:\n"
     ]
-    for key, label in field_labels:
+    for key, label, max_chars in field_labels:
         val = (row.get(key) or "").strip()
         if val:
+            if max_chars and len(val) > max_chars:
+                val = val[:max_chars] + "..."
             parts.append(f"[{label}]\n{val}")
     return "\n\n".join(parts)
 
