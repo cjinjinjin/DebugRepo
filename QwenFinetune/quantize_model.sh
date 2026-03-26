@@ -45,17 +45,20 @@ else
 fi
 echo "[INFO] Calibration data: $(wc -l < "${CALIB_DATA}") records"
 
-# ── Step 2: AWQ INT4 quantization ────────────────────────────────────────────
+# ── Step 2: AWQ INT4 quantization (via autoawq directly, no swift needed) ────
 if [ -d "${QUANTIZED_MODEL_PATH}" ]; then
     echo "[INFO] Quantized model already exists at ${QUANTIZED_MODEL_PATH}, skipping."
 else
     echo "[INFO] Running AWQ INT4 quantization ..."
-    ${PYTHON} -m swift.cli.export \
-        --model          "${MERGED_MODEL_PATH}" \
+    ${PYTHON} run_awq_quantize.py \
+        --model_path     "${MERGED_MODEL_PATH}" \
+        --calib_data     "${CALIB_DATA}" \
+        --output_dir     "${QUANTIZED_MODEL_PATH}" \
         --quant_bits     4 \
-        --quant_method   awq \
-        --calib_dataset  "${CALIB_DATA}" \
-        --output_dir     "${QUANTIZED_MODEL_PATH}"
+        --group_size     128 \
+        --zero_point     true \
+        --calib_samples  64 \
+        --calib_seqlen   1024
 
     if [ $? -ne 0 ]; then
         echo "[ERROR] Quantization failed. Exiting."
@@ -64,21 +67,17 @@ else
     echo "[INFO] Quantization done: ${QUANTIZED_MODEL_PATH}"
 fi
 
-# ── Step 3: smoke test ────────────────────────────────────────────────────────
+# ── Step 3: smoke test (via vllm directly, no swift needed) ──────────────────
 echo ""
 echo "[INFO] Running smoke test (10 samples) on quantized model ..."
 head -10 "${CALIB_DATA}" > "${SMOKE_INPUT}"
 
 CUDA_VISIBLE_DEVICES=0,1,2,3 \
-${PYTHON} -m swift.cli.infer \
-    --model                        "${QUANTIZED_MODEL_PATH}" \
-    --val_dataset                  "${SMOKE_INPUT}" \
-    --max_length                   8192 \
-    --infer_backend                vllm \
-    --max_batch_size               4 \
-    --vllm_tensor_parallel_size    4 \
-    --quantization                 awq \
-    --result_path                  "${SMOKE_OUTPUT}"
+${PYTHON} run_vllm_smoke_test.py \
+    --model          "${QUANTIZED_MODEL_PATH}" \
+    --input_jsonl    "${SMOKE_INPUT}" \
+    --output_jsonl   "${SMOKE_OUTPUT}" \
+    --tp             4
 
 if [ $? -ne 0 ]; then
     echo "[ERROR] Smoke test failed. Check quantized model."
