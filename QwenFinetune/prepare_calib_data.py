@@ -64,16 +64,32 @@ WIKITEXT_SYSTEM = (
 
 
 # ---------------------------------------------------------------------------
-# Private data: read from infer_input.jsonl (built by prepare_infer_input.py)
-# or build on-the-fly from the raw TSV
+# Private data: read from dpo_refine_eval_cot.jsonl (has real assistant turns)
+# or build on-the-fly from the raw TSV + eval JSONL for assistant turns
 # ---------------------------------------------------------------------------
+
+# Dummy assistant response used when no real GT is available
+_DUMMY_ASSISTANT = (
+    "<think>\nProductType: Physical Product\nSpecificProduct: consumer product\n"
+    "Category: retail\nVisualAnchors: product, person, environment\n"
+    "LifestyleVibe: everyday lifestyle\nCoreValueSignals: reliable, simple\n</think>\n"
+    "<Prompt1>A person using the product in a natural setting. Correct anatomy, "
+    "natural hands, sharp focus, clean composition, no logos, no watermark.</Prompt1>\n"
+    "<Prompt2>Close-up detail of the product on a clean surface. Sharp focus, "
+    "realistic textures, no text, no logos, no watermark.</Prompt2>\n"
+    "<Prompt3>Lifestyle scene showing product outcome. Natural lighting, candid, "
+    "subject not looking at camera, no logos, no watermark.</Prompt3>\n"
+    "<Prompt4>Outdoor context with product in use. Natural environment, correct anatomy, "
+    "clean composition, no logos, no watermark.</Prompt4>\n"
+    "<Prompt5>Indoor everyday scene featuring the product. Warm lighting, realistic, "
+    "no extra text, no logos, no watermark.</Prompt5>"
+)
+
 
 def load_private_records(jsonl_path: Path, n: int, seed: int) -> list[dict]:
     """
     Load records from an infer_input.jsonl (user-turn-only format).
-    For calibration we need a complete user+assistant turn, so we use
-    the system prompt + user message only (assistant left as placeholder).
-    The calibration forward pass still covers the full prompt prefix.
+    Adds a dummy assistant turn so GPTQ calibration has complete sequences.
     """
     records = []
     with open(jsonl_path, encoding="utf-8") as f:
@@ -82,7 +98,6 @@ def load_private_records(jsonl_path: Path, n: int, seed: int) -> list[dict]:
             if not line:
                 continue
             r = json.loads(line)
-            # Already in messages format from prepare_infer_input.py
             messages = r.get("messages", [])
             system   = r.get("system", SYSTEM_PROMPT_COT)
             user_msg = next((m["content"] for m in messages if m["role"] == "user"), "")
@@ -92,6 +107,7 @@ def load_private_records(jsonl_path: Path, n: int, seed: int) -> list[dict]:
                 "messages": [
                     {"role": "system",    "content": system},
                     {"role": "user",      "content": user_msg},
+                    {"role": "assistant", "content": _DUMMY_ASSISTANT},
                 ]
             })
 
@@ -102,10 +118,44 @@ def load_private_records(jsonl_path: Path, n: int, seed: int) -> list[dict]:
     return sampled
 
 
+def load_private_from_gt(gt_jsonl: Path, n: int, seed: int) -> list[dict]:
+    """
+    Load from dpo_refine_eval_cot.jsonl which has real assistant turns.
+    Preferred over TSV when available — higher calibration quality.
+    """
+    records = []
+    with open(gt_jsonl, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            r = json.loads(line)
+            messages = r.get("messages", [])
+            system   = r.get("system", SYSTEM_PROMPT_COT)
+            user_msg  = next((m["content"] for m in messages if m["role"] == "user"), "")
+            asst_msg  = next((m["content"] for m in messages if m["role"] == "assistant"), "")
+            if not user_msg or not asst_msg:
+                continue
+            records.append({
+                "messages": [
+                    {"role": "system",    "content": system},
+                    {"role": "user",      "content": user_msg},
+                    {"role": "assistant", "content": asst_msg},
+                ]
+            })
+
+    random.seed(seed)
+    random.shuffle(records)
+    sampled = records[:n]
+    print(f"[private-gt] loaded {len(records)} GT records, sampled {len(sampled)}")
+    return sampled
+
+
 def build_private_from_tsv(tsv_path: Path, n: int, seed: int) -> list[dict]:
     """
-    Build private records directly from the raw TSV (calls prepare_infer_input logic).
-    Used when no pre-built infer_input.jsonl is provided.
+    Build private records from the raw TSV.
+    Uses dummy assistant turn for GPTQ calibration completeness.
+    For higher quality calibration, prefer load_private_from_gt() with the eval JSONL.
     """
     import csv
     field_labels = [
@@ -139,8 +189,9 @@ def build_private_from_tsv(tsv_path: Path, n: int, seed: int) -> list[dict]:
             user_msg = build_user_message(row)
             records.append({
                 "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT_COT},
-                    {"role": "user",   "content": user_msg},
+                    {"role": "system",    "content": SYSTEM_PROMPT_COT},
+                    {"role": "user",      "content": user_msg},
+                    {"role": "assistant", "content": _DUMMY_ASSISTANT},
                 ]
             })
 
@@ -269,6 +320,12 @@ def main():
         default=str(SCRIPT_DIR / "RawData" / "UHRS2K_SD_Random200_0324.tsv"),
         help="Raw TSV file to build private records from (used when --private_jsonl not given)",
     )
+    parser.add_argument(
+        "--gt_jsonl",
+        default=str(SCRIPT_DIR / "data" / "dpo_refine_eval_cot.jsonl"),
+        help="GT eval JSONL with real assistant turns (highest quality calibration data). "
+             "Used in addition to TSV private data when available.",
+    )
     parser.add_argument("--n_private",    type=int, default=64)
     parser.add_argument("--n_public",     type=int, default=64)
     parser.add_argument(
@@ -278,8 +335,12 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
-    # ── Private records ──────────────────────────────────────────────────────
-    if args.private_jsonl and Path(args.private_jsonl).exists():
+    # ── Private records ───────────────────────────────────────────────────────
+    # Priority: GT eval JSONL (real assistant) > infer_input JSONL > raw TSV
+    gt_path = Path(args.gt_jsonl)
+    if gt_path.exists():
+        private = load_private_from_gt(gt_path, args.n_private, args.seed)
+    elif args.private_jsonl and Path(args.private_jsonl).exists():
         private = load_private_records(Path(args.private_jsonl), args.n_private, args.seed)
     else:
         tsv_path = Path(args.private_tsv)
