@@ -73,10 +73,12 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
 /home/aiscuser/.conda/envs/vllm_infer/bin/python3.10 -m swift.cli.infer \
     --model                        "${MERGED_MODEL_PATH}" \
     --val_dataset                  "${INFER_INPUT}" \
-    --max_length                   8192 \
+    --max_length                   16384 \
     --infer_backend                vllm \
     --max_batch_size               32 \
     --vllm_tensor_parallel_size    8 \
+    --temperature                  0.7 \
+    --top_p                        0.9 \
     --result_path                  "${RESULT_FILE}"
 
 echo ""

@@ -48,9 +48,14 @@ def extract_prompts(response: str) -> dict[int, str]:
 
 
 def write_prompts(out_f, rec_id, url_hash, lp_url, prompts, source):
-    """Write one TSV row per prompt. Returns number of rows written."""
+    """Write one TSV row per prompt, skipping exact duplicates. Returns number of rows written."""
     count = 0
+    seen_texts = set()
     for prompt_idx, prompt_text in sorted(prompts.items()):
+        if prompt_text in seen_texts:
+            print(f"[WARN] Duplicate prompt skipped: id={rec_id} source={source} prompt_index={prompt_idx}", file=sys.stderr)
+            continue
+        seen_texts.add(prompt_text)
         row = [
             rec_id,
             url_hash,
@@ -90,19 +95,18 @@ def main():
         out_f.write("\t".join(COLUMNS) + "\n")
 
         # ── Model outputs ────────────────────────────────────────────────────
+        # swift infer always outputs exactly one line per input line (verified),
+        # so positional alignment is safe even when some responses are skipped.
         for idx, record in enumerate(infer_records):
             response = record.get("response", "")
             prompts  = extract_prompts(response)
 
-            rec_id = record.get("id", "")
-            if rec_id and rec_id in gt_by_id:
-                gt = gt_by_id[rec_id]
-            elif idx < len(gt_records):
+            if idx < len(gt_records):
                 gt = gt_records[idx]
                 rec_id = gt.get("id", f"sample_{idx}")
             else:
                 gt = {}
-                rec_id = rec_id or f"sample_{idx}"
+                rec_id = f"sample_{idx}"
                 missing_gt += 1
 
             url_hash = gt.get("url_hash", "")
