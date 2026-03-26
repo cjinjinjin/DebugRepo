@@ -58,7 +58,7 @@ else
         --model          "${MERGED_MODEL_PATH}" \
         --quant_bits     4 \
         --quant_method   gptq \
-        --calib_dataset  "${CALIB_DATA}" \
+        --dataset        "${CALIB_DATA}" \
         --output_dir     "${QUANTIZED_MODEL_PATH}"
 
     if [ $? -ne 0 ]; then

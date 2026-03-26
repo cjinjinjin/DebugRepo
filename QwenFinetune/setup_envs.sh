@@ -60,6 +60,9 @@ setup_vllm_infer() {
     echo "[INFO] Installing ms-swift and dependencies ..."
     ${PIP} install "ms-swift[llm]>=4.0" "scipy>=1.11" "datasets>=2.18" "autoawq"
 
+    echo "[INFO] Installing quantization dependencies ..."
+    ${PIP} install "optimum" "auto-gptq" "bitsandbytes"
+
     echo "[INFO] Pinning transformers ..."
     ${PIP} install "transformers>=4.47,<5.0"
 
