@@ -13,7 +13,7 @@
 #   bash quantize_model.sh /vc_data/.../checkpoint-50/merged_model
 
 MERGED_MODEL_PATH="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_dpo_lora_cot_refine/v3-20260320-155846/checkpoint-50/merged_model}"
-QUANTIZED_MODEL_PATH="${MERGED_MODEL_PATH}_awq_int4"
+QUANTIZED_MODEL_PATH="${MERGED_MODEL_PATH}_gptq_int4"
 DATA_DIR="./data"
 CALIB_DATA="${DATA_DIR}/calib_data.jsonl"
 PRIVATE_TSV="RawData/UHRS2K_SD_Random200_0324.tsv"

@@ -52,7 +52,7 @@ def main():
     llm = LLM(
         model=args.model,
         tensor_parallel_size=args.tp,
-        quantization="awq",
+        quantization="gptq",
         trust_remote_code=True,
         max_model_len=8192,
     )
