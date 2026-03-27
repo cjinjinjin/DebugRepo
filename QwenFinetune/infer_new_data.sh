@@ -83,11 +83,11 @@ else
 fi
 
 # ── Step 3: batch inference ──────────────────────────────────────────────────
-# Set thinking_type flag based on THINK_MODE
+# Set system prompt based on THINK_MODE
 if [ "${THINK_MODE}" = "nothink" ]; then
-    THINKING_ARG="--thinking_type disabled"
+    SYSTEM_ARG="--system /no_think"
 else
-    THINKING_ARG="--thinking_type enabled"
+    SYSTEM_ARG=""
 fi
 
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
@@ -100,7 +100,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
     --vllm_tensor_parallel_size    8 \
     --temperature                  0.7 \
     --top_p                        0.9 \
-    ${THINKING_ARG} \
+    ${SYSTEM_ARG} \
     --result_path                  "${RESULT_FILE}"
 
 echo ""
