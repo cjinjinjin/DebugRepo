@@ -8,11 +8,11 @@
 #   4. Extract T2I prompts
 #
 # Usage:
-#   bash infer_new_data.sh [tsv_file] [checkpoint_dir]
+#   bash infer_new_data.sh [tsv_file] [checkpoint_dir] [think|nothink]
 #
 # Examples:
 #   bash infer_new_data.sh RawData/UHRS2K_SD_Random200_0324.tsv
-#   bash infer_new_data.sh RawData/UHRS2K_SD_Random200_0324.tsv /vc_data/.../checkpoint-50
+#   bash infer_new_data.sh RawData/UHRS2K_SD_Random200_0324.tsv /vc_data/.../checkpoint-50 nothink
 
 # Resolve INPUT_TSV to absolute path before cd, so relative paths from the
 # caller's working directory are handled correctly regardless of where this
@@ -26,13 +26,16 @@ fi
 # prepare_infer_input.py and extract_prompts_for_t2i.py can be found.
 cd "$(dirname "$0")" || exit 1
 
+# Thinking mode: "think" (default, slower, CoT) or "nothink" (faster, no <think> block)
+THINK_MODE="${3:-think}"
+
 MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-30B-A3B"
 ADAPTER_PATH="${2:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_dpo_lora_cot_refine/v3-20260320-155846/checkpoint-50}"
 MERGED_MODEL_PATH="${ADAPTER_PATH}/merged_model"
 RUN_TS=$(date +"%Y%m%d_%H%M%S")
 # Derive a short name from the TSV filename for output naming
 TSV_STEM=$(basename "${INPUT_TSV}" .tsv)
-RESULTS_DIR="${ADAPTER_PATH}/infer_results/${TSV_STEM}_${RUN_TS}"
+RESULTS_DIR="${ADAPTER_PATH}/infer_results/${TSV_STEM}_${RUN_TS}_${THINK_MODE}"
 INFER_INPUT="${RESULTS_DIR}/infer_input.jsonl"
 RESULT_FILE="${RESULTS_DIR}/infer_output.jsonl"
 T2I_FILE="${RESULTS_DIR}/prompts_for_t2i.txt"
@@ -45,6 +48,7 @@ echo "Adapter  : ${ADAPTER_PATH}"
 echo "Merged   : ${MERGED_MODEL_PATH}"
 echo "Input TSV: ${INPUT_TSV}"
 echo "Run TS   : ${RUN_TS}"
+echo "Think    : ${THINK_MODE}"
 echo "Output   : ${RESULT_FILE}"
 echo "============================================"
 
@@ -79,6 +83,13 @@ else
 fi
 
 # ── Step 3: batch inference ──────────────────────────────────────────────────
+# Set thinking_type flag based on THINK_MODE
+if [ "${THINK_MODE}" = "nothink" ]; then
+    THINKING_ARG="--thinking_type disabled"
+else
+    THINKING_ARG="--thinking_type enabled"
+fi
+
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
 /home/aiscuser/.conda/envs/vllm_infer/bin/python3.10 -m swift.cli.infer \
     --model                        "${MERGED_MODEL_PATH}" \
@@ -89,6 +100,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
     --vllm_tensor_parallel_size    8 \
     --temperature                  0.7 \
     --top_p                        0.9 \
+    ${THINKING_ARG} \
     --result_path                  "${RESULT_FILE}"
 
 echo ""
