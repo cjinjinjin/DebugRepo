@@ -37,6 +37,8 @@ def main():
     parser.add_argument("--tp",           type=int, default=4,
                         help="tensor_parallel_size")
     parser.add_argument("--max_tokens",   type=int, default=2048)
+    parser.add_argument("--enable_reasoning", action="store_true", default=False,
+                        help="Enable reasoning parser for Qwen3 thinking mode")
     args = parser.parse_args()
 
     try:
@@ -55,6 +57,8 @@ def main():
         quantization="gptq",
         trust_remote_code=True,
         max_model_len=8192,
+        enable_reasoning=args.enable_reasoning,
+        reasoning_parser="deepseek_r1" if args.enable_reasoning else None,
     )
 
     records = []
@@ -67,7 +71,15 @@ def main():
     print(f"[INFO] Building prompts for {len(records)} records ...")
     prompts = [build_prompt(r, tokenizer) for r in records]
 
-    sampling = SamplingParams(temperature=0.0, max_tokens=args.max_tokens)
+    # Thinking mode best practice: Temperature=0.6, TopP=0.95, TopK=20
+    # DO NOT use greedy (temperature=0.0) — causes repetition in thinking mode
+    sampling = SamplingParams(
+        temperature=0.6,
+        top_p=0.95,
+        top_k=20,
+        min_p=0.0,
+        max_tokens=args.max_tokens,
+    )
     print("[INFO] Running inference ...")
     outputs = llm.generate(prompts, sampling)
 

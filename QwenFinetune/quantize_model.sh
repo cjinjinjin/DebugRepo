@@ -31,14 +31,16 @@ echo "Infer env    : vllm_infer  (vllm 0.8.5)"
 echo "============================================"
 
 # ── Step 1: build calibration dataset ────────────────────────────────────────
+# 私有数据（GT eval + TSV）全部采入，再补充等量 alpaca 公开数据混合
+# 最终 calib_data.jsonl 里每一条都会被用到（quant_n_samples = 文件总行数）
 if [ -f "${CALIB_DATA}" ]; then
     echo "[INFO] Calibration data already exists at ${CALIB_DATA}, skipping."
 else
-    echo "[INFO] Building calibration dataset ..."
+    echo "[INFO] Building calibration dataset (private full + alpaca public) ..."
     ${PYTHON_INFER} prepare_calib_data.py \
         --private_tsv   "${PRIVATE_TSV}" \
-        --n_private     64 \
-        --n_public      64 \
+        --n_private     256 \
+        --n_public      0 \
         --output_jsonl  "${CALIB_DATA}"
 
     if [ $? -ne 0 ]; then
@@ -46,20 +48,27 @@ else
         exit 1
     fi
 fi
-echo "[INFO] Calibration data: $(wc -l < "${CALIB_DATA}") records"
+N_CALIB=$(wc -l < "${CALIB_DATA}")
+echo "[INFO] Calibration data: ${N_CALIB} records (all will be used)"
 
 # ── Step 2: GPTQ INT4 quantization via swift export (swift_train env) ─────────
 if [ -d "${QUANTIZED_MODEL_PATH}" ]; then
     echo "[INFO] Quantized model already exists at ${QUANTIZED_MODEL_PATH}, skipping."
 else
     echo "[INFO] Running GPTQ INT4 quantization via swift export ..."
+    OMP_NUM_THREADS=14 \
     CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
     ${PYTHON_TRAIN} -m swift.cli.export \
-        --model          "${MERGED_MODEL_PATH}" \
-        --quant_bits     4 \
-        --quant_method   gptq \
-        --dataset        "${CALIB_DATA}" \
-        --output_dir     "${QUANTIZED_MODEL_PATH}"
+        --model           "${MERGED_MODEL_PATH}" \
+        --quant_bits      4 \
+        --quant_method    gptq_v2 \
+        --dataset         "${CALIB_DATA}" \
+                          'AI-ModelScope/alpaca-gpt4-data-zh#128' \
+                          'AI-ModelScope/alpaca-gpt4-data-en#128' \
+        --quant_n_samples $((N_CALIB + 256)) \
+        --quant_batch_size 1 \
+        --max_length      2048 \
+        --output_dir      "${QUANTIZED_MODEL_PATH}"
 
     if [ $? -ne 0 ]; then
         echo "[ERROR] Quantization failed. Exiting."
@@ -78,7 +87,8 @@ ${PYTHON_INFER} run_vllm_smoke_test.py \
     --model          "${QUANTIZED_MODEL_PATH}" \
     --input_jsonl    "${SMOKE_INPUT}" \
     --output_jsonl   "${SMOKE_OUTPUT}" \
-    --tp             4
+    --tp             4 \
+    --enable_reasoning
 
 if [ $? -ne 0 ]; then
     echo "[ERROR] Smoke test failed. Check quantized model."

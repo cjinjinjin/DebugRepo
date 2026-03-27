@@ -122,6 +122,7 @@ def load_private_from_gt(gt_jsonl: Path, n: int, seed: int) -> list[dict]:
     """
     Load from dpo_refine_eval_cot.jsonl which has real assistant turns.
     Preferred over TSV when available — higher calibration quality.
+    If n > number of available records, repeats with shuffling to reach n.
     """
     records = []
     with open(gt_jsonl, encoding="utf-8") as f:
@@ -138,6 +139,28 @@ def load_private_from_gt(gt_jsonl: Path, n: int, seed: int) -> list[dict]:
                 continue
             records.append({
                 "messages": [
+                    {"role": "system",    "content": system},
+                    {"role": "user",      "content": user_msg},
+                    {"role": "assistant", "content": asst_msg},
+                ]
+            })
+
+    random.seed(seed)
+    random.shuffle(records)
+
+    # If n > available records, repeat with re-shuffling until we reach n
+    if len(records) < n:
+        print(f"[private-gt] only {len(records)} GT records available, repeating to reach {n}")
+        repeated = []
+        while len(repeated) < n:
+            random.shuffle(records)
+            repeated.extend(records)
+        sampled = repeated[:n]
+    else:
+        sampled = records[:n]
+
+    print(f"[private-gt] loaded {len(records)} GT records, sampled {len(sampled)}")
+    return sampled
                     {"role": "system",    "content": system},
                     {"role": "user",      "content": user_msg},
                     {"role": "assistant", "content": asst_msg},
@@ -335,19 +358,40 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
-    # ── Private records ───────────────────────────────────────────────────────
-    # Priority: GT eval JSONL (real assistant) > infer_input JSONL > raw TSV
+    # ── Private records: GT eval JSONL + TSV，两者都用，最大化多样性 ────────────
+    private = []
+
+    # 1. GT eval JSONL（有真实 assistant turn，质量最高）
     gt_path = Path(args.gt_jsonl)
     if gt_path.exists():
-        private = load_private_from_gt(gt_path, args.n_private, args.seed)
-    elif args.private_jsonl and Path(args.private_jsonl).exists():
-        private = load_private_records(Path(args.private_jsonl), args.n_private, args.seed)
+        gt_records = load_private_from_gt(gt_path, 9999, args.seed)  # 全取
+        private.extend(gt_records)
+        print(f"[calib]    GT records: {len(gt_records)}")
     else:
-        tsv_path = Path(args.private_tsv)
-        if not tsv_path.exists():
-            print(f"[ERROR] TSV not found: {tsv_path}")
-            sys.exit(1)
-        private = build_private_from_tsv(tsv_path, args.n_private, args.seed)
+        print(f"[WARN] GT JSONL not found: {gt_path}")
+
+    # 2. TSV 数据（200 条不同 LP，补充多样性，用 dummy assistant）
+    tsv_path = Path(args.private_tsv)
+    if tsv_path.exists():
+        tsv_records = build_private_from_tsv(tsv_path, 9999, args.seed)  # 全取
+        # 去掉和 GT 重复的 LP（按 user content 前100字符判断）
+        gt_prefixes = {r["messages"][1]["content"][:100] for r in private}
+        tsv_unique = [r for r in tsv_records
+                      if r["messages"][1]["content"][:100] not in gt_prefixes]
+        private.extend(tsv_unique)
+        print(f"[calib]    TSV unique records: {len(tsv_unique)}")
+    else:
+        print(f"[WARN] TSV not found: {tsv_path}")
+
+    if not private:
+        print("[ERROR] No private records available.")
+        sys.exit(1)
+
+    # 打乱后取 n_private 条
+    random.seed(args.seed)
+    random.shuffle(private)
+    private = private[:args.n_private]
+    print(f"[calib]    Final private records: {len(private)}")
 
     # ── Public records ───────────────────────────────────────────────────────
     public = load_public_records(args.n_public, args.seed)
