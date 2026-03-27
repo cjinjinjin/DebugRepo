@@ -14,11 +14,21 @@
 #   bash infer_new_data.sh RawData/UHRS2K_SD_Random200_0324.tsv
 #   bash infer_new_data.sh RawData/UHRS2K_SD_Random200_0324.tsv /vc_data/.../checkpoint-50
 
+# Resolve INPUT_TSV to absolute path before cd, so relative paths from the
+# caller's working directory are handled correctly regardless of where this
+# script lives.
+INPUT_TSV="${1:-RawData/UHRS2K_SD_Random200_0324.tsv}"
+if [[ "${INPUT_TSV}" != /* ]]; then
+    INPUT_TSV="$(pwd)/${INPUT_TSV}"
+fi
+
+# Always run relative to the directory containing this script so that
+# prepare_infer_input.py and extract_prompts_for_t2i.py can be found.
+cd "$(dirname "$0")" || exit 1
+
 MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-30B-A3B"
 ADAPTER_PATH="${2:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_dpo_lora_cot_refine/v3-20260320-155846/checkpoint-50}"
 MERGED_MODEL_PATH="${ADAPTER_PATH}/merged_model"
-
-INPUT_TSV="${1:-RawData/UHRS2K_SD_Random200_0324.tsv}"
 RUN_TS=$(date +"%Y%m%d_%H%M%S")
 # Derive a short name from the TSV filename for output naming
 TSV_STEM=$(basename "${INPUT_TSV}" .tsv)
