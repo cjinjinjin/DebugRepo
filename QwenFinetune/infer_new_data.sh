@@ -100,6 +100,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
     --vllm_tensor_parallel_size    8 \
     --temperature                  0.7 \
     --top_p                        0.9 \
+    --repetition_penalty           1.05 \
     ${SYSTEM_ARG} \
     --result_path                  "${RESULT_FILE}"
 
