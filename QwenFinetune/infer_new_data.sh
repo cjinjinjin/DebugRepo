@@ -28,6 +28,8 @@ cd "$(dirname "$0")" || exit 1
 
 # Thinking mode: "think" (default, slower, CoT) or "nothink" (faster, no <think> block)
 THINK_MODE="${3:-think}"
+# Temperature: default 0.3 for prompt diversity; set 0 for greedy (most stable)
+TEMPERATURE="${4:-0.3}"
 
 MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-30B-A3B"
 ADAPTER_PATH="${2:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_dpo_lora_cot_refine/v3-20260320-155846/checkpoint-50}"
@@ -35,7 +37,7 @@ MERGED_MODEL_PATH="${ADAPTER_PATH}/merged_model"
 RUN_TS=$(date +"%Y%m%d_%H%M%S")
 # Derive a short name from the TSV filename for output naming
 TSV_STEM=$(basename "${INPUT_TSV}" .tsv)
-RESULTS_DIR="${ADAPTER_PATH}/infer_results/${TSV_STEM}_${RUN_TS}_${THINK_MODE}"
+RESULTS_DIR="${ADAPTER_PATH}/infer_results/${TSV_STEM}_${RUN_TS}_${THINK_MODE}_t${TEMPERATURE}"
 INFER_INPUT="${RESULTS_DIR}/infer_input.jsonl"
 RESULT_FILE="${RESULTS_DIR}/infer_output.jsonl"
 T2I_FILE="${RESULTS_DIR}/prompts_for_t2i.txt"
@@ -101,7 +103,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
     --infer_backend                vllm \
     --max_batch_size               32 \
     --vllm_tensor_parallel_size    8 \
-    --temperature                  0.3 \
+    --temperature                  "${TEMPERATURE}" \
     --top_p                        0.9 \
     ${SYSTEM_ARG} \
     --result_path                  "${RESULT_FILE}"
