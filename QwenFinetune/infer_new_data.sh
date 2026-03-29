@@ -42,6 +42,9 @@ T2I_FILE="${RESULTS_DIR}/prompts_for_t2i.txt"
 
 mkdir -p "${RESULTS_DIR}"
 
+# Save a copy of this script to the results dir for reproducibility
+cp "$0" "${RESULTS_DIR}/infer_new_data.sh"
+
 echo "============================================"
 echo "Model    : ${MODEL_PATH}"
 echo "Adapter  : ${ADAPTER_PATH}"
