@@ -98,9 +98,8 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
     --infer_backend                vllm \
     --max_batch_size               32 \
     --vllm_tensor_parallel_size    8 \
-    --temperature                  0.7 \
+    --temperature                  0.3 \
     --top_p                        0.9 \
-    --repetition_penalty           1.05 \
     ${SYSTEM_ARG} \
     --result_path                  "${RESULT_FILE}"
 

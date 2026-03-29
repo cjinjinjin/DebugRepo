@@ -38,7 +38,7 @@ SYSTEM_PROMPT_COT = (
     "specialized in high-performing Native Advertisement visuals.\n\n"
     "Given a landing page URL and its extracted content fields, your task is to "
     "generate five (5) high-quality English image generation prompts for Native Ads.\n\n"
-    "First, reason about the product inside <think>...</think> tags. "
+    "First, reason about the product inside <think>...</think> tags (keep it concise, under 200 words). "
     "Extract the following from the landing page:\n"
     "- ProductType: Physical Product / Digital Product / Service\n"
     "- SpecificProduct: concise noun phrase\n"
