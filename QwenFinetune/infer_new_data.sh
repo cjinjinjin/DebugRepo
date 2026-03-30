@@ -100,6 +100,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
     --model                        "${MERGED_MODEL_PATH}" \
     --val_dataset                  "${INFER_INPUT}" \
     --max_new_tokens               2048 \
+    --vllm_max_model_len           4096 \
     --infer_backend                vllm \
     --max_batch_size               32 \
     --vllm_tensor_parallel_size    8 \
