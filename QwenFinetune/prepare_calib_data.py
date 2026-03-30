@@ -161,15 +161,6 @@ def load_private_from_gt(gt_jsonl: Path, n: int, seed: int) -> list[dict]:
 
     print(f"[private-gt] loaded {len(records)} GT records, sampled {len(sampled)}")
     return sampled
-                    {"role": "system",    "content": system},
-                    {"role": "user",      "content": user_msg},
-                    {"role": "assistant", "content": asst_msg},
-                ]
-            })
-
-    random.seed(seed)
-    random.shuffle(records)
-    sampled = records[:n]
     print(f"[private-gt] loaded {len(records)} GT records, sampled {len(sampled)}")
     return sampled
 
