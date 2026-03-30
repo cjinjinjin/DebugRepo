@@ -12,7 +12,7 @@
 # Example:
 #   bash quantize_model.sh /vc_data/.../checkpoint-50/merged_model
 
-MERGED_MODEL_PATH="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_dpo_lora_cot_refine/v3-20260320-155846/checkpoint-50/merged_model}"
+MERGED_MODEL_PATH="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot_8192_v2/v0-20260319-083851/checkpoint-50/merged_model}"
 QUANTIZED_MODEL_PATH="${MERGED_MODEL_PATH}_gptq_int4"
 DATA_DIR="./data"
 CALIB_DATA="${DATA_DIR}/calib_data.jsonl"
@@ -66,8 +66,8 @@ else
                           'AI-ModelScope/alpaca-gpt4-data-zh#128' \
                           'AI-ModelScope/alpaca-gpt4-data-en#128' \
         --quant_n_samples $((N_CALIB + 256)) \
-        --quant_batch_size 1 \
-        --max_length      2048 \
+        --quant_batch_size 4 \
+        --max_length      1024 \
         --output_dir      "${QUANTIZED_MODEL_PATH}"
 
     if [ $? -ne 0 ]; then
