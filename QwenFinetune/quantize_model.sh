@@ -20,7 +20,7 @@ PRIVATE_TSV="RawData/UHRS2K_SD_Random200_0324.tsv"
 SMOKE_INPUT="${DATA_DIR}/calib_smoke_10.jsonl"
 SMOKE_OUTPUT="${QUANTIZED_MODEL_PATH}/smoke_output.jsonl"
 PYTHON_INFER="/home/aiscuser/.conda/envs/vllm_infer/bin/python3.10"
-PYTHON_TRAIN="/home/aiscuser/.conda/envs/swift_train/bin/python"
+PYTHON_TRAIN="/home/aiscuser/.conda/envs/swift_train/bin/python3.10"
 
 echo "============================================"
 echo "Merged model : ${MERGED_MODEL_PATH}"
