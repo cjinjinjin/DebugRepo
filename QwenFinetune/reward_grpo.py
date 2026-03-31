@@ -1,111 +1,94 @@
 """
 GRPO reward function for output format regularization.
 
-Rewards correct structure:
-  <think> block with 6 required fields
-  Exactly 5 <PromptN>...</PromptN> tags in order (N=1..5)
-  Each prompt <= 150 words
-  No repeated n-grams across prompts (diversity penalty)
+Reward components (can go negative):
+  +0.2 per complete <PromptN>...</PromptN> tag, N=1..5   (+1.0 max)
+  +0.2  <think>...</think> closed properly               (binary)
+  -0.3  think block > 300 words                          (linear penalty)
+  -2.0  bigram repetition ratio across 5 prompts         (proportional, max -2.0)
+  ±0.05 per prompt <= 150 words                          (+0.05 each, -0.05 if over)
 
 swift grpo loads this via --external_plugins ./reward_grpo.py
-The entry point must be a function named `reward_fn` with signature:
-  reward_fn(completions: list[str], **kwargs) -> list[float]
+Entry point: reward_fn(completions, **kwargs) -> list[float]
 """
 
 import re
 from collections import Counter
 
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-THINK_FIELDS = [
-    "ProductType:",
-    "SpecificProduct:",
-    "Category:",
-    "VisualAnchors:",
-    "LifestyleVibe:",
-    "CoreValueSignals:",
-]
-
 PROMPT_MAX_WORDS = 150
-
-# Repetition: penalize if any 6-gram appears > 1 time across all 5 prompts
-NGRAM_SIZE = 6
-NGRAM_MAX_REPEAT = 1
+THINK_MAX_WORDS  = 300
 
 
 # ---------------------------------------------------------------------------
 # Sub-scorers
 # ---------------------------------------------------------------------------
 
-def _score_think(completion: str) -> float:
-    """0.0 – 0.25: think block presence and field completeness."""
-    m = re.search(r"<think>([\s\S]*?)</think>", completion)
+def _score_prompt_tags(text: str) -> float:
+    """
+    +0.2 for each complete <PromptN>...</PromptN> pair (N=1..5), max +1.0.
+    Only counts tags whose index is 1-5 and opening/closing match.
+    """
+    pairs = re.findall(r"<Prompt([1-5])>([\s\S]*?)</Prompt\1>", text)
+    return 0.2 * len(pairs)
+
+
+def _score_think_closed(text: str) -> float:
+    """
+    +0.2 if <think>...</think> is properly closed.
+    """
+    return 0.2 if re.search(r"<think>[\s\S]*?</think>", text) else 0.0
+
+
+def _penalty_think_length(text: str) -> float:
+    """
+    Linear penalty up to -0.3 if think block exceeds 300 words.
+    At 300 words: 0.0. At 600 words: -0.3. Capped at -0.3.
+    """
+    m = re.search(r"<think>([\s\S]*?)</think>", text)
     if not m:
         return 0.0
-    score = 0.10  # block exists
-    content = m.group(1)
-    per_field = 0.15 / len(THINK_FIELDS)
-    for field in THINK_FIELDS:
-        if field in content:
-            score += per_field
-    return score
-
-
-def _score_prompts(completion: str) -> float:
-    """0.0 – 0.50: correct number, order, and length of Prompt tags."""
-    # Find all <PromptN>...</PromptN> pairs
-    pairs = re.findall(r"<Prompt(\d)>([\s\S]*?)</Prompt\1>", completion)
-    n = len(pairs)
-
-    if n == 0:
+    wc = len(m.group(1).split())
+    if wc <= THINK_MAX_WORDS:
         return 0.0
-
-    # Partial credit for count (up to 0.30)
-    count_score = 0.30 if n == 5 else (0.06 * n)
-
-    # Order bonus (0.10): indices must be exactly [1,2,3,4,5]
-    indices = [int(p[0]) for p in pairs]
-    order_score = 0.10 if indices == list(range(1, n + 1)) else 0.0
-
-    # Per-prompt length score (up to 0.10): each of 5 prompts <= 150 words
-    length_score = 0.0
-    per_prompt = 0.02
-    for _, text in pairs:
-        wc = len(text.split())
-        if wc <= PROMPT_MAX_WORDS:
-            length_score += per_prompt
-        else:
-            # Soft penalty proportional to excess
-            excess_ratio = (wc - PROMPT_MAX_WORDS) / PROMPT_MAX_WORDS
-            length_score += per_prompt * max(0.0, 1.0 - excess_ratio)
-
-    return count_score + order_score + length_score
+    excess_ratio = (wc - THINK_MAX_WORDS) / THINK_MAX_WORDS  # 0→0, 1.0→full
+    return -0.3 * min(1.0, excess_ratio)
 
 
-def _score_diversity(completion: str) -> float:
+def _penalty_bigram_repetition(text: str) -> float:
     """
-    0.0 – 0.25: penalize repeated n-grams across the 5 prompts.
-    Full score if no n-gram repeats; linearly decays to 0 at 10+ repeats.
+    Proportional penalty up to -2.0 based on bigram repetition ratio
+    across the content of all 5 prompts combined.
+
+    repetition_ratio = (repeated bigram tokens) / (total bigram tokens)
+    penalty = -2.0 * repetition_ratio
     """
-    pairs = re.findall(r"<Prompt\d>([\s\S]*?)</Prompt\d>", completion)
+    pairs = re.findall(r"<Prompt[1-5]>([\s\S]*?)</Prompt[1-5]>", text)
     if len(pairs) < 2:
         return 0.0
 
-    all_text = " ".join(pairs).lower()
-    tokens = re.findall(r"\b\w+\b", all_text)
+    all_tokens = re.findall(r"\b\w+\b", " ".join(pairs).lower())
+    if len(all_tokens) < 2:
+        return 0.0
 
-    if len(tokens) < NGRAM_SIZE:
-        return 0.25
+    bigrams = [tuple(all_tokens[i:i+2]) for i in range(len(all_tokens) - 1)]
+    counts = Counter(bigrams)
+    total   = len(bigrams)
+    # tokens that appear in a repeated bigram (count > 1)
+    repeated = sum(c for c in counts.values() if c > 1)
+    ratio = repeated / total
+    return -2.0 * ratio
 
-    ngram_counts = Counter(
-        tuple(tokens[i: i + NGRAM_SIZE]) for i in range(len(tokens) - NGRAM_SIZE + 1)
-    )
-    n_repeated = sum(1 for c in ngram_counts.values() if c > NGRAM_MAX_REPEAT)
-    # Decay: 0 repeats -> 0.25, 10+ repeats -> 0.0
-    score = 0.25 * max(0.0, 1.0 - n_repeated / 10.0)
+
+def _score_prompt_lengths(text: str) -> float:
+    """
+    +0.05 per prompt that is <= 150 words, -0.05 if over. Range: -0.25 to +0.25.
+    """
+    pairs = re.findall(r"<Prompt[1-5]>([\s\S]*?)</Prompt[1-5]>", text)
+    score = 0.0
+    for _, content in pairs:
+        wc = len(content.split())
+        score += 0.05 if wc <= PROMPT_MAX_WORDS else -0.05
     return score
 
 
@@ -116,13 +99,12 @@ def _score_diversity(completion: str) -> float:
 def reward_fn(completions: list, **kwargs) -> list:
     """
     Args:
-        completions: list of generated response strings (one per sample in the batch)
+        completions: list of generated response strings (one per sample in batch)
     Returns:
-        list of float rewards in [0.0, 1.0]
+        list of float rewards (unbounded below, max ~1.45)
     """
     rewards = []
     for completion in completions:
-        # completions may be Message objects or plain strings
         if hasattr(completion, "content"):
             text = completion.content
         elif isinstance(completion, dict):
@@ -130,6 +112,12 @@ def reward_fn(completions: list, **kwargs) -> list:
         else:
             text = str(completion)
 
-        r = _score_think(text) + _score_prompts(text) + _score_diversity(text)
-        rewards.append(float(min(1.0, max(0.0, r))))
+        r = (
+            _score_prompt_tags(text)
+            + _score_think_closed(text)
+            + _penalty_think_length(text)
+            + _penalty_bigram_repetition(text)
+            + _score_prompt_lengths(text)
+        )
+        rewards.append(float(r))
     return rewards

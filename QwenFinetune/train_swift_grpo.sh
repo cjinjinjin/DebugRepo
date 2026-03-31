@@ -1,17 +1,17 @@
 #!/bin/bash
-# GRPO training on top of the DPO checkpoint.
+# GRPO training on top of the SFT checkpoint.
 #
 # Purpose: regularize output format (correct <think> fields, exactly 5 <PromptN> tags,
 #          no repetition) using reward-based RL — no ground-truth labels needed.
 #
 # Usage:
-#   bash train_swift_grpo.sh [dpo_adapter_path]
+#   bash train_swift_grpo.sh [sft_adapter_path]
 #
 # Example:
-#   bash train_swift_grpo.sh /vc_data/.../qwen3_dpo_lora_cot_refine/v3-20260320-155846/checkpoint-50
+#   bash train_swift_grpo.sh /vc_data/.../qwen3_sft_lora_cot_8192_v2/v0-20260319-083851/checkpoint-50
 
 MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-30B-A3B"
-DPO_ADAPTER="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_dpo_lora_cot_refine/v3-20260320-155846/checkpoint-50}"
+SFT_ADAPTER="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot_8192_v2/v0-20260319-083851/checkpoint-50}"
 DATA_DIR="./data"
 OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_grpo_lora_cot_v1"
 
@@ -32,7 +32,7 @@ TORCH_NCCL_ASYNC_ERROR_HANDLING=1 \
 swift rlhf \
     --rlhf_type                    grpo \
     --model                        ${MODEL_PATH} \
-    --adapters                     ${DPO_ADAPTER} \
+    --adapters                     ${SFT_ADAPTER} \
     --dataset                      ${DATA_DIR}/grpo_train.jsonl \
     --train_type                   lora \
     --lora_rank                    64 \
