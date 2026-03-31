@@ -38,7 +38,7 @@ SYSTEM_PROMPT_COT = (
     "specialized in high-performing Native Advertisement visuals.\n\n"
     "Given a landing page URL and its extracted content fields, your task is to "
     "generate five (5) high-quality English image generation prompts for Native Ads.\n\n"
-    "First, reason about the product inside <think>...</think> tags. "
+    "First, reason about the product inside <think>...</think> tags (keep it concise, under 200 words). "
     "Extract the following from the landing page:\n"
     "- ProductType: Physical Product / Digital Product / Service\n"
     "- SpecificProduct: concise noun phrase\n"
@@ -56,18 +56,18 @@ SYSTEM_PROMPT_COT = (
     "- Ensure correct anatomy, natural hands, sharp focus, clean composition\n\n"
     "Output format:\n"
     "<think>\n"
-    "ProductType: ...\n"
-    "SpecificProduct: ...\n"
-    "Category: ...\n"
-    "VisualAnchors: ...\n"
-    "LifestyleVibe: ...\n"
-    "CoreValueSignals: ...\n"
+    "ProductType: [Physical Product / Digital Product / Service]\n"
+    "SpecificProduct: [concise noun phrase]\n"
+    "Category: [broad category]\n"
+    "VisualAnchors: [2-3 physical elements]\n"
+    "LifestyleVibe: [emotional tone]\n"
+    "CoreValueSignals: [up to 3 values]\n"
     "</think>\n"
-    "<Prompt1>...</Prompt1>\n"
-    "<Prompt2>...</Prompt2>\n"
-    "<Prompt3>...</Prompt3>\n"
-    "<Prompt4>...</Prompt4>\n"
-    "<Prompt5>...</Prompt5>"
+    "<Prompt1>[your first image generation prompt here]</Prompt1>\n"
+    "<Prompt2>[your second image generation prompt here]</Prompt2>\n"
+    "<Prompt3>[your third image generation prompt here]</Prompt3>\n"
+    "<Prompt4>[your fourth image generation prompt here]</Prompt4>\n"
+    "<Prompt5>[your fifth image generation prompt here]</Prompt5>"
 )
 
 
@@ -77,24 +77,26 @@ SYSTEM_PROMPT_COT = (
 
 def build_user_message(row: dict) -> str:
     field_labels = [
-        ("LPURL",                          "Landing Page URL"),
-        ("DocumentTitle",                  "Document Title"),
-        ("VisualTitle",                    "Visual Title"),
-        ("Heading",                        "Heading"),
-        ("Title_CB",                       "Title (CB)"),
-        ("VisualTitle_CB",                 "Visual Title (CB)"),
-        ("Heading_CB",                     "Heading (CB)"),
-        ("BestSnippet_CB",                 "Best Snippet (CB)"),
-        ("MetaDescription_CB",             "Meta Description"),
-        ("PrimaryContentNoTitleNoHeading", "Page Content"),
+        ("LPURL",                          "Landing Page URL",  None),
+        ("DocumentTitle",                  "Document Title",    200),
+        ("VisualTitle",                    "Visual Title",      200),
+        ("Heading",                        "Heading",           400),
+        ("Title_CB",                       "Title (CB)",        200),
+        ("VisualTitle_CB",                 "Visual Title (CB)", 200),
+        ("Heading_CB",                     "Heading (CB)",      200),
+        ("BestSnippet_CB",                 "Best Snippet (CB)", 400),
+        ("MetaDescription_CB",             "Meta Description",  300),
+        ("PrimaryContentNoTitleNoHeading", "Page Content",      800),
     ]
     parts = [
         "Generate 5 image generation prompts for a Native Ad based on the "
         "following landing page information:\n"
     ]
-    for key, label in field_labels:
+    for key, label, max_chars in field_labels:
         val = (row.get(key) or "").strip()
         if val:
+            if max_chars and len(val) > max_chars:
+                val = val[:max_chars] + "..."
             parts.append(f"[{label}]\n{val}")
     return "\n\n".join(parts)
 

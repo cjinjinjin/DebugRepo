@@ -54,14 +54,17 @@ setup_vllm_infer() {
     ${PIP} install torch==2.5.1 torchvision torchaudio \
         --index-url https://download.pytorch.org/whl/cu124
 
-    echo "[INFO] Installing vLLM 0.8.5 ..."
-    ${PIP} install "vllm==0.8.5"
-
     echo "[INFO] Installing ms-swift and dependencies ..."
-    ${PIP} install "ms-swift[llm]>=4.0" "scipy>=1.11"
+    ${PIP} install "ms-swift[llm]==4.0.2" "scipy>=1.11" "datasets>=2.18" "autoawq"
+
+    echo "[INFO] Installing quantization dependencies ..."
+    ${PIP} install "optimum==1.23.3" "auto-gptq==0.7.1" "bitsandbytes"
 
     echo "[INFO] Pinning transformers ..."
-    ${PIP} install "transformers>=4.47,<5.0"
+    ${PIP} install "transformers==4.57.6"
+
+    echo "[INFO] Installing vLLM 0.8.5 (pinned after ms-swift to avoid override) ..."
+    ${PIP} install "vllm==0.8.5"
 
     echo "[INFO] Verifying ..."
     ${CONDA_ENVS_ROOT}/${ENV}/bin/python3.10 -c \
