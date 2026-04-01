@@ -13,7 +13,7 @@
 MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-30B-A3B"
 SFT_ADAPTER="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot_8192_v2/v0-20260319-083851/checkpoint-50}"
 DATA_DIR="./data"
-OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_grpo_lora_cot_v1"
+OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_grpo_lora_cot_v1/lora_64"
 
 # ---------------------------------------------------------------------------
 # Reward function (inline Python passed via --reward_funcs / external script)
@@ -35,23 +35,23 @@ swift rlhf \
     ${SFT_ADAPTER:+--adapters "${SFT_ADAPTER}"} \
     --dataset                      ${DATA_DIR}/grpo_train.jsonl \
     --train_type                   lora \
-    --lora_rank                    32 \
-    --lora_alpha                   64 \
+    --lora_rank                    64 \
+    --lora_alpha                   128 \
     --num_train_epochs             3 \
     --per_device_train_batch_size  1 \
     --gradient_accumulation_steps  8 \
     --learning_rate                5e-6 \
     --lr_scheduler_type            cosine \
     --warmup_ratio                 0.05 \
-    --max_length                   1536 \
-    --max_completion_length        512 \
+    --max_length                   4096 \
+    --max_completion_length        2048 \
     --output_dir                   ${OUTPUT_DIR} \
     --bf16                         true \
     --gradient_checkpointing       true \
     --deepspeed                    ./ds_zero3.json \
     --save_steps                   10 \
     --logging_steps                5 \
-    --num_generations              2 \
+    --num_generations              4 \
     --ds3_gather_for_generation    false \
     --reward_funcs                 format_quality \
     --external_plugins             ./reward_grpo.py
