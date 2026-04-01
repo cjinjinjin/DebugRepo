@@ -31,8 +31,8 @@ TORCH_NCCL_BLOCKING_WAIT=1 \
 TORCH_NCCL_ASYNC_ERROR_HANDLING=1 \
 swift rlhf \
     --rlhf_type                    grpo \
-    --model                        ${MODEL_PATH} \
-    --adapters                     ${SFT_ADAPTER} \
+    --model                        "${MODEL_PATH}" \
+    ${SFT_ADAPTER:+--adapters "${SFT_ADAPTER}"} \
     --dataset                      ${DATA_DIR}/grpo_train.jsonl \
     --train_type                   lora \
     --lora_rank                    64 \
