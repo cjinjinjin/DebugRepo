@@ -52,5 +52,5 @@ swift rlhf \
     --save_steps                   10 \
     --logging_steps                5 \
     --num_generations              8 \
-    --reward_funcs                 reward_fn \
+    --reward_funcs                 format_quality \
     --external_plugins             ./reward_grpo.py

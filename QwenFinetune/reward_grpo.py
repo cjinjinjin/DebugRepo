@@ -14,6 +14,7 @@ Entry point: reward_fn(completions, **kwargs) -> list[float]
 
 import re
 from collections import Counter
+from swift.rewards import orms
 
 
 PROMPT_MAX_WORDS = 150
@@ -121,3 +122,15 @@ def reward_fn(completions: list, **kwargs) -> list:
         )
         rewards.append(float(r))
     return rewards
+
+
+class FormatQualityReward:
+    def __init__(self, args=None, **kwargs):
+        pass
+
+    def __call__(self, completions, **kwargs):
+        return reward_fn(completions, **kwargs)
+
+
+# Register into swift's orms so --reward_funcs format_quality works
+orms['format_quality'] = FormatQualityReward
