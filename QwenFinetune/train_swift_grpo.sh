@@ -43,8 +43,8 @@ swift rlhf \
     --learning_rate                5e-6 \
     --lr_scheduler_type            cosine \
     --warmup_ratio                 0.05 \
-    --max_length                   2048 \
-    --max_completion_length        1024 \
+    --max_length                   1536 \
+    --max_completion_length        512 \
     --output_dir                   ${OUTPUT_DIR} \
     --bf16                         true \
     --gradient_checkpointing       true \
@@ -52,5 +52,6 @@ swift rlhf \
     --save_steps                   10 \
     --logging_steps                5 \
     --num_generations              2 \
+    --ds3_gather_for_generation    false \
     --reward_funcs                 format_quality \
     --external_plugins             ./reward_grpo.py

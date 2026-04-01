@@ -187,6 +187,8 @@ def main():
                         help="Enable reasoning mode (Qwen3 thinking)")
     parser.add_argument("--output_json", default="",
                         help="Optional: save results to this JSON file")
+    parser.add_argument("--tp",           type=int, default=1,
+                        help="Tensor parallel size (default: 1)")
     parser.add_argument("--quantization", default="none",
                         choices=["gptq", "gptq_marlin", "awq", "none"],
                         help="Quantization type (default: none). NOTE: GPTQ requires vLLM >= 0.9.x for Qwen3-MoE")
@@ -202,7 +204,7 @@ def main():
     print("  Single-Request Inference Latency Benchmark")
     print("=" * 55)
     print(f"  Model      : {args.model}")
-    print(f"  GPU        : single (CUDA_VISIBLE_DEVICES=0)")
+    print(f"  GPU        : CUDA_VISIBLE_DEVICES (tp={args.tp})")
     print(f"  Quant      : {args.quantization}")
     print(f"  Reasoning  : {args.enable_reasoning}")
     print("=" * 55)
@@ -214,7 +216,7 @@ def main():
     quant = None if args.quantization == "none" else args.quantization
     llm = LLM(
         model=args.model,
-        tensor_parallel_size=1,
+        tensor_parallel_size=args.tp,
         **({"quantization": quant} if quant else {}),
         dtype="float16" if quant in ("gptq", "gptq_marlin") else "bfloat16",
         trust_remote_code=True,
