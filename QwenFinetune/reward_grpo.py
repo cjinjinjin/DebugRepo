@@ -86,7 +86,7 @@ def _score_prompt_lengths(text: str) -> float:
     """
     pairs = re.findall(r"<Prompt[1-5]>([\s\S]*?)</Prompt[1-5]>", text)
     score = 0.0
-    for _, content in pairs:
+    for content in pairs:
         wc = len(content.split())
         score += 0.05 if wc <= PROMPT_MAX_WORDS else -0.05
     return score
