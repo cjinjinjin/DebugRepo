@@ -187,6 +187,8 @@ def main():
                         help="Enable reasoning mode (Qwen3 thinking)")
     parser.add_argument("--output_json", default="",
                         help="Optional: save results to this JSON file")
+    parser.add_argument("--enforce_eager", action="store_true", default=False,
+                        help="Disable torch.compile/cudagraph (faster startup, may reduce throughput)")
     parser.add_argument("--tp",           type=int, default=1,
                         help="Tensor parallel size (default: 1)")
     parser.add_argument("--quantization", default="none",
@@ -221,6 +223,7 @@ def main():
         dtype="float16" if quant in ("gptq", "gptq_marlin") else "bfloat16",
         trust_remote_code=True,
         max_model_len=args.max_model_len,
+        enforce_eager=args.enforce_eager,
         enable_reasoning=args.enable_reasoning,
         reasoning_parser="deepseek_r1" if args.enable_reasoning else None,
     )
