@@ -53,5 +53,6 @@ swift rlhf \
     --logging_steps                5 \
     --num_generations              4 \
     --ds3_gather_for_generation    false \
+    --use_vllm                     false \
     --reward_funcs                 format_quality \
     --external_plugins             ./reward_grpo.py
