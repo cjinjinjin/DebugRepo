@@ -224,7 +224,6 @@ def main():
         trust_remote_code=True,
         max_model_len=args.max_model_len,
         enforce_eager=args.enforce_eager,
-        enable_reasoning=args.enable_reasoning,
         reasoning_parser="deepseek_r1" if args.enable_reasoning else None,
     )
     print("[INFO] Model loaded.")
