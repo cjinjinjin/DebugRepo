@@ -213,7 +213,7 @@ def main():
     llm = LLM(
         model=args.model,
         tensor_parallel_size=1,
-        quantization=quant,
+        **({"quantization": quant} if quant else {}),
         dtype="float16" if quant in ("gptq", "gptq_marlin") else "bfloat16",
         trust_remote_code=True,
         max_model_len=args.max_model_len,
