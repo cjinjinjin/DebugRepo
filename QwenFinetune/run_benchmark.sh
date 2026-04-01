@@ -1,13 +1,17 @@
 #!/bin/bash
-# Run single-GPU inference latency benchmark for the quantized model.
+# Run single-GPU inference latency benchmark.
+# Defaults to the merged (non-quantized) model.
+# Pass the quantized model path as the first argument once GPTQ loading is fixed.
 #
 # Usage:
-#   bash run_benchmark.sh [quantized_model_path]
+#   bash run_benchmark.sh [model_path]
 #
 # Example:
+#   bash run_benchmark.sh /vc_data/.../merged_model
 #   bash run_benchmark.sh /vc_data/.../merged_model_gptq_int4
 
-QUANTIZED_MODEL_PATH="${1:-/vc_data//shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_dpo_lora_cot_refine/v3-20260320-155846/checkpoint-50/merged_model_gptq_int4}"
+MODEL_PATH="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_dpo_lora_cot_refine/v3-20260320-155846/checkpoint-50/merged_model}"
+QUANTIZED_MODEL_PATH="${MODEL_PATH}"
 PYTHON_INFER="/home/aiscuser/.conda/envs/vllm_infer/bin/python3.10"
 DATA_DIR="./data"
 EVAL_DATA="${DATA_DIR}/sft_eval_cot.jsonl"
