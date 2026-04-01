@@ -1,17 +1,17 @@
 #!/bin/bash
-# Run single-GPU inference latency benchmark.
-# Defaults to the merged (non-quantized) model.
-# Pass the quantized model path as the first argument once GPTQ loading is fixed.
+# Run single-GPU inference latency benchmark for Qwen3-MoE.
+#
+# NOTE: vLLM 0.8.5 does NOT support GPTQ for Qwen3-MoE (load_weights bug).
+#       This script uses the merged (bfloat16) model by default.
+#       GPTQ support requires vLLM >= 0.9.x.
 #
 # Usage:
 #   bash run_benchmark.sh [model_path]
 #
 # Example:
 #   bash run_benchmark.sh /vc_data/.../merged_model
-#   bash run_benchmark.sh /vc_data/.../merged_model_gptq_int4
 
 MODEL_PATH="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_dpo_lora_cot_refine/v3-20260320-155846/checkpoint-50/merged_model}"
-QUANTIZED_MODEL_PATH="${MODEL_PATH}"
 PYTHON_INFER="/home/aiscuser/.conda/envs/vllm_infer/bin/python3.10"
 DATA_DIR="./data"
 EVAL_DATA="${DATA_DIR}/sft_eval_cot.jsonl"
@@ -19,7 +19,7 @@ RESULTS_DIR="./results"
 OUTPUT_JSON="${RESULTS_DIR}/latency_benchmark.json"
 
 echo "============================================"
-echo "Model      : ${QUANTIZED_MODEL_PATH}"
+echo "Model      : ${MODEL_PATH}"
 echo "GPU        : CUDA_VISIBLE_DEVICES=0 (single GPU)"
 echo "Python env : vllm_infer"
 echo "Prompt src : ${EVAL_DATA}"
@@ -36,7 +36,7 @@ mkdir -p "${RESULTS_DIR}"
 
 CUDA_VISIBLE_DEVICES=0 \
 ${PYTHON_INFER} benchmark_single_request.py \
-    --model           "${QUANTIZED_MODEL_PATH}" \
+    --model           "${MODEL_PATH}" \
     --n_runs          5 \
     --warmup          1 \
     --max_tokens      1024 \

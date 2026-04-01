@@ -1,16 +1,18 @@
 """
-Single-request inference latency benchmark for quantized Qwen model on one GPU.
+Single-request inference latency benchmark for Qwen model on one GPU.
 
 Measures:
-  - Time-to-first-token (TTFT)
   - Total generation time
   - Tokens/second throughput
   - GPU memory usage
 
+NOTE: vLLM 0.8.5 does NOT support GPTQ for Qwen3-MoE (load_weights bug).
+Use the merged (bfloat16) model. GPTQ support requires vLLM >= 0.9.x.
+
 Usage:
-  python benchmark_single_request.py --model /path/to/quantized_model_gptq_int4
+  python benchmark_single_request.py --model /path/to/merged_model
   python benchmark_single_request.py --model /path/to/model --n_runs 5 --max_tokens 512
-  python benchmark_single_request.py --model /path/to/model --prompt_file data/calib_data.jsonl --sample_idx 0
+  python benchmark_single_request.py --model /path/to/model --prompt_file data/sft_eval_cot.jsonl --sample_idx 0
 """
 
 import argparse
@@ -168,7 +170,7 @@ def run_benchmark(llm, prompt: str, tokenizer, sampling_params, n_runs: int, war
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model",        required=True,
-                        help="Path to quantized model (GPTQ INT4)")
+                        help="Path to model (merged bfloat16 or quantized)")
     parser.add_argument("--n_runs",       type=int, default=3,
                         help="Number of benchmark runs (default: 3)")
     parser.add_argument("--warmup",       type=int, default=1,
@@ -185,9 +187,9 @@ def main():
                         help="Enable reasoning mode (Qwen3 thinking)")
     parser.add_argument("--output_json", default="",
                         help="Optional: save results to this JSON file")
-    parser.add_argument("--quantization", default="gptq_marlin",
+    parser.add_argument("--quantization", default="none",
                         choices=["gptq", "gptq_marlin", "awq", "none"],
-                        help="Quantization type (default: gptq_marlin; use gptq_marlin for MoE models)")
+                        help="Quantization type (default: none). NOTE: GPTQ requires vLLM >= 0.9.x for Qwen3-MoE")
     args = parser.parse_args()
 
     try:
