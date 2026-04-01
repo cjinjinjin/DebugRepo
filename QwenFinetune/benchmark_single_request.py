@@ -214,6 +214,7 @@ def main():
         model=args.model,
         tensor_parallel_size=1,
         quantization=quant,
+        dtype="float16" if quant == "gptq" else "bfloat16",
         trust_remote_code=True,
         max_model_len=args.max_model_len,
         enable_reasoning=args.enable_reasoning,
