@@ -185,9 +185,9 @@ def main():
                         help="Enable reasoning mode (Qwen3 thinking)")
     parser.add_argument("--output_json", default="",
                         help="Optional: save results to this JSON file")
-    parser.add_argument("--quantization", default="gptq",
-                        choices=["gptq", "awq", "none"],
-                        help="Quantization type (default: gptq)")
+    parser.add_argument("--quantization", default="gptq_marlin",
+                        choices=["gptq", "gptq_marlin", "awq", "none"],
+                        help="Quantization type (default: gptq_marlin; use gptq_marlin for MoE models)")
     args = parser.parse_args()
 
     try:
@@ -214,7 +214,7 @@ def main():
         model=args.model,
         tensor_parallel_size=1,
         quantization=quant,
-        dtype="float16" if quant == "gptq" else "bfloat16",
+        dtype="float16" if quant in ("gptq", "gptq_marlin") else "bfloat16",
         trust_remote_code=True,
         max_model_len=args.max_model_len,
         enable_reasoning=args.enable_reasoning,

@@ -37,7 +37,7 @@ ${PYTHON_INFER} benchmark_single_request.py \
     --warmup          1 \
     --max_tokens      1024 \
     --max_model_len   8192 \
-    --quantization    gptq \
+    --quantization    gptq_marlin \
     --enable_reasoning \
     --output_json     "${OUTPUT_JSON}" \
     ${PROMPT_ARGS}
