@@ -35,8 +35,8 @@ swift rlhf \
     ${SFT_ADAPTER:+--adapters "${SFT_ADAPTER}"} \
     --dataset                      ${DATA_DIR}/grpo_train.jsonl \
     --train_type                   lora \
-    --lora_rank                    64 \
-    --lora_alpha                   128 \
+    --lora_rank                    32 \
+    --lora_alpha                   64 \
     --num_train_epochs             3 \
     --per_device_train_batch_size  1 \
     --gradient_accumulation_steps  8 \
@@ -51,6 +51,6 @@ swift rlhf \
     --deepspeed                    ./ds_zero3.json \
     --save_steps                   10 \
     --logging_steps                5 \
-    --num_generations              4 \
+    --num_generations              2 \
     --reward_funcs                 format_quality \
     --external_plugins             ./reward_grpo.py
