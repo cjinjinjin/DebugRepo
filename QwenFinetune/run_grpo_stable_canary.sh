@@ -5,18 +5,18 @@ fi
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EXPERIMENT_NAME="grpo_vllm_server_qlora_canary_len2048_comp512_gen2"
-SFT_ADAPTER="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot_8192_v2/v0-20260319-083851/checkpoint-50}"
+EXPERIMENT_NAME="grpo_zero2_qlora_novllm_canary_len2048_comp512_gen2"
+SFT_ADAPTER="${1:-}"
 
 export GRPO_PRESET="stable_grpo_zero2_qlora"
 export MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot_8192_v2/v0-20260319-083851/checkpoint-50/merged_model"
 export DATA_DIR="${SCRIPT_DIR}/data"
 export OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_grpo_experiments/${EXPERIMENT_NAME}"
-export DEEPSPEED_CONFIG="zero3"
-export USE_VLLM="true"
-export VLLM_MODE="server"
-export VLLM_SERVER_HOST="127.0.0.1"
-export VLLM_SERVER_PORT="8000"
+export DEEPSPEED_CONFIG="zero2"
+export USE_VLLM="false"
+unset VLLM_MODE
+unset VLLM_SERVER_HOST
+unset VLLM_SERVER_PORT
 export LOAD_IN_4BIT="true"
 export REWARD_PLUGIN="${SCRIPT_DIR}/reward_grpo.py"
 
