@@ -31,6 +31,7 @@ TORCH_NCCL_BLOCKING_WAIT=1 \
 TORCH_NCCL_ASYNC_ERROR_HANDLING=1 \
 swift rlhf \
     --rlhf_type                    grpo \
+    --nproc_per_node               6 \
     --model                        "${MODEL_PATH}" \
     ${SFT_ADAPTER:+--adapters "${SFT_ADAPTER}"} \
     --dataset                      ${DATA_DIR}/grpo_train.jsonl \
