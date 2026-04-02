@@ -53,5 +53,7 @@ swift rlhf \
     --logging_steps                5 \
     --num_generations              4 \
     --use_vllm                     true \
+    --vllm_mode                    colocate \
+    --vllm_tensor_parallel_size    8 \
     --reward_funcs                 format_quality \
     --external_plugins             ./reward_grpo.py
