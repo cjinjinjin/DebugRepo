@@ -13,7 +13,7 @@
 MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-30B-A3B"
 SFT_ADAPTER="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot_8192_v2/v0-20260319-083851/checkpoint-50}"
 DATA_DIR="./data"
-OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_grpo_lora_cot_v1"
+OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_grpo_lora_cot_v1/lora_64"
 
 # ---------------------------------------------------------------------------
 # Reward function (inline Python passed via --reward_funcs / external script)
@@ -23,16 +23,16 @@ OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/Rich
 # ---------------------------------------------------------------------------
 
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
-NPROC_PER_NODE=8 \
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5 \
+NPROC_PER_NODE=6 \
 NCCL_TIMEOUT=7200 \
 NCCL_DEBUG=WARN \
 TORCH_NCCL_BLOCKING_WAIT=1 \
 TORCH_NCCL_ASYNC_ERROR_HANDLING=1 \
 swift rlhf \
     --rlhf_type                    grpo \
-    --model                        ${MODEL_PATH} \
-    --adapters                     ${SFT_ADAPTER} \
+    --model                        "${MODEL_PATH}" \
+    ${SFT_ADAPTER:+--adapters "${SFT_ADAPTER}"} \
     --dataset                      ${DATA_DIR}/grpo_train.jsonl \
     --train_type                   lora \
     --lora_rank                    64 \
@@ -51,6 +51,10 @@ swift rlhf \
     --deepspeed                    ./ds_zero3.json \
     --save_steps                   10 \
     --logging_steps                5 \
-    --num_generations              8 \
-    --reward_funcs                 external \
+    --num_generations              4 \
+    --use_vllm                     true \
+    --vllm_mode                    server \
+    --vllm_server_host             127.0.0.1 \
+    --vllm_server_port             8000 \
+    --reward_funcs                 format_quality \
     --external_plugins             ./reward_grpo.py

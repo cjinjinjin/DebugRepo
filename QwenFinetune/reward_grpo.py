@@ -14,6 +14,7 @@ Entry point: reward_fn(completions, **kwargs) -> list[float]
 
 import re
 from collections import Counter
+from swift.rewards import orms
 
 
 PROMPT_MAX_WORDS = 150
@@ -86,7 +87,7 @@ def _score_prompt_lengths(text: str) -> float:
     """
     pairs = re.findall(r"<Prompt[1-5]>([\s\S]*?)</Prompt[1-5]>", text)
     score = 0.0
-    for _, content in pairs:
+    for content in pairs:
         wc = len(content.split())
         score += 0.05 if wc <= PROMPT_MAX_WORDS else -0.05
     return score
@@ -121,3 +122,15 @@ def reward_fn(completions: list, **kwargs) -> list:
         )
         rewards.append(float(r))
     return rewards
+
+
+class FormatQualityReward:
+    def __init__(self, args=None, **kwargs):
+        pass
+
+    def __call__(self, completions, **kwargs):
+        return reward_fn(completions, **kwargs)
+
+
+# Register into swift's orms so --reward_funcs format_quality works
+orms['format_quality'] = FormatQualityReward
