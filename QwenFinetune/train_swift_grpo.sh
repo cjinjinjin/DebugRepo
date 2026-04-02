@@ -57,5 +57,6 @@ swift rlhf \
     --vllm_tensor_parallel_size    8 \
     --vllm_gpu_memory_utilization  0.4 \
     --vllm_enforce_eager           true \
+    --vllm_max_lora_rank           64 \
     --reward_funcs                 format_quality \
     --external_plugins             ./reward_grpo.py
