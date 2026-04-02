@@ -8,11 +8,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXPERIMENT_NAME="grpo_zero2_qlora_novllm_canary_len2048_comp512_gen2"
 SFT_ADAPTER="${1:-}"
 
+export SFT_ADAPTER=""
 export GRPO_PRESET="stable_grpo_zero2_qlora"
 export MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot_8192_v2/v0-20260319-083851/checkpoint-50/merged_model"
 export DATA_DIR="${SCRIPT_DIR}/data"
 export OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_grpo_experiments/${EXPERIMENT_NAME}"
-export DEEPSPEED_CONFIG="zero2"
+export DEEPSPEED_CONFIG="zero3"
 export USE_VLLM="false"
 unset VLLM_MODE
 unset VLLM_SERVER_HOST

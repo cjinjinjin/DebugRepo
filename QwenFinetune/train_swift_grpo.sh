@@ -18,7 +18,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 MODEL_PATH="${MODEL_PATH:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-30B-A3B}"
-SFT_ADAPTER="${1:-${SFT_ADAPTER:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot_8192_v2/v0-20260319-083851/checkpoint-50}}"
+SFT_ADAPTER="${1:-${SFT_ADAPTER:-}}"
 DATA_DIR="${DATA_DIR:-${SCRIPT_DIR}/data}"
 OUTPUT_DIR="${OUTPUT_DIR:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_grpo_lora_cot_v1/lora_64}"
 REWARD_PLUGIN="${REWARD_PLUGIN:-${SCRIPT_DIR}/reward_grpo.py}"
