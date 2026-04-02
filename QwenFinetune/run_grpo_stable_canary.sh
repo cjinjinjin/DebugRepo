@@ -5,14 +5,19 @@ fi
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EXPERIMENT_NAME="grpo_stable_1gpu_nodeepspeed_qlora_canary_len2048_comp512_gen2"
+EXPERIMENT_NAME="grpo_vllm_server_qlora_canary_len2048_comp512_gen2"
 SFT_ADAPTER="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot_8192_v2/v0-20260319-083851/checkpoint-50}"
 
 export GRPO_PRESET="stable_grpo_zero2_qlora"
 export MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-30B-A3B"
 export DATA_DIR="${SCRIPT_DIR}/data"
 export OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_grpo_experiments/${EXPERIMENT_NAME}"
-export DEEPSPEED_CONFIG=""
+export DEEPSPEED_CONFIG="zero3"
+export USE_VLLM="true"
+export VLLM_MODE="server"
+export VLLM_SERVER_HOST="127.0.0.1"
+export VLLM_SERVER_PORT="8000"
+export LOAD_IN_4BIT="true"
 export REWARD_PLUGIN="${SCRIPT_DIR}/reward_grpo.py"
 
 export MAX_LENGTH="2048"
@@ -25,8 +30,8 @@ export LEARNING_RATE="5e-6"
 export SAVE_STEPS="10"
 export LOGGING_STEPS="1"
 
-export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
-export NPROC_PER_NODE="${NPROC_PER_NODE:-1}"
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5}"
+export NPROC_PER_NODE="${NPROC_PER_NODE:-6}"
 
 echo "EXPERIMENT_NAME=${EXPERIMENT_NAME}"
 echo "OUTPUT_DIR=${OUTPUT_DIR}"
