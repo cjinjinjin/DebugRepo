@@ -15,16 +15,17 @@ import os
 import requests
 
 
-PAPYRUS_ENDPOINT = "https://WestUS2Eval.papyrus.binginternal.com"
-MODEL_NAME = "gpt-image-1-2025-04-15-Eval"
+PAPYRUS_ENDPOINT = "https://westus2large.papyrus.binginternal.com"
+MODEL_NAME = "gpt-image-1-2025-04-15-eval"
+VERIFY_SCOPE = "api://5fe538a8-15d5-4a84-961e-be66cd036687/.default"
 
 
 def get_azure_ad_token() -> str:
     """Get Azure AD token using azure-identity library."""
     try:
-        from azure.identity import DefaultAzureCredential
-        credential = DefaultAzureCredential()
-        token = credential.get_token("https://api.bing.microsoft.com/.default")
+        from azure.identity import AzureCliCredential
+        credential = AzureCliCredential()
+        token = credential.get_token(VERIFY_SCOPE)
         return token.token
     except ImportError:
         raise RuntimeError(
@@ -65,6 +66,8 @@ def generate_image(prompt: str, size: str = "1024x1024", quality: str = "standar
     headers = {
         "Content-Type": "application/json",
         "papyrus-model-name": MODEL_NAME,
+        "papyrus-quota-id": "PapyrusCustomer",
+        "papyrus-timeout-ms": "120000",
         **get_auth_headers(),
     }
 

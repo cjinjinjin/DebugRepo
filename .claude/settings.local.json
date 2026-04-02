@@ -22,7 +22,8 @@
       "Bash(do)",
       "Bash(done)",
       "Bash(python prepare_infer_input.py --input_tsv RawData/UHRS2K_SD_Random200_0324.tsv --output_jsonl /tmp/infer_input_test.jsonl)",
-      "Bash(python -c \":*)"
+      "Bash(python -c \":*)",
+      "Bash(az account:*)"
     ]
   }
 }
