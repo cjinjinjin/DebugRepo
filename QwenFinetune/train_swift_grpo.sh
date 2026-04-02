@@ -95,8 +95,8 @@ cmd=(
     --model "${MODEL_PATH}"
     --dataset "${DATA_DIR}/grpo_train.jsonl"
     --tuner_type lora
-    --lora_rank 64
-    --lora_alpha 128
+    --lora_rank "${LORA_RANK:-64}"
+    --lora_alpha "${LORA_ALPHA:-128}"
     --num_train_epochs "${NUM_TRAIN_EPOCHS}"
     --per_device_train_batch_size "${PER_DEVICE_TRAIN_BATCH_SIZE}"
     --gradient_accumulation_steps "${GRADIENT_ACCUMULATION_STEPS}"
@@ -137,7 +137,7 @@ if [[ "$(basename "${DEEPSPEED_CONFIG}")" == "ds_zero3.json" ]]; then
 fi
 
 if [[ "${USE_VLLM}" == "true" ]]; then
-    cmd+=(--use_vllm true --vllm_mode "${VLLM_MODE}" --vllm_enable_lora true --vllm_max_lora_rank 64)
+    cmd+=(--use_vllm true --vllm_mode "${VLLM_MODE}" --vllm_enable_lora true --vllm_max_lora_rank "${LORA_RANK:-64}")
 
     if [[ -n "${VLLM_GPU_MEMORY_UTILIZATION:-}" ]]; then
         cmd+=(--vllm_gpu_memory_utilization "${VLLM_GPU_MEMORY_UTILIZATION}")

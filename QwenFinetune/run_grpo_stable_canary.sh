@@ -20,6 +20,9 @@ export VLLM_SERVER_PORT="8000"
 export LOAD_IN_4BIT="true"
 export REWARD_PLUGIN="${SCRIPT_DIR}/reward_grpo.py"
 
+export LORA_RANK="16"
+export LORA_ALPHA="32"
+
 export MAX_LENGTH="2048"
 export MAX_COMPLETION_LENGTH="512"
 export NUM_GENERATIONS="2"
