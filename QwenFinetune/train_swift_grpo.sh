@@ -1,4 +1,7 @@
-#!/bin/bash
+#!/bin/sh
+if [ -z "${BASH_VERSION:-}" ]; then
+    exec bash "$0" "$@"
+fi
 # GRPO training on top of the SFT checkpoint.
 #
 # Purpose: regularize output format (correct <think> fields, exactly 5 <PromptN> tags,
@@ -118,7 +121,12 @@ if [[ -n "${SFT_ADAPTER}" ]]; then
 fi
 
 if [[ "${LOAD_IN_4BIT}" == "true" ]]; then
-    cmd+=(--load_in_4bit true)
+    cmd+=(
+        --quant_method bnb
+        --quant_bits 4
+        --bnb_4bit_quant_type nf4
+        --bnb_4bit_use_double_quant true
+    )
 fi
 
 if [[ "$(basename "${DEEPSPEED_CONFIG}")" == "ds_zero3.json" ]]; then

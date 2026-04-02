@@ -1,4 +1,7 @@
-#!/bin/bash
+#!/bin/sh
+if [ -z "${BASH_VERSION:-}" ]; then
+	exec bash "$0" "$@"
+fi
 set -euo pipefail
 
 echo "[DEPRECATED] This experiment is kept only for reference." >&2
