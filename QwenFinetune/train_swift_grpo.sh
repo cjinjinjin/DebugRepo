@@ -137,7 +137,7 @@ if [[ "$(basename "${DEEPSPEED_CONFIG}")" == "ds_zero3.json" ]]; then
 fi
 
 if [[ "${USE_VLLM}" == "true" ]]; then
-    cmd+=(--use_vllm true --vllm_mode "${VLLM_MODE}" --vllm_enable_lora true --vllm_max_lora_rank "${LORA_RANK:-64}")
+    cmd+=(--use_vllm true --vllm_mode "${VLLM_MODE}")
 
     if [[ -n "${VLLM_GPU_MEMORY_UTILIZATION:-}" ]]; then
         cmd+=(--vllm_gpu_memory_utilization "${VLLM_GPU_MEMORY_UTILIZATION}")

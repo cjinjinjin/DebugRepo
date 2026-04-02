@@ -4,8 +4,6 @@ if [ -z "${BASH_VERSION:-}" ]; then
 fi
 set -euo pipefail
 
-export VLLM_USE_V1=0
-
 MODEL_PATH="${MODEL_PATH:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-30B-A3B}"
 LORA_RANK="${LORA_RANK:-16}"
 VLLM_SERVER_PORT="${VLLM_SERVER_PORT:-8000}"
