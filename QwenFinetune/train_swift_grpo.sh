@@ -23,8 +23,8 @@ OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/Rich
 # ---------------------------------------------------------------------------
 
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5 \
-NPROC_PER_NODE=6 \
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
+NPROC_PER_NODE=8 \
 NCCL_TIMEOUT=7200 \
 NCCL_DEBUG=WARN \
 TORCH_NCCL_BLOCKING_WAIT=1 \
@@ -51,10 +51,7 @@ swift rlhf \
     --deepspeed                    ./ds_zero3.json \
     --save_steps                   10 \
     --logging_steps                5 \
-    --num_generations              4 \
-    --use_vllm                     true \
-    --vllm_mode                    server \
-    --vllm_server_host             127.0.0.1 \
-    --vllm_server_port             8000 \
+    --num_generations              2 \
+    --ds3_gather_for_generation    true \
     --reward_funcs                 format_quality \
     --external_plugins             ./reward_grpo.py
