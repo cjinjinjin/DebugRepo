@@ -18,7 +18,7 @@ export USE_VLLM="false"
 unset VLLM_MODE
 unset VLLM_SERVER_HOST
 unset VLLM_SERVER_PORT
-export LOAD_IN_4BIT="true"
+export LOAD_IN_4BIT="false"
 export REWARD_PLUGIN="${SCRIPT_DIR}/reward_grpo.py"
 
 export LORA_RANK="16"

@@ -30,8 +30,10 @@
 - **结论**：放弃
 
 ### 4. vllm server 模式 + 分开设置 CUDA_VISIBLE_DEVICES
-- **失败原因**：训练侧和 server 跨 GPU NCCL 通信失败
-- **结论**：放弃
+- **失败原因**：训练侧 `CUDA_VISIBLE_DEVICES=0-5`，server `CUDA_VISIBLE_DEVICES=6,7`，两边互不可见，NCCL 无法建立跨进程通信组（swift server 模式需要训练进程和 vllm worker 之间直接通过 NCCL 同步 LoRA 权重）
+- **关键发现**：server 端不应传 `--adapters`，base model 即可；adapter 初始化在训练侧通过 `--adapters` 传入
+- **关键发现**：两边都不设 `CUDA_VISIBLE_DEVICES`，swift 自行协调 GPU 分配
+- **结论**：放弃分开设置，改为不设置
 
 ### 5. vllm server 模式 + 不限制 CUDA_VISIBLE_DEVICES（vllm 0.18.1）
 - **失败原因**：`NCCL error: invalid usage`
@@ -49,16 +51,32 @@
 - **失败原因**：OOM。ZeRO-2 每卡需要完整优化器状态，30B 模型放不下
 - **结论**：放弃
 
-### 7. ZeRO-3 + QLoRA + 无 vllm + 加载旧 SFT adapter
-- **失败原因**：OOM。`train_swift_grpo.sh` 里硬编码了 SFT adapter 默认路径，
-  加载 rank 64 的 adapter 时 OOM
-- **修复**：canary 脚本里 `export SFT_ADAPTER=""`，`train_swift_grpo.sh` 里
-  默认值改为空，使用 merged model 直接训，不加载旧 adapter
+### 7. ZeRO-3 + QLoRA(4bit) + 无 vllm + 加载旧 SFT adapter
+- **失败原因**：OOM。`train_swift_grpo.sh` 里硬编码了 SFT adapter 默认路径，加载 rank 64 的 adapter 时 OOM
+- **修复**：`export SFT_ADAPTER=""`，`train_swift_grpo.sh` 默认值改为空
+
+### 8. ZeRO-3 + QLoRA(4bit) + 无 vllm + merged model（无 adapter）
+- **失败原因**：`TypeError: output tensor must have the same type as input tensor`
+- **根本原因**：ZeRO-3 generation 时调用 `deepspeed.zero.GatheredParameters` allgather，
+  BNB 4bit tensor 无法直接 allgather 成 BF16，类型不兼容
+- **结论**：ZeRO-3 + BNB 4bit 根本不兼容，必须用 BF16
+
+### 9. ZeRO-3 + BF16 + 无 vllm + merged model（当前方案）
+- **显存估算**：模型分片 7.5GB/卡 + 优化器 2GB/卡 + 激活值 ~20GB/卡 ≈ 30GB/卡，78GB 可用应能放下
 - **状态**：待验证
+
+## 重要参数发现
+
+| 参数 | 错误用法 | 正确用法 | 来源 |
+|------|---------|---------|------|
+| LoRA 类型 | `--train_type lora` | `--tuner_type lora` | 官方文档 |
+| deepspeed 配置 | `--deepspeed ./ds_zero3.json` | `--deepspeed zero3` | 官方文档内置字符串 |
+| vllm server 端 | 传 `--adapters` | 只传 base model，不传 adapter | 官方文档 |
+| CUDA 分配 | 手动分 GPU 给 server/训练 | 两边都不设 CUDA_VISIBLE_DEVICES | 实验验证 |
 
 ---
 
-## 当前方案（待验证）
+
 
 **ZeRO-3 + QLoRA rank 16 + 无 vllm + merged model**
 
