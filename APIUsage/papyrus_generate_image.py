@@ -16,7 +16,7 @@ import requests
 
 
 PAPYRUS_ENDPOINT = "https://westus2large.papyrus.binginternal.com"
-MODEL_NAME = "gpt-image-1-2025-04-15-eval"
+MODEL_NAME = "gpt-image-15-Eval"
 VERIFY_SCOPE = "api://5fe538a8-15d5-4a84-961e-be66cd036687/.default"
 
 
@@ -24,7 +24,7 @@ def get_azure_ad_token() -> str:
     """Get Azure AD token using azure-identity library."""
     try:
         from azure.identity import AzureCliCredential
-        credential = AzureCliCredential()
+        credential = AzureCliCredential(process_timeout=60)
         token = credential.get_token(VERIFY_SCOPE)
         return token.token
     except ImportError:
@@ -61,7 +61,7 @@ def generate_image(prompt: str, size: str = "1024x1024", quality: str = "standar
     """
     Call Papyrus image generation API and return list of base64-encoded images.
     """
-    url = f"{PAPYRUS_ENDPOINT}/v1/images/generations"
+    url = f"{PAPYRUS_ENDPOINT}/images/generations"
 
     headers = {
         "Content-Type": "application/json",
@@ -76,7 +76,7 @@ def generate_image(prompt: str, size: str = "1024x1024", quality: str = "standar
         "size": size,
         "quality": quality,
         "n": n,
-        "response_format": "b64_json",
+        "output_format": "png",
     }
 
     print(f"Calling {url}")
@@ -114,9 +114,9 @@ def main():
     parser = argparse.ArgumentParser(description="Generate images via Papyrus gpt-image-1")
     parser.add_argument("--prompt", required=True, help="Image generation prompt")
     parser.add_argument("--output", default="output.png", help="Output file path (default: output.png)")
-    parser.add_argument("--size", default="1024x1024", choices=["1024x1024", "1792x1024", "1024x1792"],
+    parser.add_argument("--size", default="1536x1024", choices=['1024x1024', '1024x1536', '1536x1024', 'auto'],
                         help="Image size")
-    parser.add_argument("--quality", default="standard", choices=["standard", "hd"],
+    parser.add_argument("--quality", default="medium", choices=["low", "medium", "high", "auto"],
                         help="Image quality")
     parser.add_argument("--n", type=int, default=1, help="Number of images to generate")
     args = parser.parse_args()
@@ -132,3 +132,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    # python papyrus_generate_image.py --prompt "your prompt here" --output output.png
