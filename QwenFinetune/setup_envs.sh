@@ -99,15 +99,18 @@ setup_swift_train() {
     echo "[INFO] Pinning transformers + trl (verified working combo) ..."
     ${PIP} install "transformers==4.57.6" "trl==0.28.0"
 
-    # vllm intentionally NOT installed: USE_VLLM=false in current GRPO plan,
-    # and trl 0.28.0 caps vllm<0.13.0 — installing vllm 0.19.0 causes ABI crashes.
+    # vllm 0.8.5 installed ONLY to satisfy swift's hard import chain
+    # (grpo_trainer → rollout_mixin → multi_turn → GRPOVllmEngine → import vllm).
+    # We don't actually use vllm (USE_VLLM=false). --no-deps avoids torch override.
+    echo "[INFO] Installing vLLM 0.8.5 (import-only, torch 2.6.0 compatible) ..."
+    ${PIP} install "vllm==0.8.5" --no-deps
 
     echo "[INFO] Installing bitsandbytes for QLoRA ..."
     ${PIP} install bitsandbytes
 
     echo "[INFO] Verifying ..."
     ${PYTHON} -c \
-        "import torch, swift, deepspeed, trl; print('torch:', torch.__version__, '| swift:', swift.__version__, '| deepspeed:', deepspeed.__version__, '| trl:', trl.__version__)"
+        "import torch, swift, deepspeed, trl, vllm; print('torch:', torch.__version__, '| swift:', swift.__version__, '| deepspeed:', deepspeed.__version__, '| trl:', trl.__version__, '| vllm:', vllm.__version__)"
 
     echo "[OK] ${ENV} ready."
 }
