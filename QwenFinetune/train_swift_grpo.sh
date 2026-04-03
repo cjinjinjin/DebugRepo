@@ -111,6 +111,8 @@ cmd=(
     --save_steps "${SAVE_STEPS}"
     --logging_steps "${LOGGING_STEPS}"
     --num_generations "${NUM_GENERATIONS}"
+    --top_k 50
+    --temperature 0.7
     --reward_funcs format_quality
     --external_plugins "${REWARD_PLUGIN}"
 )
