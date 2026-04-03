@@ -81,13 +81,14 @@ setup_swift_train() {
     echo ""
     echo "============================================"
     echo "Setting up: ${ENV}"
-    echo "  torch (latest PyPI) | deepspeed | ms-swift 4.1.0.dev0 (GitHub) | trl 0.28.0 (no vllm)"
+    echo "  torch 2.6.0 (cu124) | deepspeed | ms-swift 4.1.0.dev0 (GitHub) | trl 0.28.0 (no vllm)"
     echo "============================================"
 
     conda create -y -n "${ENV}" python=3.10
 
-    echo "[INFO] Installing PyTorch (latest from PyPI, includes CUDA) ..."
-    ${PIP} install torch torchvision torchaudio
+    echo "[INFO] Installing PyTorch 2.6.0 (cu124, compatible with driver 12080) ..."
+    ${PIP} install torch==2.6.0 torchvision torchaudio \
+        --index-url https://download.pytorch.org/whl/cu124
 
     echo "[INFO] Installing ms-swift 4.1.0.dev0 from GitHub main ..."
     ${PIP} install "git+https://github.com/modelscope/ms-swift.git"
