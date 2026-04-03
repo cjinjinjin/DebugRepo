@@ -81,7 +81,7 @@ setup_swift_train() {
     echo ""
     echo "============================================"
     echo "Setting up: ${ENV}"
-    echo "  torch (latest PyPI) | deepspeed | ms-swift 4.1.0.dev0 (GitHub) | vllm 0.19.0 | trl 0.28.0"
+    echo "  torch (latest PyPI) | deepspeed | ms-swift 4.1.0.dev0 (GitHub) | trl 0.28.0 (no vllm)"
     echo "============================================"
 
     conda create -y -n "${ENV}" python=3.10
@@ -98,15 +98,15 @@ setup_swift_train() {
     echo "[INFO] Pinning transformers + trl (verified working combo) ..."
     ${PIP} install "transformers==4.57.6" "trl==0.28.0"
 
-    echo "[INFO] Installing vLLM 0.19.0 ..."
-    ${PIP} install "vllm==0.19.0"
+    # vllm intentionally NOT installed: USE_VLLM=false in current GRPO plan,
+    # and trl 0.28.0 caps vllm<0.13.0 — installing vllm 0.19.0 causes ABI crashes.
 
     echo "[INFO] Installing bitsandbytes for QLoRA ..."
     ${PIP} install bitsandbytes
 
     echo "[INFO] Verifying ..."
     ${PYTHON} -c \
-        "import torch, swift, deepspeed, vllm, trl; print('torch:', torch.__version__, '| swift:', swift.__version__, '| deepspeed:', deepspeed.__version__, '| vllm:', vllm.__version__, '| trl:', trl.__version__)"
+        "import torch, swift, deepspeed, trl; print('torch:', torch.__version__, '| swift:', swift.__version__, '| deepspeed:', deepspeed.__version__, '| trl:', trl.__version__)"
 
     echo "[OK] ${ENV} ready."
 }
