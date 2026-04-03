@@ -76,34 +76,37 @@ setup_vllm_infer() {
 setup_swift_train() {
     local ENV="swift_train"
     local PIP; PIP=$(pip_for "${ENV}")
+    local PYTHON="${CONDA_ENVS_ROOT}/${ENV}/bin/python3.10"
 
     echo ""
     echo "============================================"
     echo "Setting up: ${ENV}"
-    echo "  torch 2.6.0 (cu124) | deepspeed | ms-swift 4.0.1 | vllm (latest)"
+    echo "  torch (latest PyPI) | deepspeed | ms-swift 4.1.0.dev0 (GitHub) | vllm 0.19.0 | trl 0.28.0"
     echo "============================================"
 
     conda create -y -n "${ENV}" python=3.10
 
-    echo "[INFO] Installing PyTorch 2.6.0 (cu124) ..."
-    ${PIP} install torch==2.6.0 torchvision torchaudio \
-        --index-url https://download.pytorch.org/whl/cu124
+    echo "[INFO] Installing PyTorch (latest from PyPI, includes CUDA) ..."
+    ${PIP} install torch torchvision torchaudio
 
-    echo "[INFO] Installing ms-swift 4.0.1 ..."
-    ${PIP} install ms-swift==4.0.1
+    echo "[INFO] Installing ms-swift 4.1.0.dev0 from GitHub main ..."
+    ${PIP} install "git+https://github.com/modelscope/ms-swift.git"
 
     echo "[INFO] Installing DeepSpeed ..."
     ${PIP} install deepspeed
 
-    echo "[INFO] Pinning transformers ..."
-    ${PIP} install "transformers>=4.47,<5.0"
+    echo "[INFO] Pinning transformers + trl (verified working combo) ..."
+    ${PIP} install "transformers==4.57.6" "trl==0.28.0"
 
-    echo "[INFO] Installing vLLM (latest) for GRPO colocate mode ..."
-    ${PIP} install vllm
+    echo "[INFO] Installing vLLM 0.19.0 ..."
+    ${PIP} install "vllm==0.19.0"
+
+    echo "[INFO] Installing bitsandbytes for QLoRA ..."
+    ${PIP} install bitsandbytes
 
     echo "[INFO] Verifying ..."
-    ${CONDA_ENVS_ROOT}/${ENV}/bin/python3.10 -c \
-        "import torch, swift, deepspeed, vllm; print('torch:', torch.__version__, '| swift:', swift.__version__, '| deepspeed:', deepspeed.__version__, '| vllm:', vllm.__version__)"
+    ${PYTHON} -c \
+        "import torch, swift, deepspeed, vllm, trl; print('torch:', torch.__version__, '| swift:', swift.__version__, '| deepspeed:', deepspeed.__version__, '| vllm:', vllm.__version__, '| trl:', trl.__version__)"
 
     echo "[OK] ${ENV} ready."
 }
