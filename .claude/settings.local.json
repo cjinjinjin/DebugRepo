@@ -25,7 +25,10 @@
       "Bash(python -c \":*)",
       "Bash(az account:*)",
       "Bash(python papyrus_generate_image.py --prompt \"a cat sitting on a cloud\" --output test.png)",
-      "Bash(python \"d:/Code/ms-image-quality-filters-aether-module-main/papyrus_generate_image.py\" --prompt \"a cat sitting on a cloud\" --output \"d:/Code/ms-image-quality-filters-aether-module-main/test.png\")"
+      "Bash(python \"d:/Code/ms-image-quality-filters-aether-module-main/papyrus_generate_image.py\" --prompt \"a cat sitting on a cloud\" --output \"d:/Code/ms-image-quality-filters-aether-module-main/test.png\")",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:swift.readthedocs.io)"
     ]
   }
 }

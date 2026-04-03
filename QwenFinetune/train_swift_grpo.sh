@@ -160,4 +160,65 @@ if [[ "${USE_VLLM}" == "true" ]]; then
     fi
 fi
 
+# ---------------------------------------------------------------------------
+# Pre-flight: verify LoRA param freeze + estimate DeepSpeed optimizer memory
+# ---------------------------------------------------------------------------
+python - <<'PYEOF'
+import os, sys
+try:
+    import torch
+    from transformers import AutoModelForCausalLM, AutoConfig
+    from peft import LoraConfig, get_peft_model
+
+    model_path = os.environ.get("MODEL_PATH", "")
+    lora_rank  = int(os.environ.get("LORA_RANK", "16"))
+    lora_alpha = int(os.environ.get("LORA_ALPHA", "32"))
+
+    print(f"[preflight] Loading config from {model_path} ...")
+    cfg = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
+    total_params = sum(
+        p.numel() for name, p in cfg.__dict__.items()
+        if isinstance(p, int)  # config-level count not reliable; use model
+    )
+
+    # Estimate via config without loading weights
+    # For Qwen3-30B-A3B MoE: ~30B params
+    # Use rough estimate: hidden_size, num_layers, intermediate_size from config
+    h   = getattr(cfg, "hidden_size", 0)
+    L   = getattr(cfg, "num_hidden_layers", 0)
+    ffn = getattr(cfg, "intermediate_size", 0) or getattr(cfg, "moe_intermediate_size", 0)
+    voc = getattr(cfg, "vocab_size", 0)
+    n_exp = getattr(cfg, "num_experts", 1) or 1
+
+    # rough: attn + ffn * experts per layer + embed
+    attn_per_layer   = 4 * h * h          # Q K V O proj
+    ffn_per_layer    = 3 * h * ffn * n_exp  # gate up down, all experts
+    embed            = voc * h
+    total_est        = L * (attn_per_layer + ffn_per_layer) + embed
+
+    # LoRA trainable params: only attn projections by default (q,v)
+    # rank * (h + h) * 2 projections * L layers  (very rough)
+    lora_trainable_est = lora_rank * h * 4 * L  # q_proj + v_proj + k_proj + o_proj
+
+    total_gb    = total_est * 2 / 1e9          # BF16
+    lora_gb     = lora_trainable_est * 2 / 1e9
+
+    # ZeRO-2: optimizer states (Adam m+v = 2x FP32) for ALL params if not filtered
+    zero2_opt_all_gpu  = total_est * 8 / 1e9      # FP32 m+v, not sharded in ZeRO-2
+    zero2_opt_lora_gpu = lora_trainable_est * 8 / 1e9
+
+    print(f"[preflight] Config: hidden={h}, layers={L}, ffn={ffn}, experts={n_exp}, vocab={voc}")
+    print(f"[preflight] Estimated total params:    {total_est/1e9:.1f}B  ({total_gb:.1f} GB BF16)")
+    print(f"[preflight] Estimated LoRA trainable:  {lora_trainable_est/1e6:.1f}M ({lora_gb:.2f} GB BF16)")
+    print(f"[preflight] ZeRO-2 Adam states if ALL params tracked: {zero2_opt_all_gpu:.1f} GB/GPU (FP32, no shard)")
+    print(f"[preflight] ZeRO-2 Adam states if ONLY LoRA tracked:  {zero2_opt_lora_gpu:.2f} GB/GPU")
+    if zero2_opt_all_gpu > 60:
+        print(f"[preflight] WARNING: ZeRO-2 will OOM if base model params are NOT excluded from optimizer!")
+        print(f"[preflight]          Ensure ms-swift passes only requires_grad=True params to optimizer.")
+    else:
+        print(f"[preflight] ZeRO-2 optimizer memory looks manageable.")
+except Exception as e:
+    print(f"[preflight] skipped ({e})", file=sys.stderr)
+PYEOF
+
 "${cmd[@]}"
