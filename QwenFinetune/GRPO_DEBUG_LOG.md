@@ -69,9 +69,15 @@
 - **修复**：`train_swift_grpo.sh` 里加 `--top_k 50 --temperature 0.7`
 
 ### 10. ZeRO-3 + BF16 + 无 vllm + merged model + top_k=50
-- **状态**：放弃（性能不可行）
-- **显存**：每卡 ~72GB / 80GB，8 卡全部正常，NCCL Init COMPLETE ✓
-- **结论**：step 0 generation 3小时未完成。ZeRO-3 native generation 对 30B MoE 每个 token 都需全层 allgather，不是死锁而是极端性能瓶颈，实际不可用
+- **状态**：✅ 跑通（能完成完整 step），但速度不可接受
+- **显存**：每卡 ~69.3GB / 80GB，8 卡全部正常，NCCL Init COMPLETE ✓
+- **Step 1 数据**：
+  - step_time: 6387s（~1.8小时/step），34 steps 预计 **4天21小时**
+  - reward: 0.091（低于 SFT baseline 0.211，step 1 正常）
+  - completions/clipped_ratio: 1.0 —— 所有生成全被截断到 MAX_COMPLETION_LENGTH=512
+  - kl: 0.0 —— 异常，policy 与 reference model 完全一致，GRPO 未在学习
+- **结论**：正确性待验证（kl=0.0 异常），速度不可用（4天21小时），必须解决 generation 加速问题
+- **对应脚本**：`run_grpo_stable_canary.sh`
 
 ### 11. ZeRO-2 + QLoRA（第二次，修复 adapter 加载问题后）
 - **状态**：待测试
