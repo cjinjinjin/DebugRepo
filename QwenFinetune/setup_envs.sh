@@ -101,9 +101,10 @@ setup_swift_train() {
 
     # vllm 0.8.5 installed ONLY to satisfy swift's hard import chain
     # (grpo_trainer → rollout_mixin → multi_turn → GRPOVllmEngine → import vllm).
-    # We don't actually use vllm (USE_VLLM=false). --no-deps avoids torch override.
+    # We don't actually use vllm (USE_VLLM=false).
+    # vllm 0.8.5 requires torch 2.6.0 + cu124, same as our pin — no conflict.
     echo "[INFO] Installing vLLM 0.8.5 (import-only, torch 2.6.0 compatible) ..."
-    ${PIP} install "vllm==0.8.5" --no-deps
+    ${PIP} install "vllm==0.8.5"
 
     echo "[INFO] Installing bitsandbytes for QLoRA ..."
     ${PIP} install bitsandbytes
