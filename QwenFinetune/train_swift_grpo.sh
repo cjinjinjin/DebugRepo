@@ -160,4 +160,48 @@ if [[ "${USE_VLLM}" == "true" ]]; then
     fi
 fi
 
+# ---------------------------------------------------------------------------
+# Pre-flight: verify LoRA param freeze + estimate DeepSpeed optimizer memory
+# ---------------------------------------------------------------------------
+python - <<'PYEOF'
+import os, sys
+try:
+    from transformers import AutoConfig
+
+    model_path = os.environ.get("MODEL_PATH", "")
+    lora_rank  = int(os.environ.get("LORA_RANK", "16"))
+
+    print(f"[preflight] Loading config from {model_path} ...")
+    cfg = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
+
+    h     = getattr(cfg, "hidden_size", 0)
+    L     = getattr(cfg, "num_hidden_layers", 0)
+    ffn   = getattr(cfg, "moe_intermediate_size", 0) or getattr(cfg, "intermediate_size", 0)
+    voc   = getattr(cfg, "vocab_size", 0)
+    n_exp = getattr(cfg, "num_experts", None) or getattr(cfg, "num_local_experts", None) or 1
+
+    attn_per_layer = 4 * h * h
+    ffn_per_layer  = 3 * h * ffn * n_exp
+    embed          = voc * h
+    total_est      = L * (attn_per_layer + ffn_per_layer) + embed
+
+    # LoRA on q/k/v/o proj across all layers
+    lora_est = lora_rank * h * 4 * L
+
+    total_gb          = total_est * 2 / 1e9
+    lora_gb           = lora_est  * 2 / 1e9
+    zero2_opt_all_gb  = total_est * 8 / 1e9   # FP32 Adam m+v, per GPU (not sharded in ZeRO-2)
+    zero2_opt_lora_gb = lora_est  * 8 / 1e9
+
+    print(f"[preflight] hidden={h}, layers={L}, ffn={ffn}, experts={n_exp}, vocab={voc}")
+    print(f"[preflight] Total params est:   {total_est/1e9:.1f}B  = {total_gb:.1f} GB BF16")
+    print(f"[preflight] LoRA trainable est: {lora_est/1e6:.1f}M   = {lora_gb:.3f} GB BF16  (rank={lora_rank})")
+    print(f"[preflight] ZeRO-2 Adam states (ALL params, per GPU): {zero2_opt_all_gb:.1f} GB  <-- OOM if base not excluded")
+    print(f"[preflight] ZeRO-2 Adam states (LoRA only,  per GPU): {zero2_opt_lora_gb:.3f} GB <-- OK if base excluded")
+    if zero2_opt_all_gb > 60:
+        print(f"[preflight] *** RISK: ZeRO-2 will OOM unless ms-swift correctly excludes frozen params from optimizer ***")
+except Exception as e:
+    print(f"[preflight] skipped: {e}", file=sys.stderr)
+PYEOF
+
 "${cmd[@]}"
