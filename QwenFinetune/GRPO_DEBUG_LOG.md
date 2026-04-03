@@ -61,9 +61,16 @@
   BNB 4bit tensor 无法直接 allgather 成 BF16，类型不兼容
 - **结论**：ZeRO-3 + BNB 4bit 根本不兼容，必须用 BF16
 
-### 9. ZeRO-3 + BF16 + 无 vllm + merged model（当前方案）
-- **显存估算**：模型分片 7.5GB/卡 + 优化器 2GB/卡 + 激活值 ~20GB/卡 ≈ 30GB/卡，78GB 可用应能放下
-- **状态**：待验证
+### 9. ZeRO-3 + BF16 + 无 vllm + merged model，top_k=-1
+- **失败原因**：`ValueError: top_k has to be a strictly positive integer, but is -1`
+- **根本原因**：swift GRPO 默认 top_k=-1，transformers generation 不接受
+- **修复**：`train_swift_grpo.sh` 里加 `--top_k 50 --temperature 0.7`
+
+### 10. ZeRO-3 + BF16 + 无 vllm + merged model + top_k=50（当前方案）
+- **状态**：运行中
+- **显存**：每卡 ~72GB / 80GB，8 卡全部正常
+- **NCCL**：8 rank 全部 Init COMPLETE ✓
+- **进度**：Train 0/34，step 0 generation 中（ZeRO-3 无 vllm 需逐层 allgather，每步耗时长，非死锁）
 
 ## 重要参数发现
 
@@ -78,21 +85,25 @@
 
 
 
-**ZeRO-3 + QLoRA rank 16 + 无 vllm + merged model**
+## 当前方案
+
+**ZeRO-3 + BF16 + 无 vllm + merged model + top_k=50**
 
 ```bash
 bash run_grpo_stable_canary.sh
 ```
 
 关键配置：
-- `GRPO_PRESET=stable_grpo_zero2_qlora`（用 preset 的 QLoRA 设置）
-- `DEEPSPEED_CONFIG=zero3`（内置字符串，不传 ds3_gather_for_generation）
+- `GRPO_PRESET=stable_grpo_zero2_qlora`
+- `DEEPSPEED_CONFIG=zero3`（内置字符串）
 - `USE_VLLM=false`
-- `LOAD_IN_4BIT=true`
-- `SFT_ADAPTER=""`（不加载旧 adapter，直接从 merged model 训）
+- `LOAD_IN_4BIT=false`（BF16）
+- `SFT_ADAPTER=""`（merged model 直接训，不加载旧 adapter）
 - `MODEL_PATH` 指向 merged model
+- `--top_k 50 --temperature 0.7`（在 train_swift_grpo.sh 里）
+- LoRA rank 16 / alpha 32
 
-Generation 方式：ZeRO-3 native（无 gather，逐层生成），速度慢但能跑。
+Generation 方式：ZeRO-3 native，逐层 allgather，速度慢但能跑。
 
 ---
 
