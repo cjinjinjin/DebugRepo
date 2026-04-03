@@ -27,6 +27,7 @@ export LOGGING_STEPS="5"
 export LORA_RANK="64"
 export LORA_ALPHA="128"
 
+export USE_VLLM="false"
 export CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
 export NPROC_PER_NODE="8"
 
