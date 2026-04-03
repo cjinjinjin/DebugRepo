@@ -206,4 +206,8 @@ except Exception as e:
     print(f"[preflight] skipped: {e}", file=sys.stderr)
 PYEOF
 
+echo "[debug] Full swift command:"
+echo "${cmd[@]}"
+echo "[debug] VLLM env vars: VLLM_MODE=${VLLM_MODE:-<unset>} VLLM_SERVER_HOST=${VLLM_SERVER_HOST:-<unset>} VLLM_SERVER_PORT=${VLLM_SERVER_PORT:-<unset>} VLLM_SERVER_BASE_URL=${VLLM_SERVER_BASE_URL:-<unset>}"
+
 "${cmd[@]}"
