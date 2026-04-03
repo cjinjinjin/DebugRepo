@@ -114,7 +114,7 @@ cmd=(
     --top_k 50
     --temperature 0.7
     --reward_funcs format_quality
-    --external_plugins "${REWARD_PLUGIN}"
+    --external_plugins "${REWARD_PLUGIN}" "${SCRIPT_DIR}/patch_colocate_rollout.py"
 )
 
 if [[ -n "${DEEPSPEED_CONFIG}" ]]; then
