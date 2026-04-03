@@ -158,6 +158,8 @@ if [[ "${USE_VLLM}" == "true" ]]; then
             cmd+=(--vllm_server_port "${VLLM_SERVER_PORT}")
         fi
     fi
+else
+    cmd+=(--use_vllm false)
 fi
 
 # ---------------------------------------------------------------------------

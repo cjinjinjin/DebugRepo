@@ -30,6 +30,12 @@ export LORA_ALPHA="128"
 export CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
 export NPROC_PER_NODE="8"
 
+# Ensure no stale vllm env vars leak into swift's arg parser
+unset VLLM_MODE
+unset VLLM_SERVER_HOST
+unset VLLM_SERVER_PORT
+unset VLLM_SERVER_BASE_URL
+
 echo "EXPERIMENT_NAME=${EXPERIMENT_NAME}"
 echo "OUTPUT_DIR=${OUTPUT_DIR}"
 
