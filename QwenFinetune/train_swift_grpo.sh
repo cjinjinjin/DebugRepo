@@ -160,6 +160,11 @@ if [[ "${USE_VLLM}" == "true" ]]; then
     fi
 else
     cmd+=(--use_vllm false)
+    # Purge ALL vllm env vars so the vllm library does not self-initialize
+    echo "[debug] Purging VLLM_* env vars (use_vllm=false) ..."
+    while IFS='=' read -r key _; do
+        [[ "${key}" == VLLM_* ]] && unset "${key}"
+    done < <(env)
 fi
 
 # ---------------------------------------------------------------------------
