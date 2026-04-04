@@ -16,12 +16,12 @@ swift rlhf \
     --rlhf_type     dpo \
     --model         ${MODEL_PATH} \
     --adapters      ${SFT_ADAPTER} \
-    --dataset       ${DATA_DIR}/dpo_refine_train_cot.jsonl \
-    --val_dataset   ${DATA_DIR}/dpo_refine_eval_cot.jsonl \
+    --dataset       ${DATA_DIR}/dpo_combined_train_cot.jsonl \
+    --val_dataset   ${DATA_DIR}/dpo_combined_eval_cot.jsonl \
     --train_type    lora \
     --lora_rank     64 \
     --lora_alpha    128 \
-    --num_train_epochs            50 \
+    --num_train_epochs            5 \
     --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 8 \
     --learning_rate               5e-5 \
@@ -32,7 +32,7 @@ swift rlhf \
     --bf16                        true \
     --gradient_checkpointing      true \
     --deepspeed                   ./ds_zero3.json \
-    --save_steps                  5 \
-    --eval_steps                  5 \
-    --logging_steps               5 \
+    --save_steps                  50 \
+    --eval_steps                  50 \
+    --logging_steps               10 \
     --beta                        0.1
