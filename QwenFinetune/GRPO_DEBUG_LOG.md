@@ -275,11 +275,11 @@ preflight 脚本会在启动时估算并输出风险警告。
   ```
   WorkNCCL(SeqNum=19, OpType=ALLGATHER, Timeout(ms)=7200000)
   ```
-- **修复方案**：升级 vllm 到 0.10.2+（已确认 v0.9.0+ 修复了此 bug）
+- **修复方案**：升级 vllm 到 0.10.2+（~~已确认 v0.9.0+ 修复了此 bug~~ 实际未修复，见 #18）
 - **版本约束发现**：
   - trl 0.28.0 要求 `vllm>=0.10.2,<0.13.0`，所以 vllm 0.9.2 不满足
   - vllm 0.10.2 需要 torch 2.8.0，torch 2.8.0+cu126 可用（CUDA driver 12080 兼容）
-  - 最终确定升级路径：**vllm 0.8.5 → 0.10.2, torch 2.6.0 → 2.8.0+cu126**
+  - ~~最终确定升级路径：**vllm 0.8.5 → 0.10.2, torch 2.6.0 → 2.8.0+cu126**~~ 0.10.2 仍有 bug，见 #18
 
 ### 两步走策略确立（2026-04-03）
 - **Plan B（保底，原机器）**：ZeRO-2 + QLoRA + `USE_VLLM=false`，超时 7200s，`MAX_COMPLETION_LENGTH=512`
@@ -288,7 +288,36 @@ preflight 脚本会在启动时估算并输出风险警告。
 - **Plan A（目标，新机器）**：外部 vLLM server（TP=2, GPUs 0-1）+ ZeRO-2 + QLoRA 训练（GPUs 2-7）
   - 脚本：`start_rollout_server.sh` + `run_grpo_server_mode.sh`
   - 预计速度：generation 快 10-50x
-  - **阻塞项**：vLLM 版本升级（0.8.5 → 0.10.2），已更新 `setup_envs.sh`
+  - **阻塞项**：vLLM 版本升级（0.8.5 → ~~0.10.2~~ 0.19.0），已更新 `setup_envs.sh`
+
+### 18. vLLM 0.10.2 仍未修复 FusedMoE._load_w2 bug（2026-04-04，新机器第二次尝试）
+- **配置**：Plan A — `start_rollout_server.sh`（GPUs 0,1, TP=2）+ `run_grpo_server_mode.sh`（GPUs 2-7）
+- **环境**：torch 2.8.0+cu126, vllm 0.10.2（从 0.8.5 升级后重建）
+- **现象**：与 #17 完全相同 — `start (0) + length (384) exceeds dimension size (1)`
+- **根因深挖**：
+  - vllm 0.10.2~0.18.1 只有 PR #33173 的 `ndim > 0` guard，保护的是 0 维标量 tensor
+  - Qwen3MoE 的问题 tensor 是 ndim > 0 但 shard 维度 size=1，guard 被绕过，narrow() 仍然越界
+  - **真正修复在 vllm 0.19.0**：PR #37010（2026-03-31 合并）添加了完整的 bounds checking：
+    - 计算 `available = loaded_weight.shape[shard_dim] - start_offset`
+    - `available <= 0` 时 early return
+    - 使用 `min(shard_size, available)` 调用 narrow
+    - 新增 `_narrow_expert_data_for_padding()` 处理 padded hidden dimensions
+- **版本追溯（完整）**：
+
+  | vllm 版本 | torch 要求 | _load_w2 bug | 说明 |
+  |----------|-----------|-------------|------|
+  | 0.8.5 | 2.6.0 | **有 bug** | 原始版本 |
+  | 0.10.2 | 2.8.0 | **有 bug** | 无修复 |
+  | 0.12.0~0.13.0 | 2.9.0 | **有 bug** | 无修复 |
+  | 0.14.0~0.16.x | 2.9.1 | **有 bug** | 仅 ndim>0 guard (PR #33173)，不够 |
+  | 0.17.0~0.18.1 | 2.10.0 | **有 bug** | 同上 |
+  | **0.19.0** | **2.10.0** | **修复** | PR #37010，完整 bounds checking |
+
+- **修复方案**：升级到 vllm 0.19.0 + torch 2.10.0+cu126
+  - torch 2.10.0+cu126 在 PyTorch 官方 whl 仓库可用（Python 3.10, Linux x86_64）✓
+  - CUDA driver 12080 兼容 cu126 ✓
+  - trl 0.28.0 要求 vllm<0.13.0 — 与 0.19.0 冲突 → 安装顺序：先装 trl，最后装 vllm 覆盖
+  - ms-swift GRPO 不走 trl 的 vllm 集成，trl 版本限制不影响实际运行
 
 ---
 
@@ -301,22 +330,23 @@ preflight 脚本会在启动时估算并输出风险警告。
 | `run_grpo_server_mode.sh` | **新建**：Plan A trainer 端启动脚本，GPUs 2-7，连接 vLLM server |
 | `start_rollout_server.sh` | **新建**：Plan A vLLM rollout server 启动脚本，`swift rollout`，TP=2 |
 | `ds_zero2.json` | 还原为原始版本（移除临时添加的 `communication_data_type` 和 `comms_config`） |
-| `setup_envs.sh` | swift_train 环境升级：torch 2.6.0+cu124 → 2.8.0+cu126, vllm 0.8.5 → 0.10.2（修复 Qwen3MoE FusedMoE bug，满足 trl>=0.10.2 要求） |
+| `setup_envs.sh` | swift_train 环境升级：torch 2.6.0+cu124 → 2.10.0+cu126, vllm 0.8.5 → 0.19.0（FusedMoE._load_w2 TP 修复 PR #37010；中间版本 0.10.2~0.18.1 均未修复） |
 
-### 环境升级记录（2026-04-04 计划）
-`setup_envs.sh` swift_train 环境第二次升级（尚未执行，待在新机器运行）：
-- **旧版本**：torch 2.6.0+cu124, vllm 0.8.5
-- **新版本**：torch 2.8.0+cu126, vllm 0.10.2
+### 环境升级记录（2026-04-04，第三次 — 最终版）
+`setup_envs.sh` swift_train 环境升级：
+- **旧版本**：torch 2.8.0+cu126, vllm 0.10.2（第二次升级，仍有 _load_w2 bug）
+- **新版本**：torch 2.10.0+cu126, vllm 0.19.0
 - **其他不变**：ms-swift 4.1.0.dev0 (GitHub main), deepspeed (latest), trl 0.28.0, transformers 4.57.6, bitsandbytes (latest)
-- **动机**：vllm 0.8.5 的 FusedMoE._load_w2 对 Qwen3MoE TP 不兼容；trl 0.28.0 要求 vllm>=0.10.2
-- **兼容性验证**：torch 2.8.0+cu126 兼容 CUDA driver 12080 ✓；deepspeed 无 torch 上限 ✓；transformers>=2.2 ✓；bitsandbytes>=2.3 ✓
+- **动机**：vllm 0.10.2 仍有 Qwen3MoE FusedMoE._load_w2 TP>1 bug，真正修复在 0.19.0 (PR #37010)
+- **兼容性**：torch 2.10.0+cu126 兼容 CUDA driver 12080 ✓；trl 0.28.0 限制 vllm<0.13.0 但 ms-swift GRPO 不走 trl vllm 集成
 
 ---
 
 ## 待办
-1. ~~在新机器上执行环境升级~~（已完成）
-2. 验证 vllm 0.10.2 + Qwen3MoE TP=2 能否正常启动 `swift rollout`
-3. 重跑 Plan A：`start_rollout_server.sh` + `run_grpo_server_mode.sh`
-4. **重跑方案十（canary）**：`MAX_COMPLETION_LENGTH=1024`，观察 clipped_ratio 是否下降、reward 是否出现上升趋势
-5. 如果 Plan A 仍有问题，在原机器跑 Plan B：`run_grpo_stable_scaleup.sh`（已有超时修复）
-6. 若成功：对比 GRPO 训后 reward 与 SFT baseline（0.211）
+1. ~~在新机器上执行环境升级（0.10.2）~~（已完成但 bug 未修复）
+2. 在新机器上重建环境：vllm 0.19.0 + torch 2.10.0+cu126
+3. 验证 vllm 0.19.0 + Qwen3MoE TP=2 能否正常启动 `swift rollout`
+4. 重跑 Plan A：`start_rollout_server.sh` + `run_grpo_server_mode.sh`
+5. **重跑方案十（canary）**：`MAX_COMPLETION_LENGTH=1024`，观察 clipped_ratio 是否下降、reward 是否出现上升趋势
+6. 如果 Plan A 仍有问题，在原机器跑 Plan B：`run_grpo_stable_scaleup.sh`（已有超时修复）
+7. 若成功：对比 GRPO 训后 reward 与 SFT baseline（0.211）

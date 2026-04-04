@@ -3,7 +3,7 @@
 #
 # Creates two envs:
 #   vllm_infer  — for batch inference  (torch 2.5.1 + vllm 0.8.5 + ms-swift)
-#   swift_train — for GRPO/LoRA training (torch 2.8.0+cu126 + vllm 0.10.2 + deepspeed + ms-swift)
+#   swift_train — for GRPO/LoRA training (torch 2.10.0+cu126 + vllm 0.19.0 + deepspeed + ms-swift)
 #
 # Usage:
 #   bash setup_envs.sh              # setup both envs
@@ -84,13 +84,13 @@ setup_swift_train() {
     echo ""
     echo "============================================"
     echo "Setting up: ${ENV}"
-    echo "  torch 2.8.0 (cu126) | vllm 0.10.2 | deepspeed | ms-swift 4.1.0.dev0 (GitHub) | trl 0.28.0"
+    echo "  torch 2.10.0 (cu126) | vllm 0.19.0 | deepspeed | ms-swift 4.1.0.dev0 (GitHub) | trl 0.28.0"
     echo "============================================"
 
     conda create -y -n "${ENV}" python=3.10
 
-    echo "[INFO] Installing PyTorch 2.8.0 (cu126, compatible with CUDA driver 12080) ..."
-    ${PIP} install torch==2.8.0 torchvision torchaudio \
+    echo "[INFO] Installing PyTorch 2.10.0 (cu126, compatible with CUDA driver 12080) ..."
+    ${PIP} install torch==2.10.0 torchvision torchaudio \
         --index-url https://download.pytorch.org/whl/cu126
 
     echo "[INFO] Installing ms-swift 4.1.0.dev0 from GitHub main ..."
@@ -99,15 +99,17 @@ setup_swift_train() {
     echo "[INFO] Installing DeepSpeed ..."
     ${PIP} install deepspeed
 
-    # vllm 0.10.2: fixes Qwen3MoE FusedMoE _load_w2 bug from 0.8.5,
-    # satisfies trl 0.28.0's requirement (vllm>=0.10.2,<0.13.0),
-    # and supports swift rollout for server-mode GRPO.
-    echo "[INFO] Installing vLLM 0.10.2 (torch 2.8.0 compatible, Qwen3MoE fix) ..."
-    ${PIP} install "vllm==0.10.2"
-
-    # Pin AFTER vllm to ensure vllm's deps don't override these versions.
-    echo "[INFO] Pinning transformers + trl (verified working combo) ..."
+    # Pin AFTER ms-swift to ensure consistent versions.
+    echo "[INFO] Pinning transformers + trl ..."
     ${PIP} install "transformers==4.57.6" "trl==0.28.0"
+
+    # vllm 0.19.0: first release with the complete FusedMoE._load_w2 fix
+    # for Qwen3-30B-A3B TP>1 narrow() crash (PR #37010, merged Mar 31 2026).
+    # NOTE: v0.8.5 and v0.10.2 both crash; v0.15.1-v0.18.1 have only a
+    # partial ndim>0 guard (PR #33173) that does NOT fix dim-size-1 scales.
+    # trl 0.28.0 caps vllm<0.13.0 — install vllm LAST to override.
+    echo "[INFO] Installing vLLM 0.19.0 (Qwen3MoE FusedMoE._load_w2 TP fix) ..."
+    ${PIP} install "vllm==0.19.0"
 
     echo "[INFO] Installing bitsandbytes for QLoRA ..."
     ${PIP} install bitsandbytes
