@@ -342,6 +342,45 @@ preflight 脚本会在启动时估算并输出风险警告。
 
 ---
 
+## 2026-04-04: DPO Format-Preference 训练 OOM 排查与修复
+
+### 背景
+GRPO 在 Qwen3-30B-A3B (MoE) 上因 ZeRO-3 allgather 死锁无法跑通，改用 DPO format-preference 训练替代。
+
+### DPO 数据管线已完成
+- `prepare_dpo_format.py`：12 种 corruption 策略合成格式错误的 rejected（missing tags, think violations, structural violations, length violations, repetition）
+- `combine_dpo_data.py`：合并 format DPO (~1800 条) + quality DPO (74 条)
+- 输出：`dpo_combined_train_cot.jsonl` + `dpo_combined_eval_cot.jsonl`
+- 每条 pair 用 `reward_fn()` 交叉验证 chosen reward > rejected reward
+
+### ms-swift API 变更
+- `--train_type` 在新版 ms-swift 中已改为 `--tuner_type`
+- 报错：`ValueError: remaining_argv: ['--train_type', 'lora']`
+- 修复：所有脚本统一改为 `--tuner_type lora`
+
+### 清理 14b/27b 脚本
+- 已删除 10 个不再使用的 14b/27b 训练/评估/推理脚本
+
+### DPO 训练 OOM
+- **环境**：8×80G GPU
+- **症状**：`torch.OutOfMemoryError: CUDA out of memory`，即使停掉其他 infer 进程（释放 ~10G/卡）仍然 OOM
+- **原因分析**：
+  - `ds_zero3.json` 原始配置没有 optimizer offload，optimizer states 全在 GPU 上
+  - 原始 DPO 只有 74 条数据能跑通，但当前 ~1900 条数据量不是 OOM 直接原因（逐 batch 处理）
+  - DPO 需要同时保留 reference model + policy model 的 logprobs，显存需求比 SFT 大
+  - `max_length=8192` + DPO 双模型 forward 是显存峰值的主要来源
+- **修复**：在 `ds_zero3.json` 中添加 `offload_optimizer`：
+  ```json
+  "offload_optimizer": {
+    "device": "cpu",
+    "pin_memory": true
+  }
+  ```
+- **关于 max_length**：曾考虑降到 4096，但统计 quality DPO 数据字符长度（mean=10711, p90=15742）后发现会截断大量样本，保持 8192
+- **状态**：已提交推送（commit `2239a95`），待在训练机上重试
+
+---
+
 ## 待办
 1. ~~在新机器上执行环境升级（0.10.2）~~（已完成但 bug 未修复）
 2. 在新机器上重建环境：vllm 0.19.0 + torch 2.10.0+cu126
