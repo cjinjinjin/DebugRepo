@@ -79,10 +79,8 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}"
 export NPROC_PER_NODE="${NPROC_PER_NODE:-8}"
 export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
-# PyTorch NCCL watchdog timeout (ms) — generation on 30B MoE can be very slow
+# PyTorch NCCL watchdog timeout — generation on 30B MoE can take 10+ min per rank
 export TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC="${TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC:-7200}"
-export NCCL_TIMEOUT="${NCCL_TIMEOUT:-7200}"
-export TORCH_NCCL_BLOCKING_WAIT="${TORCH_NCCL_BLOCKING_WAIT:-1}"
 export TORCH_NCCL_ASYNC_ERROR_HANDLING="${TORCH_NCCL_ASYNC_ERROR_HANDLING:-1}"
 
 echo "GRPO_PRESET=${GRPO_PRESET}"
@@ -159,6 +157,9 @@ if [[ "${USE_VLLM}" == "true" ]]; then
         fi
         if [[ -n "${VLLM_SERVER_PORT:-}" ]]; then
             cmd+=(--vllm_server_port "${VLLM_SERVER_PORT}")
+        fi
+        if [[ -n "${VLLM_SERVER_TIMEOUT:-}" ]]; then
+            cmd+=(--vllm_server_timeout "${VLLM_SERVER_TIMEOUT}")
         fi
     fi
 else
