@@ -5,7 +5,7 @@ fi
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EXPERIMENT_NAME="grpo_stable_zero2_qlora_len4096_comp1024_gen2"
+EXPERIMENT_NAME="grpo_stable_zero2_qlora_len2048_comp512_gen2"
 export SFT_ADAPTER=""
 
 export GRPO_PRESET="stable_grpo_zero2_qlora"
@@ -15,8 +15,8 @@ export OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Te
 export DEEPSPEED_CONFIG="${SCRIPT_DIR}/ds_zero2.json"
 export REWARD_PLUGIN="${SCRIPT_DIR}/reward_grpo.py"
 
-export MAX_LENGTH="4096"
-export MAX_COMPLETION_LENGTH="1024"
+export MAX_LENGTH="2048"
+export MAX_COMPLETION_LENGTH="512"
 export NUM_GENERATIONS="2"
 export PER_DEVICE_TRAIN_BATCH_SIZE="1"
 export GRADIENT_ACCUMULATION_STEPS="8"
