@@ -1,7 +1,6 @@
 #!/bin/bash
 
-# TODO: Update SFT_ADAPTER to the best SFT checkpoint path after SFT training completes
-SFT_ADAPTER="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_14b_sft_lora_cot_v1/<REPLACE_WITH_BEST_CHECKPOINT>"
+SFT_ADAPTER="${SFT_ADAPTER:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_14b_sft_lora_cot_v1/best_checkpoint}"
 MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-14B"
 DATA_DIR="./data"
 OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_14b_dpo_lora_cot_v1"

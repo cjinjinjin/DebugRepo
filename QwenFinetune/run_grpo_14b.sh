@@ -9,8 +9,7 @@ EXPERIMENT_NAME="grpo_14b_zero2_bf16_len2048_comp2048_gen2"
 export SFT_ADAPTER=""
 
 export GRPO_PRESET="stable_grpo_zero2_qlora"
-# TODO: Update this path after SFT training completes and checkpoint is merged
-export MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_14b_sft_lora_cot_v1/<REPLACE_WITH_MERGED_MODEL_PATH>"
+export MODEL_PATH="${MODEL_PATH:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_14b_sft_lora_cot_v1/merged_model}"
 export DATA_DIR="${SCRIPT_DIR}/data"
 export OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_14b_grpo_experiments/${EXPERIMENT_NAME}"
 export DEEPSPEED_CONFIG="zero2"
