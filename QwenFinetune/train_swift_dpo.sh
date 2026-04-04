@@ -18,7 +18,7 @@ swift rlhf \
     --adapters      ${SFT_ADAPTER} \
     --dataset       ${DATA_DIR}/dpo_combined_train_cot.jsonl \
     --val_dataset   ${DATA_DIR}/dpo_combined_eval_cot.jsonl \
-    --train_type    lora \
+    --tuner_type    lora \
     --lora_rank     64 \
     --lora_alpha    128 \
     --num_train_epochs            5 \

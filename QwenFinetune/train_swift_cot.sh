@@ -15,7 +15,7 @@ swift sft \
     --model        ${MODEL_PATH} \
     --dataset      ${DATA_DIR}/sft_train_cot.jsonl \
     --val_dataset  ${DATA_DIR}/sft_eval_cot.jsonl \
-    --train_type   lora \
+    --tuner_type   lora \
     --lora_rank    64 \
     --lora_alpha   128 \
     --num_train_epochs            10 \
