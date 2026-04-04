@@ -35,6 +35,16 @@ import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 
+# Regex pattern for constrained decoding: enforces <think>...</think> + 5 <PromptN> tags
+CONSTRAINED_PATTERN = (
+    r"<think>[\s\S]{10,3000}</think>\s*"
+    r"<Prompt1>[\s\S]{10,1500}</Prompt1>\s*"
+    r"<Prompt2>[\s\S]{10,1500}</Prompt2>\s*"
+    r"<Prompt3>[\s\S]{10,1500}</Prompt3>\s*"
+    r"<Prompt4>[\s\S]{10,1500}</Prompt4>\s*"
+    r"<Prompt5>[\s\S]{10,1500}</Prompt5>"
+)
+
 # Import the system prompt used during training
 SYSTEM_PROMPT = """You are an expert Ad Creative Director and Senior AI Image Prompt Engineer, specialized in high-performing Native Advertisement visuals.
 
@@ -73,9 +83,12 @@ class QwenPromptGenerator:
         load_in_4bit: bool = False,
         load_in_8bit: bool = False,
         torch_dtype=torch.bfloat16,
+        constrained: bool = False,
     ):
         self.adapter_path = adapter_path
         self.torch_dtype = torch_dtype
+        self.constrained = constrained
+        self._logits_processor = None
 
         # Determine where to load base model from
         if base_model:
@@ -130,6 +143,26 @@ class QwenPromptGenerator:
 
         self.model.eval()
         print("Model ready.")
+
+        if self.constrained:
+            self._init_constrained_decoding()
+
+    def _init_constrained_decoding(self):
+        """Initialize outlines regex-guided logits processor."""
+        try:
+            from outlines.processors import RegexLogitsProcessor
+            print(f"Initializing constrained decoding with outlines ...")
+            self._logits_processor = RegexLogitsProcessor(
+                CONSTRAINED_PATTERN, tokenizer=self.tokenizer
+            )
+            print("Constrained decoding ready.")
+        except ImportError:
+            print(
+                "WARNING: outlines not installed. Install with: pip install outlines\n"
+                "Falling back to unconstrained generation.",
+                file=sys.stderr,
+            )
+            self.constrained = False
 
     def build_input(self, lp_fields: dict) -> str:
         """Build the chat-template formatted input string."""
@@ -193,7 +226,11 @@ class QwenPromptGenerator:
             eos_token_id=self.tokenizer.eos_token_id,
         )
 
-        output_ids = self.model.generate(**inputs, generation_config=gen_config)
+        generate_kwargs = {**inputs, "generation_config": gen_config}
+        if self.constrained and self._logits_processor is not None:
+            generate_kwargs["logits_processor"] = [self._logits_processor]
+
+        output_ids = self.model.generate(**generate_kwargs)
         # Decode only the newly generated tokens
         prompt_len = inputs["input_ids"].shape[1]
         results = []
@@ -238,7 +275,10 @@ class QwenPromptGenerator:
             )
 
             with torch.inference_mode():
-                output_ids = self.model.generate(**enc, generation_config=gen_config)
+                generate_kwargs = {**enc, "generation_config": gen_config}
+                if self.constrained and self._logits_processor is not None:
+                    generate_kwargs["logits_processor"] = [self._logits_processor]
+                output_ids = self.model.generate(**generate_kwargs)
 
             prompt_len = enc["input_ids"].shape[1]
             for j, seq_ids in enumerate(output_ids):
@@ -338,6 +378,9 @@ def parse_args():
     p.add_argument("--temperature", type=float, default=0.7)
     p.add_argument("--top_p", type=float, default=0.9)
     p.add_argument("--do_sample", action="store_true", default=True)
+    # Constrained decoding
+    p.add_argument("--constrained", action="store_true", default=False,
+                   help="Enable regex-constrained decoding (requires outlines)")
     # Merge mode
     p.add_argument("--merge_and_save", default="",
                    help="If set, merge adapter into base model and save to this path")
@@ -361,6 +404,7 @@ def main():
         base_model=args.base_model or None,
         load_in_4bit=args.load_in_4bit,
         load_in_8bit=args.load_in_8bit,
+        constrained=args.constrained,
     )
     gen_kwargs = {
         "max_new_tokens": args.max_new_tokens,

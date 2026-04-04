@@ -3,7 +3,7 @@
 #
 # Creates two envs:
 #   vllm_infer  — for batch inference  (torch 2.5.1 + vllm 0.8.5 + ms-swift)
-#   swift_train — for LoRA fine-tuning (torch 2.6.0 + deepspeed + ms-swift)
+#   swift_train — for GRPO/LoRA training (torch 2.8.0+cu126 + vllm 0.10.2 + deepspeed + ms-swift)
 #
 # Usage:
 #   bash setup_envs.sh              # setup both envs
@@ -66,6 +66,9 @@ setup_vllm_infer() {
     echo "[INFO] Installing vLLM 0.8.5 (pinned after ms-swift to avoid override) ..."
     ${PIP} install "vllm==0.8.5"
 
+    echo "[INFO] Installing outlines for constrained decoding ..."
+    ${PIP} install outlines
+
     echo "[INFO] Verifying ..."
     ${CONDA_ENVS_ROOT}/${ENV}/bin/python3.10 -c \
         "import torch, vllm, swift; print('torch:', torch.__version__, '| vllm:', vllm.__version__, '| swift:', swift.__version__)"
@@ -81,14 +84,14 @@ setup_swift_train() {
     echo ""
     echo "============================================"
     echo "Setting up: ${ENV}"
-    echo "  torch 2.6.0 (cu124) | deepspeed | ms-swift 4.1.0.dev0 (GitHub) | trl 0.28.0 (no vllm)"
+    echo "  torch 2.8.0 (cu126) | vllm 0.10.2 | deepspeed | ms-swift 4.1.0.dev0 (GitHub) | trl 0.28.0"
     echo "============================================"
 
     conda create -y -n "${ENV}" python=3.10
 
-    echo "[INFO] Installing PyTorch 2.6.0 (cu124, compatible with driver 12080) ..."
-    ${PIP} install torch==2.6.0 torchvision torchaudio \
-        --index-url https://download.pytorch.org/whl/cu124
+    echo "[INFO] Installing PyTorch 2.8.0 (cu126, compatible with CUDA driver 12080) ..."
+    ${PIP} install torch==2.8.0 torchvision torchaudio \
+        --index-url https://download.pytorch.org/whl/cu126
 
     echo "[INFO] Installing ms-swift 4.1.0.dev0 from GitHub main ..."
     ${PIP} install "git+https://github.com/modelscope/ms-swift.git"
@@ -96,12 +99,11 @@ setup_swift_train() {
     echo "[INFO] Installing DeepSpeed ..."
     ${PIP} install deepspeed
 
-    # vllm 0.8.5 installed ONLY to satisfy swift's hard import chain
-    # (grpo_trainer → rollout_mixin → multi_turn → GRPOVllmEngine → import vllm).
-    # We don't actually use vllm (USE_VLLM=false).
-    # vllm 0.8.5 requires torch 2.6.0 + cu124, same as our pin — no conflict.
-    echo "[INFO] Installing vLLM 0.8.5 (import-only, torch 2.6.0 compatible) ..."
-    ${PIP} install "vllm==0.8.5"
+    # vllm 0.10.2: fixes Qwen3MoE FusedMoE _load_w2 bug from 0.8.5,
+    # satisfies trl 0.28.0's requirement (vllm>=0.10.2,<0.13.0),
+    # and supports swift rollout for server-mode GRPO.
+    echo "[INFO] Installing vLLM 0.10.2 (torch 2.8.0 compatible, Qwen3MoE fix) ..."
+    ${PIP} install "vllm==0.10.2"
 
     # Pin AFTER vllm to ensure vllm's deps don't override these versions.
     echo "[INFO] Pinning transformers + trl (verified working combo) ..."

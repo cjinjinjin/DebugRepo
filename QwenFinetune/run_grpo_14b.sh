@@ -1,0 +1,47 @@
+#!/bin/sh
+if [ -z "${BASH_VERSION:-}" ]; then
+	exec bash "$0" "$@"
+fi
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+EXPERIMENT_NAME="grpo_14b_zero2_bf16_len2048_comp2048_gen2"
+export SFT_ADAPTER=""
+
+export GRPO_PRESET="stable_grpo_zero2_qlora"
+# TODO: Update this path after SFT training completes and checkpoint is merged
+export MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_14b_sft_lora_cot_v1/<REPLACE_WITH_MERGED_MODEL_PATH>"
+export DATA_DIR="${SCRIPT_DIR}/data"
+export OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_14b_grpo_experiments/${EXPERIMENT_NAME}"
+export DEEPSPEED_CONFIG="zero2"
+export REWARD_PLUGIN="${SCRIPT_DIR}/reward_grpo.py"
+
+# 14B dense model fits comfortably in BF16, no need for QLoRA
+export LOAD_IN_4BIT="false"
+
+export MAX_LENGTH="2048"
+export MAX_COMPLETION_LENGTH="2048"
+export NUM_GENERATIONS="2"
+export PER_DEVICE_TRAIN_BATCH_SIZE="1"
+export GRADIENT_ACCUMULATION_STEPS="8"
+export NUM_TRAIN_EPOCHS="1"
+export LEARNING_RATE="5e-6"
+export SAVE_STEPS="10"
+export LOGGING_STEPS="5"
+export LORA_RANK="64"
+export LORA_ALPHA="128"
+
+export USE_VLLM="false"
+export CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
+export NPROC_PER_NODE="8"
+
+# Ensure no stale vllm env vars leak into swift's arg parser
+unset VLLM_MODE
+unset VLLM_SERVER_HOST
+unset VLLM_SERVER_PORT
+unset VLLM_SERVER_BASE_URL
+
+echo "EXPERIMENT_NAME=${EXPERIMENT_NAME}"
+echo "OUTPUT_DIR=${OUTPUT_DIR}"
+
+bash "${SCRIPT_DIR}/train_swift_grpo.sh"

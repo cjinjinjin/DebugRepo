@@ -70,15 +70,57 @@
 - **修复**：`train_swift_grpo.sh` 里加 `--top_k 50 --temperature 0.7`
 
 ### 10. ZeRO-3 + BF16 + 无 vllm + merged model + top_k=50
-- **状态**：✅ 跑通（能完成完整 step），但速度不可接受
-- **显存**：每卡 ~69.3GB / 80GB，8 卡全部正常，NCCL Init COMPLETE ✓
-- **Step 1 数据**：
-  - step_time: 6387s（~1.8小时/step），34 steps 预计 **4天21小时**
-  - reward: 0.091（低于 SFT baseline 0.211，step 1 正常）
-  - completions/clipped_ratio: 1.0 —— 所有生成全被截断到 MAX_COMPLETION_LENGTH=512
-  - kl: 0.0 —— 异常，policy 与 reference model 完全一致，GRPO 未在学习
-- **结论**：正确性待验证（kl=0.0 异常），速度不可用（4天21小时），必须解决 generation 加速问题
+- **状态**：✅ 跑通（已运行 10/34 steps，checkpoint-10 已保存），但存在严重的训练效果问题
+- **显存**：每卡 ~69.3GB（step 1-2）→ 70.07GB（step 3+），8 卡全部正常，NCCL Init COMPLETE ✓
 - **对应脚本**：`run_grpo_stable_canary.sh`
+- **训练曲线（10 steps 完整数据）**：
+
+  | Step | Reward | Loss | KL | clipped_ratio | frac_reward_zero_std | step_time(s) |
+  |------|--------|------|----|---------------|----------------------|-------------|
+  | 1 | 0.0911 | -0.0881 | 0.0 | 1.0 | 0.03125 | 6388 |
+  | 2 | 0.0704 | -0.1090 | 0.0 | 1.0 | 0.0625 | 6248 |
+  | 3 | 0.0394 | -0.0840 | 0.0093 | 1.0 | 0.09375 | 6148 |
+  | 4 | 0.0994 | 0.0051 | 0.0079 | 1.0 | 0.03125 | 6081 |
+  | 5 | 0.0772 | -0.1058 | 0.0076 | 1.0 | 0.0625 | 6120 |
+  | 6 | 0.0839 | -0.0387 | 0.0083 | 0.984375 | 0.03125 | 6090 |
+  | 7 | 0.0621 | 0.1919 | 0.0079 | 1.0 | 0.046875 | 6141 |
+  | 8 | 0.0659 | 0.0383 | 0.0078 | 1.0 | 0.109375 | 6145 |
+  | 9 | 0.0890 | -0.0398 | 0.0082 | 1.0 | 0.09375 | 6223 |
+  | 10 | 0.1044 | 0.0709 | 0.0075 | 1.0 | 0.03125 | 6163 |
+
+- **问题 1：Reward 无上升趋势**：
+  - 10 步 reward 在 0.039~0.104 之间波动，无明确上升趋势（均值 ~0.075）
+  - 远低于 SFT baseline（0.211），经过 10 步训练仍未恢复到 baseline 水平
+  - GRPO 训练正常情况下应该看到 reward 逐步上升
+
+- **问题 2：completions/clipped_ratio ≈ 1.0（根因）**：
+  - 几乎所有 step 的 clipped_ratio = 1.0（仅 step 6 为 0.984），mean_length = max_length = 512
+  - **说明模型在 512 tokens 内根本无法完成回复，所有生成均被截断**
+  - 截断的不完整回复无法获得合理的 format/quality reward
+  - reward signal 噪声大、信息量低，模型无法学到"好回复"的信号
+  - 这是 reward 不涨的根本原因
+
+- **问题 3：KL 极低且平坦**：
+  - Step 1-2 KL=0.0（policy 与 reference 完全一致）
+  - Step 3+ KL 稳定在 ~0.008，几乎不增长
+  - 说明策略更新幅度极小，模型几乎没有从 reference policy 偏移
+
+- **问题 4：Loss 剧烈波动**：
+  - Loss 从 -0.109 到 +0.192，正负交替，说明训练信号非常嘈杂
+  - 与问题 2 一致：截断回复给出的 reward 方差大但信息量低
+
+- **问题 5：frac_reward_zero_std 偶尔偏高**：
+  - Step 8 达到 0.109375（~11% 的 prompt 所有 generation 获得相同 reward）
+  - 当一个 prompt 的所有 generation 都被截断且 reward 相同时，该 prompt 对梯度无贡献（GRPO 依赖 group 内 reward 方差来学习）
+
+- **速度**：~6100-6400s/step（~1.7h/step），34 steps 预计 **4天21小时**
+- **已保存 checkpoint**：`checkpoint-10`（`/vc_data/.../grpo_zero2_qlora_novllm_canary_len2048_comp512_gen2/v3-20260403-014147/checkpoint-10`）
+
+- **修复方案**：将 `MAX_COMPLETION_LENGTH` 从 512 提高到 1024
+  - `run_grpo_stable_canary.sh` 已更新：`MAX_COMPLETION_LENGTH="1024"`，实验名改为 `..._comp1024_gen2`
+  - 期望：clipped_ratio 显著下降，模型能生成完整回复，reward signal 更干净，训练出现上升趋势
+  - 风险：completion 变长会增加 generation 时间和显存，step_time 可能从 ~6100s 增加到 ~8000-10000s
+  - 如果 1024 仍不够（clipped_ratio 仍很高），考虑提高到 2048 并相应增大 MAX_LENGTH
 
 ### 11. ZeRO-2 + QLoRA（第二次，修复 adapter 加载问题后）
 - **状态**：待测试
@@ -180,6 +222,7 @@ preflight 脚本会在启动时估算并输出风险警告。
 | `train_swift_grpo.sh` | 加 preflight 参数估算脚本（训练前自动运行，估算 ZeRO-2 optimizer state 风险）|
 | `run_grpo_stable_scaleup.sh` | 清除硬编码 SFT adapter 路径；MODEL_PATH 改为 merged model；补充 LORA_RANK/LORA_ALPHA |
 | `run_grpo_stable_canary.sh` | `SFT_ADAPTER=""`，MODEL_PATH 指向 merged model，DEEPSPEED_CONFIG=zero3 |
+| `run_grpo_stable_canary.sh` | `MAX_COMPLETION_LENGTH` 从 512 提高到 1024；实验名改为 `..._comp1024_gen2`（2026-04-04，修复 clipped_ratio=1.0 问题）|
 | `setup_envs.sh` | 新增 swift_train 环境重建脚本：ms-swift 4.1.0.dev0 + torch 2.8.0 + vllm 0.19.0 + trl 0.28.0 + transformers 4.57.6 |
 
 ### 环境重建记录（2026-04-02）
@@ -191,10 +234,89 @@ preflight 脚本会在启动时估算并输出风险警告。
 
 ---
 
+### 15. ZeRO-2 + QLoRA + 无 vllm — NCCL ALLREDUCE 超时（2026-04-03）
+- **配置**：`run_grpo_stable_scaleup.sh`，ZeRO-2 + QLoRA 4bit，`USE_VLLM=false`，`MAX_COMPLETION_LENGTH=1024`
+- **现象**：训练启动正常，preflight 通过，但第一个 step 的 generation 阶段 NCCL ALLREDUCE 在 600s 超时
+- **错误**：`WorkNCCL(SeqNum=1, OpType=ALLREDUCE, Timeout(ms)=600000)` + `NCCL operation timed out after 600000 ms`
+- **根因分析（深入研究后确认）**：
+  - **Generation 非同步问题**：8 个 GPU 独立运行 `model.generate()`，各自随机采样（top_k=50, temperature=0.7），产生不同长度的输出
+  - 快的 GPU 先完成 generation，进入 gradient allreduce 阶段等待；慢的 GPU 还在 generate，超过 600s 默认超时
+  - 这不是 allreduce 本身的问题，而是 generation 耗时差异导致的等待超时
+  - BNB 4bit 反量化比 BF16 慢 2-3x，加剧了 generation 时间
+  - ms-swift issue #6029 和 trl issue #3119 确认这是 GRPO + 大模型的已知问题
+- **修复**：
+  - 添加 `--ddp_timeout 7200` 到 swift 命令（HuggingFace Trainer 级别的 NCCL 超时）
+  - 设置 `TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC=7200`（PyTorch watchdog 超时）
+  - 设置 `TORCH_NCCL_ASYNC_ERROR_HANDLING=1`（不能与 `TORCH_NCCL_BLOCKING_WAIT` 共用）
+  - 降低 `MAX_COMPLETION_LENGTH` 从 1024 到 512 减少 generation 时间差异
+- **重要发现**：`TORCH_NCCL_BLOCKING_WAIT` 和 `TORCH_NCCL_ASYNC_ERROR_HANDLING` 在某些 PyTorch 版本中互斥
+- **结论**：Plan B（ZeRO-2 + QLoRA + 无 vllm）理论上可跑通，但每 step ~30-60 分钟，作为验证方案可用；需要 Plan A 加速
+
+### 16. VLLM_MODE 环境变量泄露导致 colocate 模式误启动（2026-04-03）
+- **现象**：`run_grpo_stable_scaleup.sh` 设了 `USE_VLLM=false`，但 debug 日志显示 `--use_vllm true --vllm_mode colocate`
+- **根因**：
+  - `train_swift_grpo.sh` 的 preset `stable_grpo_zero2_qlora` 默认 `VLLM_MODE_DEFAULT="colocate"`
+  - VLLM_MODE 被设置后传给 swift 命令行，swift 忽略了 `USE_VLLM=false` 而读取了 `VLLM_MODE`
+  - 此外 shell 环境可能残留旧的 `export USE_VLLM=true`，覆盖了默认值
+- **修复**：
+  1. `run_grpo_stable_scaleup.sh` 显式 `export USE_VLLM="false"` 和 `unset VLLM_MODE/VLLM_SERVER_*`
+  2. `train_swift_grpo.sh` 在 `USE_VLLM=false` 分支添加 VLLM_* 环境变量清除逻辑
+- **教训**：swift 会读取 VLLM_* 环境变量自行初始化，即使命令行传了 `--use_vllm false`
+
+### 17. vLLM 0.8.5 FusedMoE `_load_w2` bug — Plan A server 模式失败（2026-04-03，新机器）
+- **配置**：Plan A — `start_rollout_server.sh`（GPUs 0,1, TP=2）+ `run_grpo_server_mode.sh`（GPUs 2-7）
+- **Server 端错误**：
+  ```
+  IndexError: start (0) + length (384) exceeds dimension size (1)
+  ```
+  发生在 `vllm/model_executor/layers/fused_moe/layer.py` 的 `FusedMoE._load_w2` 方法
+- **根因**：vLLM 0.8.5 的 `_load_w2` 对 Qwen3MoE 的 expert weight scale tensor 调用 `narrow()`，但 scale tensor 维度为 1（未分片），`narrow(0, 384)` 越界
+- **Trainer 端连锁错误**：server crash 后 trainer 侧 NCCL ALLGATHER 等待权重同步，7200s 超时
+  ```
+  WorkNCCL(SeqNum=19, OpType=ALLGATHER, Timeout(ms)=7200000)
+  ```
+- **修复方案**：升级 vllm 到 0.10.2+（已确认 v0.9.0+ 修复了此 bug）
+- **版本约束发现**：
+  - trl 0.28.0 要求 `vllm>=0.10.2,<0.13.0`，所以 vllm 0.9.2 不满足
+  - vllm 0.10.2 需要 torch 2.8.0，torch 2.8.0+cu126 可用（CUDA driver 12080 兼容）
+  - 最终确定升级路径：**vllm 0.8.5 → 0.10.2, torch 2.6.0 → 2.8.0+cu126**
+
+### 两步走策略确立（2026-04-03）
+- **Plan B（保底，原机器）**：ZeRO-2 + QLoRA + `USE_VLLM=false`，超时 7200s，`MAX_COMPLETION_LENGTH=512`
+  - 脚本：`run_grpo_stable_scaleup.sh`
+  - 预计速度：~30-60 分钟/step，慢但能验证训练逻辑正确性
+- **Plan A（目标，新机器）**：外部 vLLM server（TP=2, GPUs 0-1）+ ZeRO-2 + QLoRA 训练（GPUs 2-7）
+  - 脚本：`start_rollout_server.sh` + `run_grpo_server_mode.sh`
+  - 预计速度：generation 快 10-50x
+  - **阻塞项**：vLLM 版本升级（0.8.5 → 0.10.2），已更新 `setup_envs.sh`
+
+---
+
+## 环境修改记录（补充 2026-04-03~04）
+
+| 文件 | 修改内容 |
+|---|---|
+| `train_swift_grpo.sh` | 添加 `--ddp_timeout 7200`；添加 `TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC=7200`；移除 `TORCH_NCCL_BLOCKING_WAIT`；添加 VLLM_* 环境变量清除；添加 server 模式 `--vllm_server_timeout` 透传 |
+| `run_grpo_stable_scaleup.sh` | 添加 `export USE_VLLM="false"`；降低 `MAX_COMPLETION_LENGTH` 到 512；`unset VLLM_MODE/VLLM_SERVER_*`；改实验名 |
+| `run_grpo_server_mode.sh` | **新建**：Plan A trainer 端启动脚本，GPUs 2-7，连接 vLLM server |
+| `start_rollout_server.sh` | **新建**：Plan A vLLM rollout server 启动脚本，`swift rollout`，TP=2 |
+| `ds_zero2.json` | 还原为原始版本（移除临时添加的 `communication_data_type` 和 `comms_config`） |
+| `setup_envs.sh` | swift_train 环境升级：torch 2.6.0+cu124 → 2.8.0+cu126, vllm 0.8.5 → 0.10.2（修复 Qwen3MoE FusedMoE bug，满足 trl>=0.10.2 要求） |
+
+### 环境升级记录（2026-04-04 计划）
+`setup_envs.sh` swift_train 环境第二次升级（尚未执行，待在新机器运行）：
+- **旧版本**：torch 2.6.0+cu124, vllm 0.8.5
+- **新版本**：torch 2.8.0+cu126, vllm 0.10.2
+- **其他不变**：ms-swift 4.1.0.dev0 (GitHub main), deepspeed (latest), trl 0.28.0, transformers 4.57.6, bitsandbytes (latest)
+- **动机**：vllm 0.8.5 的 FusedMoE._load_w2 对 Qwen3MoE TP 不兼容；trl 0.28.0 要求 vllm>=0.10.2
+- **兼容性验证**：torch 2.8.0+cu126 兼容 CUDA driver 12080 ✓；deepspeed 无 torch 上限 ✓；transformers>=2.2 ✓；bitsandbytes>=2.3 ✓
+
+---
+
 ## 待办
-1. 在新环境下重跑 `run_grpo_stable_scaleup.sh`（ms-swift 4.1.0.dev0 可能已修复旧环境的兼容性问题）
-2. 如果仍卡住：先用 Gemini 建议的冒烟测试参数（`MAX_COMPLETION_LENGTH=128`, `GRADIENT_ACCUMULATION_STEPS=1`）验证是否能到 Step 1
-3. 如果冒烟测试也卡：临时设 `LOAD_IN_4BIT=false` + `MAX_COMPLETION_LENGTH=512` 复现 canary 成功路径，逐步恢复参数定位根因
-4. 若 ZeRO-2 OOM：确认是 optimizer state 问题，再加 CPU offload 到 ds_zero2.json
-5. 若成功：对比 GRPO 训后 reward 与 SFT baseline（0.211）
-6. 若需要加速 generation：ms-swift 4.1.0.dev0 可能已修复 vllm server 兼容性，尝试 `USE_VLLM=true` + vllm 0.19.0
+1. ~~在新机器上执行环境升级~~（已完成）
+2. 验证 vllm 0.10.2 + Qwen3MoE TP=2 能否正常启动 `swift rollout`
+3. 重跑 Plan A：`start_rollout_server.sh` + `run_grpo_server_mode.sh`
+4. **重跑方案十（canary）**：`MAX_COMPLETION_LENGTH=1024`，观察 clipped_ratio 是否下降、reward 是否出现上升趋势
+5. 如果 Plan A 仍有问题，在原机器跑 Plan B：`run_grpo_stable_scaleup.sh`（已有超时修复）
+6. 若成功：对比 GRPO 训后 reward 与 SFT baseline（0.211）
