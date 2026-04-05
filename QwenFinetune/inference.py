@@ -155,17 +155,21 @@ class QwenPromptGenerator:
         try:
             import outlines
             from outlines.types import Regex
-            print("Initializing constrained decoding with outlines ...")
-            self._outlines_model = outlines.from_transformers(self.model, self.tokenizer)
-            self._outlines_regex = Regex(CONSTRAINED_PATTERN)
-            print("Constrained decoding ready.")
-        except ImportError:
+        except ImportError as e:
             print(
-                "WARNING: outlines not installed. Install with: pip install 'outlines[transformers]'\n"
+                f"WARNING: outlines import failed: {e}\n"
+                "Install with: pip install 'outlines[transformers]'\n"
                 "Falling back to unconstrained generation.",
                 file=sys.stderr,
             )
             self.constrained = False
+            return
+
+        try:
+            print("Initializing constrained decoding with outlines ...")
+            self._outlines_model = outlines.from_transformers(self.model, self.tokenizer)
+            self._outlines_regex = Regex(CONSTRAINED_PATTERN)
+            print("Constrained decoding ready.")
         except Exception as e:
             print(f"WARNING: outlines init failed: {e}\nFalling back to unconstrained.", file=sys.stderr)
             self.constrained = False
