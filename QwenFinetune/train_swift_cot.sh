@@ -1,7 +1,8 @@
 #!/bin/bash
 
 MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-30B-A3B"
-DATA_DIR="./data"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DATA_DIR="${SCRIPT_DIR}/data"
 OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot_8192_v2"
 
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
