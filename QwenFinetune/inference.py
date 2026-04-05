@@ -90,8 +90,7 @@ class QwenPromptGenerator:
         self.adapter_path = adapter_path
         self.torch_dtype = torch_dtype
         self.constrained = constrained
-        self._outlines_model = None
-        self._outlines_regex = None
+        self._outlines_generator = None
 
         # Determine where to load base model from
         if base_model:
@@ -151,10 +150,10 @@ class QwenPromptGenerator:
             self._init_constrained_decoding()
 
     def _init_constrained_decoding(self):
-        """Initialize outlines model wrapper for regex-constrained generation."""
+        """Initialize outlines regex-constrained generator."""
         try:
-            import outlines
-            from outlines.types import Regex
+            from outlines.models.transformers import Transformers
+            import outlines.generate
         except ImportError as e:
             print(
                 f"WARNING: outlines import failed: {e}\n"
@@ -167,8 +166,10 @@ class QwenPromptGenerator:
 
         try:
             print("Initializing constrained decoding with outlines ...")
-            self._outlines_model = outlines.from_transformers(self.model, self.tokenizer)
-            self._outlines_regex = Regex(CONSTRAINED_PATTERN)
+            outlines_model = Transformers(self.model, self.tokenizer)
+            self._outlines_generator = outlines.generate.regex(
+                outlines_model, CONSTRAINED_PATTERN
+            )
             print("Constrained decoding ready.")
         except Exception as e:
             print(f"WARNING: outlines init failed: {e}\nFalling back to unconstrained.", file=sys.stderr)
@@ -220,18 +221,11 @@ class QwenPromptGenerator:
         """
         input_text = self.build_input(lp_fields)
 
-        if self.constrained and self._outlines_model is not None:
+        if self.constrained and self._outlines_generator is not None:
             # Use outlines constrained generation
             results = []
             for _ in range(num_return_sequences):
-                result = self._outlines_model(
-                    input_text,
-                    output_type=self._outlines_regex,
-                    max_new_tokens=max_new_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                    do_sample=do_sample,
-                )
+                result = self._outlines_generator(input_text, max_tokens=max_new_tokens)
                 results.append(str(result).strip())
             return results
 
@@ -276,18 +270,11 @@ class QwenPromptGenerator:
 
         all_results = []
 
-        if self.constrained and self._outlines_model is not None:
+        if self.constrained and self._outlines_generator is not None:
             # Constrained: generate one-by-one via outlines
             for idx, lp in enumerate(lp_fields_list):
                 input_text = self.build_input(lp)
-                result = self._outlines_model(
-                    input_text,
-                    output_type=self._outlines_regex,
-                    max_new_tokens=max_new_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                    do_sample=do_sample,
-                )
+                result = self._outlines_generator(input_text, max_tokens=max_new_tokens)
                 all_results.append([str(result).strip()])
                 if (idx + 1) % batch_size == 0 or idx + 1 == len(lp_fields_list):
                     print(f"  Processed {idx + 1}/{len(lp_fields_list)}")
