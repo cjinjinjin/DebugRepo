@@ -433,6 +433,33 @@ GRPO 在 Qwen3-30B-A3B (MoE) 上因 ZeRO-3 allgather 死锁无法跑通，改用
 
 ---
 
+## 2026-04-04: DPO Combined 数据集生成完成
+
+### 数据准备流水线执行结果
+- 运行 `python combine_dpo_data.py`，该脚本内部先调用 format DPO 生成，再合并
+- **Format DPO 数据生成**：
+  - 从 833 条 SFT 样本生成 1882 条 format-preference pairs
+  - 9 种 corruption 策略分布均匀（185–226 条/类）
+  - Reward violations（chosen ≤ rejected）：617 条被过滤
+  - 最终 format DPO：train=1700, eval=182
+- **Quality/Refine DPO 数据**（已有）：train=74, eval=8
+- **Combined DPO 数据**：train=1774, eval=190
+  - `dpo_combined_train_cot.jsonl`（1774 条）
+  - `dpo_combined_eval_cot.jsonl`（190 条）
+  - `dataset_stats_dpo_combined.json`
+
+### 数据集组成比例
+| 类型 | Train | Eval | 占比 |
+|------|-------|------|------|
+| Format preference | 1700 | 182 | 95.8% |
+| Quality/Refine preference | 74 | 8 | 4.2% |
+| **Combined** | **1774** | **190** | **100%** |
+
+### 下一步
+- 在训练机上执行 `bash train_swift_dpo.sh`，此前的 OOM 修复和路径修复已就绪
+
+---
+
 ## 待办
 1. ~~在新机器上执行环境升级（0.10.2）~~（已完成但 bug 未修复）
 2. 在新机器上重建环境：vllm 0.19.0 + torch 2.10.0+cu126
