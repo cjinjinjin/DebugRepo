@@ -153,18 +153,21 @@ class QwenPromptGenerator:
         """Initialize outlines regex-guided logits processor with simplified pattern."""
         try:
             from outlines.processors import RegexLogitsProcessor
+            from outlines.models.transformers import TransformerTokenizer
             import signal
 
             def _timeout_handler(signum, frame):
                 raise TimeoutError("FSM compilation timed out")
 
             print("Initializing constrained decoding with outlines ...")
+            # Wrap HF tokenizer with outlines adapter (provides .vocabulary attribute)
+            outlines_tokenizer = TransformerTokenizer(self.tokenizer)
             # Set 120s timeout for FSM compilation
             old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
             signal.alarm(120)
             try:
                 self._logits_processor = RegexLogitsProcessor(
-                    CONSTRAINED_PATTERN, tokenizer=self.tokenizer
+                    CONSTRAINED_PATTERN, tokenizer=outlines_tokenizer
                 )
                 signal.alarm(0)
                 print("Constrained decoding ready.")
