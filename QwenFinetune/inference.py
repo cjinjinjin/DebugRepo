@@ -90,7 +90,8 @@ class QwenPromptGenerator:
         self.adapter_path = adapter_path
         self.torch_dtype = torch_dtype
         self.constrained = constrained
-        self._logits_processor = None
+        self._outlines_model = None
+        self._outlines_regex = None
 
         # Determine where to load base model from
         if base_model:
@@ -150,42 +151,24 @@ class QwenPromptGenerator:
             self._init_constrained_decoding()
 
     def _init_constrained_decoding(self):
-        """Initialize outlines regex-guided logits processor with simplified pattern."""
+        """Initialize outlines model wrapper for regex-constrained generation."""
         try:
-            from outlines.processors import RegexLogitsProcessor
-            from outlines.models.transformers import TransformerTokenizer
-            import signal
-
-            def _timeout_handler(signum, frame):
-                raise TimeoutError("FSM compilation timed out")
-
+            import outlines
+            from outlines.types import Regex
             print("Initializing constrained decoding with outlines ...")
-            # Wrap HF tokenizer with outlines adapter (provides .vocabulary attribute)
-            outlines_tokenizer = TransformerTokenizer(self.tokenizer)
-            # Set 120s timeout for FSM compilation
-            old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
-            signal.alarm(120)
-            try:
-                self._logits_processor = RegexLogitsProcessor(
-                    CONSTRAINED_PATTERN, tokenizer=outlines_tokenizer
-                )
-                signal.alarm(0)
-                print("Constrained decoding ready.")
-            except TimeoutError:
-                signal.alarm(0)
-                print("WARNING: FSM compilation timed out (>120s). Falling back to unconstrained.", file=sys.stderr)
-                self.constrained = False
-                self._logits_processor = None
-            finally:
-                signal.signal(signal.SIGALRM, old_handler)
+            self._outlines_model = outlines.from_transformers(self.model, self.tokenizer)
+            self._outlines_regex = Regex(CONSTRAINED_PATTERN)
+            print("Constrained decoding ready.")
         except ImportError:
             print(
-                "WARNING: outlines not installed. Install with: pip install outlines\n"
+                "WARNING: outlines not installed. Install with: pip install 'outlines[transformers]'\n"
                 "Falling back to unconstrained generation.",
                 file=sys.stderr,
             )
             self.constrained = False
-            self._logits_processor = None
+        except Exception as e:
+            print(f"WARNING: outlines init failed: {e}\nFalling back to unconstrained.", file=sys.stderr)
+            self.constrained = False
 
     def build_input(self, lp_fields: dict) -> str:
         """Build the chat-template formatted input string."""
@@ -232,6 +215,23 @@ class QwenPromptGenerator:
         Returns a list of raw output strings (one per return sequence).
         """
         input_text = self.build_input(lp_fields)
+
+        if self.constrained and self._outlines_model is not None:
+            # Use outlines constrained generation
+            results = []
+            for _ in range(num_return_sequences):
+                result = self._outlines_model(
+                    input_text,
+                    output_type=self._outlines_regex,
+                    max_new_tokens=max_new_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    do_sample=do_sample,
+                )
+                results.append(str(result).strip())
+            return results
+
+        # Unconstrained generation via HF generate()
         inputs = self.tokenizer(
             input_text,
             return_tensors="pt",
@@ -249,11 +249,7 @@ class QwenPromptGenerator:
             eos_token_id=self.tokenizer.eos_token_id,
         )
 
-        generate_kwargs = {**inputs, "generation_config": gen_config}
-        if self.constrained and self._logits_processor is not None:
-            generate_kwargs["logits_processor"] = [self._logits_processor]
-
-        output_ids = self.model.generate(**generate_kwargs)
+        output_ids = self.model.generate(**inputs, generation_config=gen_config)
         prompt_len = inputs["input_ids"].shape[1]
         results = []
         for seq_ids in output_ids:
@@ -269,44 +265,61 @@ class QwenPromptGenerator:
         **gen_kwargs,
     ) -> list[list[str]]:
         """Batch inference over a list of LP field dicts."""
+        max_new_tokens = gen_kwargs.get("max_new_tokens", 1024)
+        temperature = gen_kwargs.get("temperature", 0.7)
+        top_p = gen_kwargs.get("top_p", 0.9)
+        do_sample = gen_kwargs.get("do_sample", True)
+
         all_results = []
-        for i in range(0, len(lp_fields_list), batch_size):
-            batch = lp_fields_list[i: i + batch_size]
-            input_texts = [self.build_input(lp) for lp in batch]
 
-            enc = self.tokenizer(
-                input_texts,
-                return_tensors="pt",
-                padding=True,
-                truncation=True,
-                max_length=1536,
-            ).to(self.model.device)
+        if self.constrained and self._outlines_model is not None:
+            # Constrained: generate one-by-one via outlines
+            for idx, lp in enumerate(lp_fields_list):
+                input_text = self.build_input(lp)
+                result = self._outlines_model(
+                    input_text,
+                    output_type=self._outlines_regex,
+                    max_new_tokens=max_new_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    do_sample=do_sample,
+                )
+                all_results.append([str(result).strip()])
+                if (idx + 1) % batch_size == 0 or idx + 1 == len(lp_fields_list):
+                    print(f"  Processed {idx + 1}/{len(lp_fields_list)}")
+        else:
+            # Unconstrained: use HF generate() with batching
+            for i in range(0, len(lp_fields_list), batch_size):
+                batch = lp_fields_list[i: i + batch_size]
+                input_texts = [self.build_input(lp) for lp in batch]
 
-            max_new_tokens = gen_kwargs.get("max_new_tokens", 1024)
-            temperature = gen_kwargs.get("temperature", 0.7)
-            top_p = gen_kwargs.get("top_p", 0.9)
-            do_sample = gen_kwargs.get("do_sample", True)
+                enc = self.tokenizer(
+                    input_texts,
+                    return_tensors="pt",
+                    padding=True,
+                    truncation=True,
+                    max_length=1536,
+                ).to(self.model.device)
 
-            gen_config = GenerationConfig(
-                max_new_tokens=max_new_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                do_sample=do_sample,
-                pad_token_id=self.tokenizer.pad_token_id,
-                eos_token_id=self.tokenizer.eos_token_id,
-            )
+                gen_config = GenerationConfig(
+                    max_new_tokens=max_new_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    do_sample=do_sample,
+                    pad_token_id=self.tokenizer.pad_token_id,
+                    eos_token_id=self.tokenizer.eos_token_id,
+                )
 
-            with torch.inference_mode():
-                generate_kwargs = {**enc, "generation_config": gen_config}
-                output_ids = self.model.generate(**generate_kwargs)
+                with torch.inference_mode():
+                    output_ids = self.model.generate(**enc, generation_config=gen_config)
 
-            prompt_len = enc["input_ids"].shape[1]
-            for j, seq_ids in enumerate(output_ids):
-                new_ids = seq_ids[prompt_len:]
-                text = self.tokenizer.decode(new_ids, skip_special_tokens=True)
-                all_results.append([text.strip()])
+                prompt_len = enc["input_ids"].shape[1]
+                for j, seq_ids in enumerate(output_ids):
+                    new_ids = seq_ids[prompt_len:]
+                    text = self.tokenizer.decode(new_ids, skip_special_tokens=True)
+                    all_results.append([text.strip()])
 
-            print(f"  Processed {min(i + batch_size, len(lp_fields_list))}/{len(lp_fields_list)}")
+                print(f"  Processed {min(i + batch_size, len(lp_fields_list))}/{len(lp_fields_list)}")
 
         return all_results
 

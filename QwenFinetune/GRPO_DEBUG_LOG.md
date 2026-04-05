@@ -460,6 +460,42 @@ GRPO 在 Qwen3-30B-A3B (MoE) 上因 ZeRO-3 allgather 死锁无法跑通，改用
 
 ---
 
+## 2026-04-04: Constrained Decoding 迁移到 outlines 高阶 API
+
+### 问题回顾
+- 方案 2（简化正则 + outlines 低阶 `RegexLogitsProcessor`）依然失败：
+  - `interegular` 不支持 lookahead `(?!...)` → `Unsupported: Group can not have lookbacks/lookaheads`
+  - 进一步简化到 `[^<]+` 后，HF tokenizer 缺少 `.vocabulary` 属性 → `AttributeError: Qwen2TokenizerFast has no attribute vocabulary`
+  - 添加 `TransformerTokenizer` wrapper 后仍有同样问题
+
+### 方案 3：outlines 高阶 API（当前实现）
+- 使用 `outlines.from_transformers(model, tokenizer)` 包装 HF 模型
+- 使用 `outlines.types.Regex(pattern)` 定义约束类型
+- 生成调用：`model(prompt, output_type=Regex(...), max_new_tokens=..., temperature=..., top_p=..., do_sample=...)`
+- 优势：outlines 内部处理 tokenizer 适配，无需手动 wrap
+- `generate()` 和 `generate_batch()` 均已更新：
+  - constrained 模式：通过 `self._outlines_model()` 逐条生成
+  - unconstrained 模式：走原有 HF `model.generate()` 路径，无变化
+
+### 简化的正则 Pattern
+```
+<think>[^<]+</think>\s*
+<Prompt1>[^<]+</Prompt1>\s*
+<Prompt2>[^<]+</Prompt2>\s*
+<Prompt3>[^<]+</Prompt3>\s*
+<Prompt4>[^<]+</Prompt4>\s*
+<Prompt5>[^<]+</Prompt5>
+```
+- `[^<]+`：匹配非 `<` 字符，FSM 状态复杂度低
+- 假设：tag 内容不含 `<` 字符（对 prompt 文本成立）
+
+### 待验证
+- 在训练机上 `pip install 'outlines[transformers]'` 后运行 constrained inference
+- FSM 编译时间是否可接受（150K 词表 + 简化 pattern）
+- 格式合规率是否从 SFT baseline 30% 提升
+
+---
+
 ## 待办
 1. ~~在新机器上执行环境升级（0.10.2）~~（已完成但 bug 未修复）
 2. 在新机器上重建环境：vllm 0.19.0 + torch 2.10.0+cu126
