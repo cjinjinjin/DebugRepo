@@ -36,13 +36,14 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 
 # Regex pattern for constrained decoding: enforces <think>...</think> + 5 <PromptN> tags
+# Use [^<]+ instead of [\s\S]+ to avoid FSM state explosion with large vocabularies
 CONSTRAINED_PATTERN = (
-    r"<think>[\s\S]{10,3000}</think>\s*"
-    r"<Prompt1>[\s\S]{10,1500}</Prompt1>\s*"
-    r"<Prompt2>[\s\S]{10,1500}</Prompt2>\s*"
-    r"<Prompt3>[\s\S]{10,1500}</Prompt3>\s*"
-    r"<Prompt4>[\s\S]{10,1500}</Prompt4>\s*"
-    r"<Prompt5>[\s\S]{10,1500}</Prompt5>"
+    r"<think>[^<]+(?:<(?!/think>)[^<]*)*</think>\s*"
+    r"<Prompt1>[^<]+(?:<(?!/Prompt1>)[^<]*)*</Prompt1>\s*"
+    r"<Prompt2>[^<]+(?:<(?!/Prompt2>)[^<]*)*</Prompt2>\s*"
+    r"<Prompt3>[^<]+(?:<(?!/Prompt3>)[^<]*)*</Prompt3>\s*"
+    r"<Prompt4>[^<]+(?:<(?!/Prompt4>)[^<]*)*</Prompt4>\s*"
+    r"<Prompt5>[^<]+(?:<(?!/Prompt5>)[^<]*)*</Prompt5>"
 )
 
 # Import the system prompt used during training
@@ -148,14 +149,31 @@ class QwenPromptGenerator:
             self._init_constrained_decoding()
 
     def _init_constrained_decoding(self):
-        """Initialize outlines regex-guided logits processor."""
+        """Initialize outlines regex-guided logits processor with simplified pattern."""
         try:
             from outlines.processors import RegexLogitsProcessor
-            print(f"Initializing constrained decoding with outlines ...")
-            self._logits_processor = RegexLogitsProcessor(
-                CONSTRAINED_PATTERN, tokenizer=self.tokenizer
-            )
-            print("Constrained decoding ready.")
+            import signal
+
+            def _timeout_handler(signum, frame):
+                raise TimeoutError("FSM compilation timed out")
+
+            print("Initializing constrained decoding with outlines ...")
+            # Set 120s timeout for FSM compilation
+            old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+            signal.alarm(120)
+            try:
+                self._logits_processor = RegexLogitsProcessor(
+                    CONSTRAINED_PATTERN, tokenizer=self.tokenizer
+                )
+                signal.alarm(0)
+                print("Constrained decoding ready.")
+            except TimeoutError:
+                signal.alarm(0)
+                print("WARNING: FSM compilation timed out (>120s). Falling back to unconstrained.", file=sys.stderr)
+                self.constrained = False
+                self._logits_processor = None
+            finally:
+                signal.signal(signal.SIGALRM, old_handler)
         except ImportError:
             print(
                 "WARNING: outlines not installed. Install with: pip install outlines\n"
@@ -163,6 +181,7 @@ class QwenPromptGenerator:
                 file=sys.stderr,
             )
             self.constrained = False
+            self._logits_processor = None
 
     def build_input(self, lp_fields: dict) -> str:
         """Build the chat-template formatted input string."""
@@ -231,7 +250,6 @@ class QwenPromptGenerator:
             generate_kwargs["logits_processor"] = [self._logits_processor]
 
         output_ids = self.model.generate(**generate_kwargs)
-        # Decode only the newly generated tokens
         prompt_len = inputs["input_ids"].shape[1]
         results = []
         for seq_ids in output_ids:
@@ -276,8 +294,6 @@ class QwenPromptGenerator:
 
             with torch.inference_mode():
                 generate_kwargs = {**enc, "generation_config": gen_config}
-                if self.constrained and self._logits_processor is not None:
-                    generate_kwargs["logits_processor"] = [self._logits_processor]
                 output_ids = self.model.generate(**generate_kwargs)
 
             prompt_len = enc["input_ids"].shape[1]
@@ -380,7 +396,7 @@ def parse_args():
     p.add_argument("--do_sample", action="store_true", default=True)
     # Constrained decoding
     p.add_argument("--constrained", action="store_true", default=False,
-                   help="Enable regex-constrained decoding (requires outlines)")
+                   help="Enable regex-constrained decoding via outlines")
     # Merge mode
     p.add_argument("--merge_and_save", default="",
                    help="If set, merge adapter into base model and save to this path")
@@ -419,16 +435,36 @@ def main():
         lp_fields_list = [r.get("lp_fields", r) for r in records]
         all_outputs = gen.generate_batch(lp_fields_list, batch_size=args.batch_size, **gen_kwargs)
 
+        # Format compliance stats
+        format_regex = re.compile(
+            r"<think>[\s\S]+?</think>\s*"
+            r"<Prompt1>[\s\S]+?</Prompt1>\s*"
+            r"<Prompt2>[\s\S]+?</Prompt2>\s*"
+            r"<Prompt3>[\s\S]+?</Prompt3>\s*"
+            r"<Prompt4>[\s\S]+?</Prompt4>\s*"
+            r"<Prompt5>[\s\S]+?</Prompt5>"
+        )
+        n_compliant = 0
+
         results = []
         for record, outputs in zip(records, all_outputs):
-            prompts = parse_output_prompts(outputs[0])
+            raw = outputs[0]
+            compliant = bool(format_regex.search(raw))
+            if compliant:
+                n_compliant += 1
+            prompts = parse_output_prompts(raw)
             results.append({
                 "id": record.get("id", ""),
                 "lp_fields": record.get("lp_fields", record),
                 "generated_prompts": prompts,
-                "raw_output": outputs[0],
+                "raw_output": raw,
+                "format_compliant": compliant,
             })
         write_jsonl(results, args.output_file)
+
+        # Print summary
+        total = len(results)
+        print(f"\nFormat compliance: {n_compliant}/{total} ({100*n_compliant/total:.1f}%)")
 
     else:
         # Single query mode from CLI args

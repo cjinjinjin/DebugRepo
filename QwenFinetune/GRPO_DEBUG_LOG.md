@@ -379,6 +379,58 @@ GRPO 在 Qwen3-30B-A3B (MoE) 上因 ZeRO-3 allgather 死锁无法跑通，改用
 - **关于 max_length**：曾考虑降到 4096，但统计 quality DPO 数据字符长度（mean=10711, p90=15742）后发现会截断大量样本，保持 8192
 - **状态**：已提交推送（commit `2239a95`），待在训练机上重试
 
+### DPO 训练数据路径解析错误
+- **报错**：`Exception: Invalid repo_id: dataset, must be of format namespace/name`
+- **根因**：`train_swift_dpo.sh` 中 `DATA_DIR="./data"` 是相对路径，ms-swift 的 DPO `_get_dataset` 将其误认为 ModelScope repo ID
+- **修复**：`DATA_DIR` 改为基于脚本目录的绝对路径：
+  ```bash
+  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+  DATA_DIR="${SCRIPT_DIR}/data"
+  ```
+- 同步修复了 `train_swift_cot.sh`
+- **状态**：已提交推送（commit `8110f3b`），待在训练机上重试
+
+### DPO 训练当前状态
+- OOM 修复（offload_optimizer）+ 路径修复（绝对路径）已推送
+- 等待训练机 `git pull` 后重试 `bash train_swift_dpo.sh`
+
+---
+
+## 2026-04-04: Inference + Constrained Decoding 排查
+
+### SFT 模型格式合规率基线
+- SFT checkpoint-50 merged model 的格式合规率约 **30%**（用户实测）
+- 70% 的输出格式不合规（缺少 tag、think block 问题等）
+- 这是 DPO format-preference 训练的动机：提升格式合规率
+
+### Constrained Decoding 方案演变
+
+**方案 1：outlines RegexLogitsProcessor（原实现，失败）**
+- 使用 `outlines` 库的 `RegexLogitsProcessor`，在 decode 时通过 FSM 约束 token 生成
+- **问题**：原始正则 `[\s\S]{10,3000}` 中大范围量词导致 FSM 状态爆炸
+  - Qwen3-30B-A3B 词表 ~150K tokens
+  - FSM 状态数 = O(量词范围 × 词表大小)，编译时间极长
+  - 实际现象：卡在 "Initializing constrained decoding with outlines ..." 一整夜无响应
+
+**方案 2：简化正则 + outlines（当前实现）**
+- 将 `[\s\S]{10,3000}` 替换为 `[^<]+(?:<(?!/tag>)[^<]*)*`
+  - `[^<]+` 匹配非 `<` 字符（大多数文本 token）
+  - `(?:<(?!/tag>)[^<]*)*` 允许非闭合标签的 `<` 出现
+- FSM 状态数从 O(3000 × vocab_size) 降到 O(tag_count × vocab_size)
+- 添加 120 秒编译超时保护（SIGALRM），超时自动 fallback 到无约束模式
+- **待验证**：简化后的 pattern 在 150K 词表上 FSM 编译是否能在 120s 内完成
+
+**放弃的方案**：
+- vLLM guided decoding：vLLM 在此模型上有 FusedMoE TP bug（见 #17/#18），引入 vLLM 做 inference 环境复杂度高
+- 后处理验证+重试：30B 模型单条推理慢，重试会成倍增加时间
+- 纯后处理统计（不约束）：不满足需求，用户需要的是推理时实时提升合规率
+
+### Inference 脚本改动（`inference.py`）
+- 简化 `CONSTRAINED_PATTERN` 正则
+- `_init_constrained_decoding()` 添加 120s 超时保护
+- Batch 模式输出格式合规率统计 + 每条结果附带 `format_compliant` 字段
+- 保留 `--constrained` flag，不影响无约束推理
+
 ---
 
 ## 待办
