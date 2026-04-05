@@ -36,14 +36,15 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 
 # Regex pattern for constrained decoding: enforces <think>...</think> + 5 <PromptN> tags
-# Use [^<]+ instead of [\s\S]+ to avoid FSM state explosion with large vocabularies
+# Uses [^<]+ only (no lookahead) for interegular/outlines compatibility
+# Assumption: tag content does not contain '<' characters (valid for prompt text)
 CONSTRAINED_PATTERN = (
-    r"<think>[^<]+(?:<(?!/think>)[^<]*)*</think>\s*"
-    r"<Prompt1>[^<]+(?:<(?!/Prompt1>)[^<]*)*</Prompt1>\s*"
-    r"<Prompt2>[^<]+(?:<(?!/Prompt2>)[^<]*)*</Prompt2>\s*"
-    r"<Prompt3>[^<]+(?:<(?!/Prompt3>)[^<]*)*</Prompt3>\s*"
-    r"<Prompt4>[^<]+(?:<(?!/Prompt4>)[^<]*)*</Prompt4>\s*"
-    r"<Prompt5>[^<]+(?:<(?!/Prompt5>)[^<]*)*</Prompt5>"
+    r"<think>[^<]+</think>\s*"
+    r"<Prompt1>[^<]+</Prompt1>\s*"
+    r"<Prompt2>[^<]+</Prompt2>\s*"
+    r"<Prompt3>[^<]+</Prompt3>\s*"
+    r"<Prompt4>[^<]+</Prompt4>\s*"
+    r"<Prompt5>[^<]+</Prompt5>"
 )
 
 # Import the system prompt used during training
