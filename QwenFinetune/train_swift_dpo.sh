@@ -22,7 +22,7 @@ swift rlhf \
     --tuner_type    lora \
     --lora_rank     64 \
     --lora_alpha    128 \
-    --num_train_epochs            5 \
+    --num_train_epochs            1 \
     --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 8 \
     --learning_rate               5e-5 \
@@ -33,7 +33,7 @@ swift rlhf \
     --bf16                        true \
     --gradient_checkpointing      true \
     --deepspeed                   ./ds_zero3.json \
-    --save_steps                  50 \
-    --eval_steps                  50 \
-    --logging_steps               10 \
+    --save_steps                  10 \
+    --eval_steps                  10 \
+    --logging_steps               5 \
     --beta                        0.1

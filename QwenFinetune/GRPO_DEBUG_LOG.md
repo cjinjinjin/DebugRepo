@@ -122,6 +122,38 @@
   - 风险：completion 变长会增加 generation 时间和显存，step_time 可能从 ~6100s 增加到 ~8000-10000s
   - 如果 1024 仍不够（clipped_ratio 仍很高），考虑提高到 2048 并相应增大 MAX_LENGTH
 
+### 10b. 方案十 comp1024 重跑结果（2026-04-05，前 3 steps）
+- **配置变更**：`MAX_COMPLETION_LENGTH=1024`（其余与方案十一致），实验名 `..._comp1024_gen2`
+- **训练曲线**：
+
+  | Step | Reward | Loss | KL | clipped_ratio | mean_length | min_length | frac_reward_zero_std | step_time(s) |
+  |------|--------|------|----|---------------|-------------|------------|----------------------|-------------|
+  | 1 | 0.4571 | -0.0011 | 0.0 | 0.1406 | 898.5 | 647.0 | 0.03125 | 10641 |
+  | 2 | 0.4575 | 0.0778 | 0.0 | 0.1641 | 904.7 | 477.5 | 0.015625 | 10552 |
+  | 3 | 0.3987 | 0.0165 | 0.0066 | 0.2188 | 915.2 | 676.0 | 0.015625 | 10759 |
+
+- **与 comp512 的对比（step 1）**：
+
+  | 指标 | comp512 | comp1024 | 变化 |
+  |------|---------|----------|------|
+  | reward | 0.091 | **0.457** | **+5x**，已超过 SFT baseline 0.211 |
+  | clipped_ratio | 1.0 | **0.141** | 从全部截断降到 14% |
+  | mean_length | 512.0 | **898.5** | 模型实际需要 ~900 tokens |
+  | min_length | 512.0 | **647.0** | 最短回复也超过原 512 上限 |
+  | step_time | 6388 | 10641 | 慢 ~1.67x（预期内） |
+
+- **关键发现**：
+  1. **comp512 的低 reward 完全是截断导致的**：1024 后第一步 reward 就达到 0.457，远超 SFT baseline（0.211）
+  2. **模型实际需要 ~900 tokens**：mean_length 稳定在 898-915，min_length 477-676，说明 512 根本不够
+  3. **clipped_ratio 在上升**：0.14 → 0.16 → 0.22，mean_length 也在增长（899 → 915），模型回复有变长趋势
+  4. **reward 尚无上升趋势**：step 1-2 稳定在 0.457，step 3 略降到 0.399，可能受 clipped_ratio 上升影响
+  5. **KL 仍然极低**：step 1-2 为 0.0，step 3 才出现 0.007，策略更新幅度仍然很小
+  6. **frac_reward_zero_std 很低**（0.016-0.031），说明大多数 prompt 的 generation 间有足够 reward 方差，GRPO 梯度有效
+  7. **速度**：~10600s/step（~2.9h/step），34 steps 预计 **~8 天**
+
+- **隐患**：clipped_ratio 持续上升中。如果到 step 5-6 超过 0.3，reward 会被截断回复拖累，训练信号退化。届时需考虑提高到 `MAX_COMPLETION_LENGTH=2048`（同时 `MAX_LENGTH` 提到 4096）
+- **状态**：训练进行中，继续观察
+
 ### 11. ZeRO-2 + QLoRA（第二次，修复 adapter 加载问题后）
 - **状态**：待测试
 - **配置**：`run_grpo_stable_scaleup.sh`，ZeRO-2 + QLoRA 4bit，无 vllm，merged model，无旧 adapter
@@ -490,9 +522,92 @@ GRPO 在 Qwen3-30B-A3B (MoE) 上因 ZeRO-3 allgather 死锁无法跑通，改用
 - 假设：tag 内容不含 `<` 字符（对 prompt 文本成立）
 
 ### 待验证
-- 在训练机上 `pip install 'outlines[transformers]'` 后运行 constrained inference
-- FSM 编译时间是否可接受（150K 词表 + 简化 pattern）
-- 格式合规率是否从 SFT baseline 30% 提升
+- ~~在训练机上 `pip install 'outlines[transformers]'` 后运行 constrained inference~~（已验证）
+- ~~FSM 编译时间是否可接受（150K 词表 + 简化 pattern）~~（可接受，秒级完成）
+- ~~格式合规率是否从 SFT baseline 30% 提升~~（单条测试已通过，batch 评估中）
+
+---
+
+## 2026-04-05: Constrained Decoding 验证成功
+
+### outlines API 修复历程
+- **方案 3a（outlines 新 API）失败**：`outlines.from_transformers()` + `outlines.types.Regex` 是新版 API（>0.2.x）
+  - 训练机安装的是 outlines 0.1.11（旧版），`outlines.types` 没有 `Regex` 类
+  - `from outlines.types import Regex` → `ImportError: cannot import name 'Regex'`
+- **方案 3b（outlines 旧 API）成功**：outlines 0.1.x 使用不同的 API：
+  - `outlines.models.transformers.Transformers(model, tokenizer)` 包装已加载的 HF 模型
+  - `outlines.generate.regex(outlines_model, pattern)` 创建 regex-constrained generator
+  - `generator(prompt, max_tokens=N)` 执行约束生成
+  - FSM 编译秒级完成，无超时问题
+
+### 单条测试结果
+- **输入**：`--url "https://example.com/product" --title "Premium Wireless Headphones" --constrained`
+- **输出**：格式完全合规
+  - `<think>` block 存在且闭合 ✓
+  - 5 个 `<PromptN>` tag 全部正确解析 ✓
+  - prompt 内容质量良好：场景多样（夜间通勤、桌面工作区、公交车、家居），包含摄影参数、安全约束、排除条件
+- **结论**：constrained decoding 在 SFT merged model + outlines 0.1.11 上可行
+
+### Batch 评估
+- **进行中**：在 `dpo_combined_eval_cot.jsonl`（190 条）上评估
+- **命令**：
+  ```bash
+  python inference.py \
+      --adapter_path .../merged_model \
+      --input_file data/dpo_combined_eval_cot.jsonl \
+      --output_file results/constrained_dpo_eval.jsonl \
+      --constrained --max_new_tokens 2048 --batch_size 1
+  ```
+- **待得出**：格式合规率（对比 SFT baseline ~30%），预期 ~100%（regex 约束为硬约束）
+
+### inference.py 最终实现
+```python
+# _init_constrained_decoding():
+from outlines.models.transformers import Transformers
+import outlines.generate
+outlines_model = Transformers(self.model, self.tokenizer)
+self._outlines_generator = outlines.generate.regex(outlines_model, CONSTRAINED_PATTERN)
+
+# generate() / generate_batch():
+result = self._outlines_generator(input_text, max_tokens=max_new_tokens)
+```
+
+---
+
+## 2026-04-05: DPO 首次训练运行 + 超参调整
+
+### CUDA 版本不匹配
+- **报错**：`DeepSpeed CUDAMismatchException: Installed CUDA 11.8 ≠ torch compiled with 12.6`
+- **原因**：`offload_optimizer` 需要编译 `DeepSpeedCPUAdam` JIT 扩展，系统 CUDA toolkit 11.8 与 PyTorch CUDA 12.6 不匹配
+- **修复**：`DS_SKIP_CUDA_CHECK=1 bash train_swift_dpo.sh`
+- 实际 GPU driver 支持 CUDA 12.8（`nvidia-smi` 确认），只是系统 nvcc 版本旧
+
+### 首次训练运行结果（5 epoch，v10-20260405-013625）
+- 8×A100-80GB，显存 21–28 GiB/卡（27–35%），GPU 利用率 100%
+- 训练速度：~39 分钟/step（ZeRO-3 + offload_optimizer 开销大）
+
+| Step | Loss | Accuracy | Margins | LR |
+|------|------|----------|---------|-----|
+| 1 | 0.1876 | 98.4% | 56.8 | 7.14e-6 |
+| 10 | 0.0111 | 99.5% | 65.7 | 4.99e-5 |
+
+- **观察**：Loss 10 步内从 0.188 降到 0.011，accuracy 99.5%，模型已基本学会区分 chosen/rejected
+- **问题**：
+  - `num_train_epochs=5` → 总 140 steps，预计 3.5 天，且极大概率过拟合
+  - `save_steps=50` → 到第一个 checkpoint 时模型可能已经过拟合
+
+### 超参调整
+- `num_train_epochs`: 5 → **1**（总步数 ~28，DPO 通常 1-2 epoch 足够）
+- `save_steps`: 50 → **10**（保留 step 10/20/28 的 checkpoint 做对比）
+- `eval_steps`: 50 → **10**（同步）
+- `logging_steps`: 10 → **5**（更细粒度观察 loss 曲线）
+- 需要停掉当前运行，`git pull` 后重新启动
+
+### 下一步
+1. 停掉当前 5-epoch 训练
+2. 训练机 `git pull` 获取新配置
+3. 重新执行 `DS_SKIP_CUDA_CHECK=1 bash train_swift_dpo.sh`
+4. 观察 step 10 的 eval loss，若已收敛则用 checkpoint-10 做 inference 评估
 
 ---
 
