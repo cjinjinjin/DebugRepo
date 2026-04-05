@@ -166,7 +166,36 @@
   7. **速度**：~10600s/step（~2.9h/step），34 steps 预计 **~8 天**
 
 - **隐患**：clipped_ratio 持续上升中。如果到 step 5-6 超过 0.3，reward 会被截断回复拖累，训练信号退化。届时需考虑提高到 `MAX_COMPLETION_LENGTH=2048`（同时 `MAX_LENGTH` 提到 4096）
-- **状态**：训练进行中，继续观察
+- **状态**：comp1024 训练进行中；已启动 comp2048 实验（见 10c）
+
+### 10c. 方案十 comp2048 实验（2026-04-05）
+- **动机**：comp1024 的 clipped_ratio 持续上升（0.14 → 0.16 → 0.22），模型 mean_length 在增长（899 → 915），如果继续训练截断比例会更高，reward 信号退化。提前启动 comp2048 消除截断瓶颈。
+- **配置变更**（vs comp1024）：
+
+  | 参数 | comp1024 | comp2048 |
+  |------|----------|----------|
+  | MAX_LENGTH | 2048 | **4096** |
+  | MAX_COMPLETION_LENGTH | 1024 | **2048** |
+  | SAVE_STEPS | 10 | **1**（每步都保存，因每步耗时极长） |
+  | EXPERIMENT_NAME | `..._comp1024_gen2` | `..._comp2048_gen2` |
+
+- **其余配置不变**：ZeRO-3 + BF16 + 无 vllm，8×A100-80GB，LoRA rank=16/alpha=32，LR=5e-6，NUM_GENERATIONS=2，GRADIENT_ACCUMULATION_STEPS=8
+- **对应脚本**：`run_grpo_stable_canary_comp2048.sh`（新建，避免与正在运行的 comp1024 冲突）
+- **预期**：
+  - clipped_ratio 应接近 0（模型 mean_length ~900，远低于 2048 上限）
+  - reward 信号更干净，训练梯度更有效
+  - step_time 预计 ~15000-20000s（~4-5.5h/step），比 comp1024 慢 1.5-2x
+  - 显存可能更紧张（MAX_LENGTH=4096 增加 activation memory），需监控 OOM
+- **风险**：
+  1. OOM：4096 token 序列长度显著增加 activation memory，8×80GB 可能吃紧
+  2. 训练速度慢：每步 ~4-5h，34 steps 预计 ~5-7 天
+  3. 模型可能学会生成更长的回复（reward hacking），需监控 mean_length 趋势
+- **状态**：待启动（需先停掉 comp512 训练释放 GPU）
+- **训练曲线**：等待数据填充
+
+  | Step | Reward | Loss | KL | clipped_ratio | mean_length | min_length | frac_reward_zero_std | step_time(s) |
+  |------|--------|------|----|---------------|-------------|------------|----------------------|-------------|
+  | — | — | — | — | — | — | — | — | — |
 
 ### 11. ZeRO-2 + QLoRA（第二次，修复 adapter 加载问题后）
 - **状态**：待测试
@@ -269,6 +298,7 @@ preflight 脚本会在启动时估算并输出风险警告。
 | `run_grpo_stable_scaleup.sh` | 清除硬编码 SFT adapter 路径；MODEL_PATH 改为 merged model；补充 LORA_RANK/LORA_ALPHA |
 | `run_grpo_stable_canary.sh` | `SFT_ADAPTER=""`，MODEL_PATH 指向 merged model，DEEPSPEED_CONFIG=zero3 |
 | `run_grpo_stable_canary.sh` | `MAX_COMPLETION_LENGTH` 从 512 提高到 1024；实验名改为 `..._comp1024_gen2`（2026-04-04，修复 clipped_ratio=1.0 问题）|
+| `run_grpo_stable_canary_comp2048.sh` | **新建**（2026-04-05）：comp2048 实验专用脚本，`MAX_LENGTH=4096`，`MAX_COMPLETION_LENGTH=2048`，`SAVE_STEPS=1`，避免与运行中的 comp1024 冲突 |
 | `setup_envs.sh` | 新增 swift_train 环境重建脚本：ms-swift 4.1.0.dev0 + torch 2.8.0 + vllm 0.19.0 + trl 0.28.0 + transformers 4.57.6 |
 
 ### 环境重建记录（2026-04-02）
