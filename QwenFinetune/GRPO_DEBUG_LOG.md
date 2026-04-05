@@ -500,13 +500,13 @@ GRPO 在 Qwen3-30B-A3B (MoE) 上因 ZeRO-3 allgather 死锁无法跑通，改用
   - 进一步简化到 `[^<]+` 后，HF tokenizer 缺少 `.vocabulary` 属性 → `AttributeError: Qwen2TokenizerFast has no attribute vocabulary`
   - 添加 `TransformerTokenizer` wrapper 后仍有同样问题
 
-### 方案 3：outlines 高阶 API（当前实现）
-- 使用 `outlines.from_transformers(model, tokenizer)` 包装 HF 模型
-- 使用 `outlines.types.Regex(pattern)` 定义约束类型
-- 生成调用：`model(prompt, output_type=Regex(...), max_new_tokens=..., temperature=..., top_p=..., do_sample=...)`
-- 优势：outlines 内部处理 tokenizer 适配，无需手动 wrap
+### 方案 3：outlines 旧 API 0.1.x（最终可用实现）
+- 使用 `outlines.models.transformers.Transformers(model, tokenizer)` 包装已加载的 HF 模型
+- 使用 `outlines.generate.regex(outlines_model, pattern)` 创建 regex-constrained generator
+- 生成调用：`generator(prompt, max_tokens=N)`
+- 优势：outlines 内部处理 tokenizer 适配（`TransformerTokenizer`），无需手动 wrap
 - `generate()` 和 `generate_batch()` 均已更新：
-  - constrained 模式：通过 `self._outlines_model()` 逐条生成
+  - constrained 模式：通过 `self._outlines_generator()` 逐条生成
   - unconstrained 模式：走原有 HF `model.generate()` 路径，无变化
 
 ### 简化的正则 Pattern
