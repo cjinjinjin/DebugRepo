@@ -171,8 +171,8 @@
 - **Step 4-5 稳定信号**：clipped_ratio 连续两步 0.109、grad_norm 稳定在 ~0.058-0.060、KL ~0.007。训练在健康区间运行。
 - **状态**：comp1024 训练进行中（5/34 steps，已运行 ~30h）；comp2048 实验待启动（见 10c）
 
-### 10c. 方案十 comp2048 实验（2026-04-05）
-- **动机**：comp1024 的 clipped_ratio 持续上升（0.14 → 0.16 → 0.22），模型 mean_length 在增长（899 → 915），如果继续训练截断比例会更高，reward 信号退化。提前启动 comp2048 消除截断瓶颈。
+### 10c. 方案十 comp2048 实验（2026-04-05，前 2 steps）
+- **动机**：comp1024 的 clipped_ratio 在 step 3 升到 0.22（后续回落到 0.11），提前启动 comp2048 消除截断瓶颈，获得更干净的 reward 信号。
 - **配置变更**（vs comp1024）：
 
   | 参数 | comp1024 | comp2048 |
@@ -184,21 +184,38 @@
 
 - **其余配置不变**：ZeRO-3 + BF16 + 无 vllm，8×A100-80GB，LoRA rank=16/alpha=32，LR=5e-6，NUM_GENERATIONS=2，GRADIENT_ACCUMULATION_STEPS=8
 - **对应脚本**：`run_grpo_stable_canary_comp2048.sh`（新建，避免与正在运行的 comp1024 冲突）
-- **预期**：
-  - clipped_ratio 应接近 0（模型 mean_length ~900，远低于 2048 上限）
-  - reward 信号更干净，训练梯度更有效
-  - step_time 预计 ~15000-20000s（~4-5.5h/step），比 comp1024 慢 1.5-2x
-  - 显存可能更紧张（MAX_LENGTH=4096 增加 activation memory），需监控 OOM
-- **风险**：
-  1. OOM：4096 token 序列长度显著增加 activation memory，8×80GB 可能吃紧
-  2. 训练速度慢：每步 ~4-5h，34 steps 预计 ~5-7 天
-  3. 模型可能学会生成更长的回复（reward hacking），需监控 mean_length 趋势
-- **状态**：待启动（需先停掉 comp512 训练释放 GPU）
-- **训练曲线**：等待数据填充
+- **训练曲线**：
 
-  | Step | Reward | Loss | KL | clipped_ratio | mean_length | min_length | frac_reward_zero_std | step_time(s) |
-  |------|--------|------|----|---------------|-------------|------------|----------------------|-------------|
-  | — | — | — | — | — | — | — | — | — |
+  | Step | Reward | Loss | KL | clipped_ratio | mean_length | min_length | max_length | frac_reward_zero_std | grad_norm | step_time(s) |
+  |------|--------|------|----|---------------|-------------|------------|------------|----------------------|-----------|-------------|
+  | 1 | 0.5070 | -0.0881 | 0.0 | 0.0 | 898.4 | 722.0 | 1128.5 | 0.0 | 0.060 | 11064 |
+  | 2 | 0.4800 | -0.0219 | 0.0 | 0.0 | 902.4 | 712.0 | 1127.5 | 0.0 | 0.060 | 10957 |
+
+- **与 comp1024 的对比（step 1）**：
+
+  | 指标 | comp1024 | comp2048 | 变化 |
+  |------|----------|----------|------|
+  | reward | 0.457 | **0.507** | **+11%**，目前所有实验最高起点 |
+  | clipped_ratio | 0.141 | **0.0** | **完全消除截断** |
+  | max_length | 1024.0 | **1128.5** | 有回复超过 1024，被 comp1024 截断但 comp2048 保留 |
+  | min_length | 647.0 | **722.0** | 最短回复更长（保留了完整内容） |
+  | frac_reward_zero_std | 0.031 | **0.0** | 100% 的 prompt 有有效梯度信号 |
+  | step_time | 10641 | **11064** | **仅慢 4%**（远好于预期的 50-100%） |
+  | memory(GiB) | 69.7 | **70.3** | 仅多 0.6 GiB，无 OOM 风险 |
+
+- **关键发现**：
+  1. **clipped_ratio = 0.0**：完全消除截断，所有回复完整生成，reward 信号最干净
+  2. **reward 0.507 是所有实验最高起点**：超过 comp1024 step 1 的 0.457（+11%），说明被截断的 ~14% 回复确实拉低了 comp1024 的 reward
+  3. **max_length 1128.5**：有回复长度超过 1024，这些在 comp1024 中被截断（获得低 reward），在 comp2048 中完整保留
+  4. **step_time 几乎无增加**（11064 vs 10641，+4%）：因为模型实际 mean_length ~900 远低于 2048 上限，generation 时间由实际长度决定而非上限
+  5. **显存无压力**：70.3 GiB vs 69.7 GiB，仅多 0.6 GiB，之前担心的 OOM 风险不存在
+  6. **frac_reward_zero_std = 0.0 连续两步**：所有 prompt 的 generation 间都有 reward 方差，GRPO 梯度 100% 有效
+  7. **"Could not estimate tokens" 警告**：无害，transformers 对该模型架构缺少 FLOPs 估算，不影响训练
+- **预期修正**：
+  - ~~step_time 15000-20000s~~ → 实际 ~11000s（与 comp1024 几乎持平）
+  - ~~OOM 风险~~ → 不存在（70.3 GiB，余量 ~10 GiB）
+  - ~~34 steps 5-7 天~~ → 预计 **~8.6 天**（与 comp1024 相同）
+- **状态**：训练进行中（2/34 steps），checkpoint-1 和 checkpoint-2 已保存
 
 ### 11. ZeRO-2 + QLoRA（第二次，修复 adapter 加载问题后）
 - **状态**：待测试
