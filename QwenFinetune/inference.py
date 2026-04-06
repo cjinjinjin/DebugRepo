@@ -271,13 +271,16 @@ class QwenPromptGenerator:
         all_results = []
 
         if self.constrained and self._outlines_generator is not None:
-            # Constrained: generate one-by-one via outlines
-            for idx, lp in enumerate(lp_fields_list):
-                input_text = self.build_input(lp)
-                result = self._outlines_generator(input_text, max_tokens=max_new_tokens)
-                all_results.append([str(result).strip()])
-                if (idx + 1) % batch_size == 0 or idx + 1 == len(lp_fields_list):
-                    print(f"  Processed {idx + 1}/{len(lp_fields_list)}")
+            # Constrained: batch generate via outlines (supports list of prompts)
+            for i in range(0, len(lp_fields_list), batch_size):
+                batch = lp_fields_list[i: i + batch_size]
+                input_texts = [self.build_input(lp) for lp in batch]
+                results = self._outlines_generator(input_texts, max_tokens=max_new_tokens)
+                if isinstance(results, str):
+                    results = [results]
+                for r in results:
+                    all_results.append([str(r).strip()])
+                print(f"  Processed {min(i + batch_size, len(lp_fields_list))}/{len(lp_fields_list)}")
         else:
             # Unconstrained: use HF generate() with batching
             for i in range(0, len(lp_fields_list), batch_size):
