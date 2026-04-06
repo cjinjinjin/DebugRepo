@@ -11,11 +11,11 @@
 # If no checkpoint_dir is given, ADAPTER_PATH below is used (best checkpoint from training log).
 
 MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-30B-A3B"
-# NOTE: training log shows best_model_checkpoint = checkpoint-5, use that by default
-ADAPTER_PATH="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_dpo_lora_cot_refine/v3-20260320-155846/checkpoint-50}"
+# NOTE: training log shows best_model_checkpoint = checkpoint-10 (v11, 1-epoch run)
+ADAPTER_PATH="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_dpo_lora_cot_refine/v11-20260405-094235/checkpoint-10}"
 MERGED_MODEL_PATH="${ADAPTER_PATH}/merged_model"
 DATA_DIR="./data"
-EVAL_DATA="${DATA_DIR}/dpo_refine_eval_cot.jsonl"
+EVAL_DATA="${DATA_DIR}/dpo_combined_eval_cot.jsonl"
 RESULTS_DIR="${ADAPTER_PATH}/eval_results"
 RESULT_FILE="${RESULTS_DIR}/eval_swift_output.jsonl"
 REPORT_FILE="${RESULTS_DIR}/eval_report.json"

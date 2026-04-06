@@ -684,11 +684,32 @@ result = self._outlines_generator(input_text, max_tokens=max_new_tokens)
 - `logging_steps`: 10 → **5**（更细粒度观察 loss 曲线）
 - 需要停掉当前运行，`git pull` 后重新启动
 
+### 1-epoch 重跑结果（v11-20260405-094235，28 steps，总耗时 20.7h）
+
+| Step | Epoch | Loss | Grad Norm | Accuracy | Margins | Eval Loss | Eval Margins |
+|------|-------|------|-----------|----------|---------|-----------|--------------|
+| 1 | 0.04 | 0.1876 | 1.70 | 98.4% | 56.8 | - | - |
+| 5 | 0.18 | 0.0234 | ~0 | 99.2% | 64.2 | - | - |
+| 10 | 0.36 | 0.0 | 0.0 | 100% | 75.9 | 0.0 | 80.3 |
+| 15 | 0.55 | 0.0 | 0.0 | 100% | 83.5 | - | - |
+| 20 | 0.73 | 0.0 | 0.0 | 100% | 83.2 | 0.0 | 84.4 |
+| 25 | 0.91 | 0.0 | 0.0 | 100% | 83.2 | - | - |
+| 28 | 1.0 | 0.0 | 0.0 | 100% | - | 0.0 | 84.6 |
+
+- **swift 自动选出 best_model_checkpoint = checkpoint-10**
+- **收敛极快**：step 5 时 loss 已降到 0.023，step 10 后 loss=0、grad_norm=0，模型完全停止学习
+- **step 10 之后的 ~14 小时无实质更新**：checkpoint-10/20/28 效果应几乎相同
+- **任务太简单**：format corruption 的 chosen/rejected 差异太大，模型几乎不需要学习就能区分
+- **潜在风险**：margins 持续增大（56→84），logps/chosen 在下降（-1114→-1277），可能存在 likelihood displacement，需通过 inference 验证生成质量未退化
+- **Checkpoints 路径**：
+  - `checkpoint-10`（best）：`.../qwen3_dpo_lora_cot_refine/v11-20260405-094235/checkpoint-10`
+  - `checkpoint-20`：`.../qwen3_dpo_lora_cot_refine/v11-20260405-094235/checkpoint-20`
+  - `checkpoint-28`（last）：`.../qwen3_dpo_lora_cot_refine/v11-20260405-094235/checkpoint-28`
+
 ### 下一步
-1. 停掉当前 5-epoch 训练
-2. 训练机 `git pull` 获取新配置
-3. 重新执行 `DS_SKIP_CUDA_CHECK=1 bash train_swift_dpo.sh`
-4. 观察 step 10 的 eval loss，若已收敛则用 checkpoint-10 做 inference 评估
+1. 用 checkpoint-10 执行 `bash eval_swift_dpo.sh`（merge → inference → evaluate）
+2. 对比 SFT baseline 的格式合规率（~30%）和生成质量
+3. 若质量未退化，checkpoint-10 可作为 DPO 最终模型
 
 ---
 
