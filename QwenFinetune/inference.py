@@ -35,11 +35,18 @@ import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 
-# Regex pattern for constrained decoding: enforces <think>...</think> + 5 <PromptN> tags
-# Uses [^<]+ only (no lookahead) for interegular/outlines compatibility
-# Assumption: tag content does not contain '<' characters (valid for prompt text)
-CONSTRAINED_PATTERN = (
+# Regex pattern for constrained decoding with think block
+CONSTRAINED_PATTERN_COT = (
     r"<think>[^<]+</think>\s*"
+    r"<Prompt1>[^<]+</Prompt1>\s*"
+    r"<Prompt2>[^<]+</Prompt2>\s*"
+    r"<Prompt3>[^<]+</Prompt3>\s*"
+    r"<Prompt4>[^<]+</Prompt4>\s*"
+    r"<Prompt5>[^<]+</Prompt5>"
+)
+
+# Regex pattern for constrained decoding without think block (faster inference)
+CONSTRAINED_PATTERN_NO_THINK = (
     r"<Prompt1>[^<]+</Prompt1>\s*"
     r"<Prompt2>[^<]+</Prompt2>\s*"
     r"<Prompt3>[^<]+</Prompt3>\s*"
@@ -86,10 +93,12 @@ class QwenPromptGenerator:
         load_in_8bit: bool = False,
         torch_dtype=torch.bfloat16,
         constrained: bool = False,
+        no_think: bool = False,
     ):
         self.adapter_path = adapter_path
         self.torch_dtype = torch_dtype
         self.constrained = constrained
+        self.no_think = no_think
         self._outlines_generator = None
 
         # Determine where to load base model from
@@ -165,10 +174,12 @@ class QwenPromptGenerator:
             return
 
         try:
-            print("Initializing constrained decoding with outlines ...")
+            pattern = CONSTRAINED_PATTERN_NO_THINK if self.no_think else CONSTRAINED_PATTERN_COT
+            mode = "no_think" if self.no_think else "COT"
+            print(f"Initializing constrained decoding with outlines ({mode} mode) ...")
             outlines_model = Transformers(self.model, self.tokenizer)
             self._outlines_generator = outlines.generate.regex(
-                outlines_model, CONSTRAINED_PATTERN
+                outlines_model, pattern
             )
             print("Constrained decoding ready.")
         except Exception as e:
@@ -203,6 +214,7 @@ class QwenPromptGenerator:
             messages,
             tokenize=False,
             add_generation_prompt=True,
+            enable_thinking=not self.no_think,
         )
 
     @torch.inference_mode()
@@ -408,6 +420,8 @@ def parse_args():
     # Constrained decoding
     p.add_argument("--constrained", action="store_true", default=False,
                    help="Enable regex-constrained decoding via outlines")
+    p.add_argument("--no_think", action="store_true", default=False,
+                   help="Skip <think> block in constrained decoding (faster inference)")
     # Merge mode
     p.add_argument("--merge_and_save", default="",
                    help="If set, merge adapter into base model and save to this path")
@@ -432,6 +446,7 @@ def main():
         load_in_4bit=args.load_in_4bit,
         load_in_8bit=args.load_in_8bit,
         constrained=args.constrained,
+        no_think=args.no_think,
     )
     gen_kwargs = {
         "max_new_tokens": args.max_new_tokens,
@@ -447,14 +462,23 @@ def main():
         all_outputs = gen.generate_batch(lp_fields_list, batch_size=args.batch_size, **gen_kwargs)
 
         # Format compliance stats
-        format_regex = re.compile(
-            r"<think>[\s\S]+?</think>\s*"
-            r"<Prompt1>[\s\S]+?</Prompt1>\s*"
-            r"<Prompt2>[\s\S]+?</Prompt2>\s*"
-            r"<Prompt3>[\s\S]+?</Prompt3>\s*"
-            r"<Prompt4>[\s\S]+?</Prompt4>\s*"
-            r"<Prompt5>[\s\S]+?</Prompt5>"
-        )
+        if gen.no_think:
+            format_regex = re.compile(
+                r"<Prompt1>[\s\S]+?</Prompt1>\s*"
+                r"<Prompt2>[\s\S]+?</Prompt2>\s*"
+                r"<Prompt3>[\s\S]+?</Prompt3>\s*"
+                r"<Prompt4>[\s\S]+?</Prompt4>\s*"
+                r"<Prompt5>[\s\S]+?</Prompt5>"
+            )
+        else:
+            format_regex = re.compile(
+                r"<think>[\s\S]+?</think>\s*"
+                r"<Prompt1>[\s\S]+?</Prompt1>\s*"
+                r"<Prompt2>[\s\S]+?</Prompt2>\s*"
+                r"<Prompt3>[\s\S]+?</Prompt3>\s*"
+                r"<Prompt4>[\s\S]+?</Prompt4>\s*"
+                r"<Prompt5>[\s\S]+?</Prompt5>"
+            )
         n_compliant = 0
 
         results = []
