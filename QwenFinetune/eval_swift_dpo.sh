@@ -36,7 +36,8 @@ if [ -d "${MERGED_MODEL_PATH}" ]; then
     echo "[INFO] Merged model already exists at ${MERGED_MODEL_PATH}, skipping merge."
 else
     echo "[INFO] Merging DPO LoRA adapter into base model ..."
-    /home/aiscuser/.conda/envs/vllm_infer/bin/python3.10 -m swift.cli.export \
+    # Use swift_train env for merge (vllm_infer has autoawq/transformers conflict)
+    /home/aiscuser/.conda/envs/swift_train/bin/python3.10 -m swift.cli.export \
         --model        "${MODEL_PATH}" \
         --adapters     "${ADAPTER_PATH}" \
         --merge_lora   true \

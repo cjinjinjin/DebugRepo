@@ -173,7 +173,7 @@
 - **Step 6-7 观察**：训练仍在健康区间，但 frac_reward_zero_std 上升需关注。reward 平台未突破，可能需要更多 steps 才能看到明确趋势。
 - **状态**：comp1024 训练进行中（7/34 steps，已运行 ~41h）；comp2048 并行运行中（见 10c）
 
-### 10c. 方案十 comp2048 实验（2026-04-05~06，前 3 steps）
+### 10c. 方案十 comp2048 实验（2026-04-05~06，前 6 steps）
 - **动机**：comp1024 的 clipped_ratio 在 step 3 升到 0.22（后续回落到 0.11），提前启动 comp2048 消除截断瓶颈，获得更干净的 reward 信号。
 - **配置变更**（vs comp1024）：
 
@@ -193,6 +193,9 @@
   | 1 | 0.5070 | -0.0881 | 0.0 | 0.0 | 898.4 | 722.0 | 1128.5 | 0.0 | 0.060 | 11064 |
   | 2 | 0.4800 | -0.0219 | 0.0 | 0.0 | 902.4 | 712.0 | 1127.5 | 0.0 | 0.060 | 10957 |
   | 3 | 0.4540 | 0.0709 | 0.0061 | 0.0 | 899.8 | 704.5 | 1134.5 | 0.0 | 0.147 | 11212 |
+  | 4 | — | — | — | — | — | — | — | — | — | — |
+  | 5 | 0.4751 | 0.1380 | 0.0063 | 0.0 | 897.7 | 627.0 | 1134.5 | 0.0 | 0.057 | 11115 |
+  | 6 | 0.5016 | 0.0495 | 0.0062 | 0.0 | 900.0 | 750.5 | 1147.0 | 0.0 | 0.055 | 11022 |
 
 - **与 comp1024 的对比（step 1）**：
 
@@ -212,10 +215,10 @@
   3. **max_length 1128.5**：有回复长度超过 1024，这些在 comp1024 中被截断（获得低 reward），在 comp2048 中完整保留
   4. **step_time 几乎无增加**（11064 vs 10641，+4%）：因为模型实际 mean_length ~900 远低于 2048 上限，generation 时间由实际长度决定而非上限
   5. **显存无压力**：70.3 GiB vs 69.7 GiB，仅多 0.6 GiB，之前担心的 OOM 风险不存在
-  6. **frac_reward_zero_std = 0.0 连续三步**：所有 prompt 的 generation 间都有 reward 方差，GRPO 梯度 100% 有效
+  6. **frac_reward_zero_std = 0.0 连续六步**：所有 prompt 的 generation 间都有 reward 方差，GRPO 梯度 100% 有效
   7. **"Could not estimate tokens" 警告**：无害，transformers 对该模型架构缺少 FLOPs 估算，不影响训练
-  8. **Step 3 grad_norm 小幅上升到 0.147**：比 step 1-2 的 0.060 高 ~2.5x，但远低于 comp512 的梯度爆炸（6.494），属正常波动
-  9. **显存 step 3 升到 73.15 GiB**（vs step 1-2 的 70.3 GiB），增加 2.8 GiB，仍有 ~7 GiB 余量
+  8. **Step 3 grad_norm 小幅上升到 0.147**：比 step 1-2 的 0.060 高 ~2.5x，但 step 5-6 回落到 0.055-0.057，属正常波动
+  9. **显存 step 3+ 稳定在 73.15 GiB**，仍有 ~7 GiB 余量
 - **预期修正**：
   - ~~step_time 15000-20000s~~ → 实际 ~11000s（与 comp1024 几乎持平）
   - ~~OOM 风险~~ → 不存在（70.3 GiB，余量 ~10 GiB）
@@ -707,9 +710,45 @@ result = self._outlines_generator(input_text, max_tokens=max_new_tokens)
   - `checkpoint-28`（last）：`.../qwen3_dpo_lora_cot_refine/v11-20260405-094235/checkpoint-28`
 
 ### 下一步
-1. 用 checkpoint-10 执行 `bash eval_swift_dpo.sh`（merge → inference → evaluate）
-2. 对比 SFT baseline 的格式合规率（~30%）和生成质量
-3. 若质量未退化，checkpoint-10 可作为 DPO 最终模型
+1. ~~用 checkpoint-10 执行 `bash eval_swift_dpo.sh`（merge → inference → evaluate）~~（已完成）
+2. ~~对比 SFT baseline 的格式合规率（~30%）和生成质量~~（见下方评估结果）
+
+---
+
+## 2026-04-06: DPO checkpoint-10 Inference 评估结果
+
+### 环境问题
+- `vllm_infer` 环境的 `autoawq` 与 `transformers` 版本冲突：`ImportError: cannot import name 'PytorchGELUTanh'`
+- **修复**：merge 步骤改用 `swift_train` 环境执行 `swift.cli.export`，inference 继续用 `vllm_infer`
+
+### 评估结果（checkpoint-10，190 条 dpo_combined_eval_cot.jsonl）
+
+| 指标 | DPO checkpoint-10 | SFT baseline |
+|------|-------------------|--------------|
+| 5 tags 全部存在 | **31.6%** | ~30% |
+| think block 存在 | 74.7% | - |
+| CoT 6 字段全有 | 7.9% | - |
+| 平均 prompt 字数 | 40.2 | - |
+| 关键词覆盖率 | 5.5% | - |
+| 禁用词 prompts | 1.4/5 | - |
+
+### 结论：DPO 未能提升格式合规率
+
+**格式合规率 31.6% ≈ SFT baseline 30%**，DPO 训练几乎无效。
+
+### 失败原因分析
+
+1. **Train-Inference Gap**：训练时 accuracy 100%（判别任务），但自回归生成时模型并未因此生成更好的格式。DPO 优化的是 chosen vs rejected 的相对 log-prob，不直接优化生成质量
+2. **Likelihood Displacement**：logps/chosen 从 -1114 下降到 -1277，模型在推大 margin 的同时降低了 chosen 的绝对概率，可能导致生成质量退化
+3. **负样本太简单**：format corruption 策略太极端（如 `drop_all_prompts`、`no_think`），chosen/rejected 差异巨大，模型轻松区分但没学到细粒度的格式约束
+4. **数据不平衡**：format DPO 占 95.8%（1700 条），quality DPO 仅 4.2%（74 条），质量信号被淹没
+
+### 可能的改进方向
+
+1. **更难的负样本**：borderline 负样本（如只少一个 tag、tag 顺序错、字数略超 150 words），让模型学到更细粒度的区分
+2. **减小 beta**：当前 beta=0.1，更小的值让模型更保守地偏离 reference policy，减少 likelihood displacement
+3. **Constrained Decoding**：regex 约束是硬约束（100% 格式合规），可能比 DPO 更实际、更高效
+4. **IPO / KTO 等其他 preference 算法**：对 likelihood displacement 更鲁棒
 
 ---
 
