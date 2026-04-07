@@ -33,7 +33,7 @@ swift rlhf \
     --bf16                        true \
     --gradient_checkpointing      true \
     --deepspeed                   ./ds_zero3.json \
-    --save_steps                  10 \
-    --eval_steps                  10 \
-    --logging_steps               5 \
+    --save_steps                  1 \
+    --eval_steps                  5 \
+    --logging_steps               1 \
     --beta                        0.1

@@ -758,6 +758,32 @@ result = self._outlines_generator(input_text, max_tokens=max_new_tokens)
 
 ---
 
+## 2026-04-06: DPO 早期 Checkpoint 实验（每步保存）
+
+### 动机
+- checkpoint-10 评估显示格式合规率 31.6% ≈ SFT baseline，DPO 过度训练可能导致 likelihood displacement
+- 训练曲线显示 step 1 时 loss=0.1876、accuracy=98.4%，模型已在学习但尚未过拟合
+- step 5 时 loss 已降到 0.023，step 10 完全归零 → **最早的 checkpoint 可能效果最好**
+- 假设：step 1-3 时模型刚开始调整偏好方向，chosen 的绝对概率尚未被压低
+
+### 超参调整
+- `save_steps`: 10 → **1**（每步保存 checkpoint）
+- `logging_steps`: 5 → **1**（每步记录 loss）
+- `eval_steps`: 保持 **5**（eval 耗时较长）
+- 其余参数不变（1 epoch, 28 steps, beta=0.1）
+
+### 评估计划
+- 重新训练后，对 checkpoint-1 ~ checkpoint-5 逐个做 inference 评估
+- 找到格式合规率最高的 sweet spot
+- LoRA adapter 每个 checkpoint ~几百 MB，28 个 checkpoint 磁盘空间无压力
+
+### 下一步
+1. 训练机 `git pull` 后 `DS_SKIP_CUDA_CHECK=1 bash train_swift_dpo.sh`
+2. 用 `eval_swift_dpo.sh` 逐个评估 checkpoint-1 到 checkpoint-5
+3. 对比各 checkpoint 格式合规率，选出最佳
+
+---
+
 ## 待办
 1. ~~在新机器上执行环境升级（0.10.2）~~（已完成但 bug 未修复）
 2. 在新机器上重建环境：vllm 0.19.0 + torch 2.10.0+cu126
