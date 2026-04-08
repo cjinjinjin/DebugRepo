@@ -784,6 +784,47 @@ result = self._outlines_generator(input_text, max_tokens=max_new_tokens)
 
 ---
 
+## 2026-04-08: GRPO comp2048 checkpoint-6 Inference 评估结果
+
+### 评估配置
+- **Checkpoint**：`grpo_zero2_qlora_novllm_canary_len4096_comp2048_gen2/v0-20260405-095718/checkpoint-6`
+- **Base model**（merge 对象）：SFT merged model（`qwen3_sft_lora_cot_8192_v2/v0-20260319-083851/checkpoint-50/merged_model`）
+- **评估数据**：`dpo_combined_eval_cot.jsonl`（8 条，dpo_refine 子集）
+- **推理方式**：`eval_swift_cot.sh` — swift export merge → swift infer（vLLM backend, TP=8）→ evaluate.py
+- **结果路径**：`.../checkpoint-6/eval_results/eval_report_20260408_033632.json`
+
+### 环境问题
+- 当前机器 `vllm_infer` 环境 swift 版本 4.0.2，merge 时 peft 触发 autoawq 与 transformers 版本冲突：`ImportError: cannot import name 'PytorchGELUTanh'`
+- **修复**：卸载 autoawq（`pip uninstall autoawq`），该包已 deprecated 且不影响推理
+
+### 评估结果
+
+| 指标 | GRPO comp2048 ckpt-6 | DPO ckpt-10 | SFT baseline |
+|------|---------------------|-------------|--------------|
+| 5 tags 全部存在 | **87.5%** | 31.6% | ~30% |
+| think block 存在 | **100%** | 74.7% | - |
+| CoT 6 字段全有 | 12.5% | 7.9% | - |
+| 平均 prompt 字数 | 56.7 | 40.2 | - |
+| 关键词覆盖率 | **31.0%** | 5.5% | - |
+| 禁用词 prompts | 0.9/5 | 1.4/5 | - |
+| 质量 hints | 1.1/5 | - | - |
+
+### 关键发现
+
+1. **GRPO 格式合规率 87.5%，远超 DPO（31.6%）和 SFT baseline（~30%）**：GRPO 仅 6 步训练就将格式合规率提升到近 3 倍
+2. **think block 100% 存在**：所有输出均包含 CoT 推理过程
+3. **关键词覆盖率 31.0% vs DPO 5.5%**：GRPO 模型生成的 prompt 与 landing page 内容关联度更高
+4. **禁用词 0.9/5 vs DPO 1.4/5**：GRPO 模型更好地遵守了排除约束
+5. **平均 prompt 字数 56.7 vs DPO 40.2**：GRPO 模型生成更详细的 prompt
+6. **CoT 6 字段全有仅 12.5%**：think block 结构仍有改进空间
+
+### 结论
+- GRPO 在仅 6 步训练后已显著优于 DPO 和 SFT baseline
+- 评估样本仅 8 条，需在更大测试集上验证
+- 建议：继续训练更多步数，同时对 checkpoint-3/4/5 也做评估，找到最佳 checkpoint
+
+---
+
 ## 待办
 1. ~~在新机器上执行环境升级（0.10.2）~~（已完成但 bug 未修复）
 2. 在新机器上重建环境：vllm 0.19.0 + torch 2.10.0+cu126
