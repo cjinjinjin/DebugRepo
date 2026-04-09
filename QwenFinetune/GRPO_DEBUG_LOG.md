@@ -797,7 +797,7 @@ result = self._outlines_generator(input_text, max_tokens=max_new_tokens)
 - 当前机器 `vllm_infer` 环境 swift 版本 4.0.2，merge 时 peft 触发 autoawq 与 transformers 版本冲突：`ImportError: cannot import name 'PytorchGELUTanh'`
 - **修复**：卸载 autoawq（`pip uninstall autoawq`），该包已 deprecated 且不影响推理
 
-### 评估结果
+### 评估结果（小样本，8 条 dpo_refine_eval_cot.jsonl）
 
 | 指标 | GRPO comp2048 ckpt-6 | DPO ckpt-10 | SFT baseline |
 |------|---------------------|-------------|--------------|
@@ -809,19 +809,37 @@ result = self._outlines_generator(input_text, max_tokens=max_new_tokens)
 | 禁用词 prompts | 0.9/5 | 1.4/5 | - |
 | 质量 hints | 1.1/5 | - | - |
 
+### 评估结果（完整，190 条 dpo_combined_eval_cot.jsonl）
+
+| 指标 | GRPO comp2048 ckpt-6 (190条) | DPO v12 ckpt-1 (190条) | SFT baseline |
+|------|------------------------------|------------------------|--------------|
+| 5 tags 全部存在 | 23.7% | **57.9%** | ~30% |
+| All 5 unique | 22.6% | **52.6%** | - |
+| Fully compliant | 22.6% | **47.9%** | - |
+| think block 存在 | 45.8% | 74.2% | - |
+| CoT 6 字段全有 | 6.3% | **17.4%** | - |
+| 平均 prompt 字数 | 18.7 | **68.2** | - |
+| 关键词覆盖率 | 7.5% | 9.1% | - |
+| 禁用词 prompts | 0.3/5 | 2.7/5 | - |
+| 质量 hints | 0.1/5 | - | - |
+
 ### 关键发现
 
-1. **GRPO 格式合规率 87.5%，远超 DPO（31.6%）和 SFT baseline（~30%）**：GRPO 仅 6 步训练就将格式合规率提升到近 3 倍
-2. **think block 100% 存在**：所有输出均包含 CoT 推理过程
-3. **关键词覆盖率 31.0% vs DPO 5.5%**：GRPO 模型生成的 prompt 与 landing page 内容关联度更高
-4. **禁用词 0.9/5 vs DPO 1.4/5**：GRPO 模型更好地遵守了排除约束
-5. **平均 prompt 字数 56.7 vs DPO 40.2**：GRPO 模型生成更详细的 prompt
-6. **CoT 6 字段全有仅 12.5%**：think block 结构仍有改进空间
+1. **8 条小样本结果严重高估**：87.5% → 23.7%（190 条），小样本评估不可靠
+2. **190 条上 GRPO ckpt-6 表现不如 SFT baseline（~30%）和 DPO ckpt-1（57.9%）**
+3. **平均 prompt 字数仅 18.7**（vs DPO 68.2）：模型生成内容过短，大量回复不完整
+4. **think block 仅 45.8%**：近一半输出缺少 CoT 推理过程
+5. **大量 "No model prompts" 警告**：许多 format corruption 类型的输入上模型未能生成有效 prompt
+6. **可能原因**：
+   - GRPO 仅 6 步训练，KL ~0.006，策略更新幅度极小
+   - GRPO 训练数据分布与 format DPO 评估数据分布不同
+   - 训练时 reward ~0.48 看似不错，但 inference 时生成质量不足
+   - max_length=4096 的推理设置可能与 GRPO 训练时的上下文长度不匹配
 
 ### 结论
-- GRPO 在仅 6 步训练后已显著优于 DPO 和 SFT baseline
-- 评估样本仅 8 条，需在更大测试集上验证
-- 建议：继续训练更多步数，同时对 checkpoint-3/4/5 也做评估，找到最佳 checkpoint
+- GRPO comp2048 ckpt-6 在 190 条完整评估上表现不佳，8 条小样本结果不具代表性
+- 当前 DPO v12 ckpt-1（47.9% fully compliant）仍是最佳方案
+- GRPO 需要更多训练步数和/或更高 LR 才能产生实质性改进
 
 ---
 
@@ -869,7 +887,7 @@ result = self._outlines_generator(input_text, max_tokens=max_new_tokens)
 1. **DPO checkpoint-1 显著优于 checkpoint-10**：format compliance 从 31.6% 提升到 57.9%（+26.3pp），fully compliant 47.9%
 2. **证实 likelihood displacement 假说**：step 1 时模型刚开始调整偏好，chosen 概率尚未被过度压低；step 10 后完全过拟合
 3. **DPO 在极早期有正向效果**：仅 1 步 DPO 训练就将 SFT baseline 的 ~30% 提升到 47.9%（fully compliant）
-4. **仍不如 GRPO**：GRPO ckpt-6 的 87.5%（8 条样本）远高于 DPO ckpt-1 的 57.9%（190 条样本），但样本量差异大
+4. **GRPO 在 190 条上不如 DPO ckpt-1**：GRPO ckpt-6 仅 23.7%（190 条），远低于 DPO ckpt-1 的 57.9%。此前 8 条小样本上 87.5% 的结果不具代表性
 5. **Forbidden words 上升到 2.7/5**：DPO 在减少禁用词方面不如 GRPO（0.9/5），可能因为 format DPO 数据不含禁用词约束
 
 ### 全部 5 个 Checkpoint 对比（190 条 eval 数据）
