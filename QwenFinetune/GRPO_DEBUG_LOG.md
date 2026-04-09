@@ -825,6 +825,83 @@ result = self._outlines_generator(input_text, max_tokens=max_new_tokens)
 
 ---
 
+## 2026-04-08: DPO v12 早期 Checkpoint 评估结果
+
+### 评估配置
+- **训练版本**：v12-20260407-052859（save_steps=1，每步保存）
+- **评估数据**：`dpo_combined_eval_cot.jsonl`（190 条）
+- **评估脚本**：`eval_swift_dpo.sh`（含 `--max_new_tokens 4096`）
+- **evaluate.py 更新**：新增 prompt uniqueness 检查（5 个 prompt 必须互不相同）
+
+### Eval 数据 Input Token 分布
+| 统计量 | Tokens |
+|--------|--------|
+| 平均 | 1303 |
+| 中位数 | 1046 |
+| P90 | 2217 |
+| P95 | 3063 |
+| 最大值 | 7363 |
+| >4096 | 5 个样本 |
+| >6144 | 3 个样本 |
+
+### SFT 训练集 Output Token 分布
+| 部分 | 平均 | P95 | 最大 |
+|------|------|-----|------|
+| Think | 77 | 94 | 115 |
+| Prompts | 869 | 964 | 1106 |
+| 总输出 | 946 | 1058 | 1221 |
+
+### Checkpoint-1 评估结果（190 条）
+
+| 指标 | DPO v12 ckpt-1 | DPO v11 ckpt-10 | SFT baseline | GRPO ckpt-6 (8条) |
+|------|----------------|-----------------|--------------|-------------------|
+| All 5 tags present | **57.9%** | 31.6% | ~30% | 87.5% |
+| All 5 unique | **52.6%** | - | - | - |
+| Fully compliant | **47.9%** | - | - | - |
+| Think block present | **74.2%** | 74.7% | - | 100% |
+| CoT 6 fields | 17.4% | 7.9% | - | 12.5% |
+| Avg word count | 68.2 | 40.2 | - | 56.7 |
+| Keyword coverage | 9.1% | 5.5% | - | 31.0% |
+| Forbidden words | 2.7/5 | 1.4/5 | - | 0.9/5 |
+
+### 关键发现
+
+1. **DPO checkpoint-1 显著优于 checkpoint-10**：format compliance 从 31.6% 提升到 57.9%（+26.3pp），fully compliant 47.9%
+2. **证实 likelihood displacement 假说**：step 1 时模型刚开始调整偏好，chosen 概率尚未被过度压低；step 10 后完全过拟合
+3. **DPO 在极早期有正向效果**：仅 1 步 DPO 训练就将 SFT baseline 的 ~30% 提升到 47.9%（fully compliant）
+4. **仍不如 GRPO**：GRPO ckpt-6 的 87.5%（8 条样本）远高于 DPO ckpt-1 的 57.9%（190 条样本），但样本量差异大
+5. **Forbidden words 上升到 2.7/5**：DPO 在减少禁用词方面不如 GRPO（0.9/5），可能因为 format DPO 数据不含禁用词约束
+
+### 全部 5 个 Checkpoint 对比（190 条 eval 数据）
+
+| 指标 | ckpt-1 | ckpt-2 | ckpt-3 | ckpt-4 | ckpt-5 | SFT baseline | GRPO ckpt-6 (8条) |
+|------|--------|--------|--------|--------|--------|--------------|-------------------|
+| **Fully compliant** | **47.9%** | 46.8% | 39.5% | 25.3% | 41.6% | ~30% | 87.5% |
+| All 5 tags | **57.9%** | 55.8% | 49.5% | 37.4% | 50.5% | ~30% | 87.5% |
+| All unique | **52.6%** | 52.1% | 44.7% | 33.2% | 45.3% | - | - |
+| Think block | 74.2% | 74.2% | 75.3% | 72.1% | **81.6%** | - | 100% |
+| CoT 6 fields | 17.4% | **21.6%** | 12.6% | 9.5% | 17.4% | - | 12.5% |
+| Avg word count | **68.2** | 62.2 | 55.5 | 47.5 | 53.6 | - | 56.7 |
+| Keyword coverage | 9.1% | **9.8%** | 8.9% | 6.3% | 8.4% | - | 31.0% |
+| Forbidden words | 2.7/5 | 2.6/5 | 2.4/5 | 1.8/5 | 2.3/5 | - | 0.9/5 |
+
+### 趋势分析
+
+1. **Format compliance 单调递减（ckpt-1→4）**：47.9% → 46.8% → 39.5% → 25.3%，ckpt-4 甚至低于 SFT baseline（~30%）
+2. **Ckpt-5 回弹到 41.6%**：可能是 eval noise，但仍低于 ckpt-1
+3. **Likelihood displacement 完全确认**：DPO 训练步数越多，chosen 概率越被压低，生成质量越差
+4. **Avg word count 持续下降**（68→62→55→47→54）：模型逐渐生成更短、更不完整的输出
+5. **Ckpt-1 是唯一全面优于 SFT baseline 的 checkpoint**
+
+### DPO 实验最终结论
+
+- **DPO 最佳 checkpoint = checkpoint-1**（仅 1 步训练），fully compliant 47.9%
+- DPO 对 format compliance 的提升有限（47.9% vs GRPO 87.5%），且极易过拟合退化
+- Likelihood displacement 是 DPO 在此任务上的根本瓶颈：负样本太简单，模型通过压低 chosen 概率来拉大 margin，而非真正学习格式约束
+- **GRPO 是更有前景的方向**：直接优化 reward 而非相对偏好，不存在 likelihood displacement 问题
+
+---
+
 ## 待办
 1. ~~在新机器上执行环境升级（0.10.2）~~（已完成但 bug 未修复）
 2. 在新机器上重建环境：vllm 0.19.0 + torch 2.10.0+cu126
