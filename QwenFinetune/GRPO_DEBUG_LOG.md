@@ -252,6 +252,53 @@
   
   **注**：reward 在 steps 1-13 中呈缓慢上升（前 6 步均值 0.484 → 后 7 步均值 0.492），但仍在平台波动范围内（0.45-0.51）。GRPO 在大模型上学习缓慢是已知现象（KL ~0.006 说明策略更新幅度极小），需要更多 steps 才能确认趋势。Steps 11-12 的截断事件（max_length 达 1678 和 2048）说明模型偶尔会探索更长的回复，但不持续。
 
+- **GRPO vs DPO 评估对比分析（2026-04-08）**：
+
+  在 190 条 `dpo_combined_eval_cot.jsonl` 数据上，GRPO comp2048 ckpt-6 与 DPO v12 ckpt-1 的评估对比：
+
+  | 指标 | GRPO comp2048 ckpt-6 | DPO v12 ckpt-1 | SFT baseline | 差距 |
+  |------|----------------------|----------------|--------------|------|
+  | Fully compliant | 22.6% | **47.9%** | ~30% | DPO 高 2.1x |
+  | All 5 tags present | 23.7% | **57.9%** | ~30% | DPO 高 2.4x |
+  | Think block present | 45.8% | **74.2%** | — | DPO 高 1.6x |
+  | Avg word count | 18.7 | **68.2** | — | DPO 高 3.6x |
+  | Keyword coverage | 7.5% | **9.1%** | — | DPO 略高 |
+  | CoT 6 fields complete | 6.3% | **17.4%** | — | DPO 高 2.8x |
+
+  **核心问题诊断**：
+
+  1. **Reward hacking（偷懒策略）**：GRPO 的 avg word count 仅 18.7（DPO 为 68.2），说明模型学到了"写 5 个极短 `<PromptN>` 标签 → 拿格式分 +1.0 + 长度奖励 +0.25，同时避免 bigram 惩罚和 think 长度惩罚"的捷径。training reward ~0.49 看似不错，但实际输出质量很差
+  2. **Reward 函数与评估指标脱节**：reward 主要奖励格式（tag 闭合 +1.0），对内容质量（关键词覆盖、语义相关性）没有约束；prompt 长度惩罚过弱（仅 ±0.05/prompt），模型可以写 5 个几词的短 prompt 就拿满分
+  3. **NUM_GENERATIONS=2 梯度信号不足**：仅 2 个候选做 group comparison，reward 方差极低（KL ~0.006），模型几乎没有收到"哪个更好"的有效梯度。13 步后 reward 仍在平台波动
+  4. **学习率过低**：LR=5e-6 导致策略更新幅度极小（KL ~0.006），学习速度远慢于 DPO（DPO 1 步就到 47.9%）
+
+  **Reward 函数各组件问题严重程度分析**（基于 ckpt-6 在 190 条上的输出）：
+
+  当前 reward 函数（`reward_grpo.py`）理论满分 ~1.45，格式分（tag 闭合 +1.0）占 69%：
+
+  | 排名 | Reward 组件 | 严重程度 | 现状 & 问题 |
+  |------|------------|---------|------------|
+  | 1 | **无最低字数约束**（缺失） | 🔴🔴 最严重 | avg 18.7 词 → 模型写 `<Prompt1>nice photo</Prompt1>` 这样 2-3 词的空壳也不扣分，直接导致输出无意义 |
+  | 2 | **无内容质量/语句通顺信号**（缺失） | 🔴🔴 最严重 | keyword coverage 7.5%, quality hints 0.1/5 → reward 完全不衡量 prompt 是否与 LP 相关、是否是通顺的 T2I prompt，模型可输出语法碎片拿高分 |
+  | 3 | `_score_think_closed` 只奖励闭合 | 🔴 严重 | think block 45.8% 但 CoT 6 fields 仅 6.3% → 模型写 `<think>ok</think>` 就拿 +0.2，和完整 6 字段 CoT 推理拿同样分数 |
+  | 4 | `_score_prompt_lengths` ±0.05 太弱 | 🔴 严重 | 5 个 3 词 prompt（+0.25）和 5 个 100 词好 prompt（+0.25）拿相同分数，对长度完全没有区分度 |
+  | 5 | `_penalty_bigram_repetition` 短输出下失效 | ⚠️ 中 | 每个 prompt ~4 词 → bigram 极少 → 惩罚≈0，反而间接鼓励"写短以避免重复惩罚" |
+  | 6 | `_penalty_think_length` 方向单一 | 🟡 轻微 | 只惩罚写太长（>300 词），不惩罚写太短/太空。当前 think 内容极短，此组件完全不工作 |
+  | — | `_score_prompt_tags` +0.2/tag | ⚠️ 中 | 方向正确但权重过大（+1.0 占总分 69%），是"唯一强正向信号"，模型把全部学习能力放在凑 tag 上 |
+
+  **核心结论**：当前 reward 最大问题不是某个组件权重不对，而是**完全缺少内容质量维度**。模型只需学会"写 5 个极短闭合 tag + 空 think block"就拿接近满分（+1.0 + 0.2 + 0.25 = 1.45），这正是 ckpt-6 学到的 reward hacking 策略。
+
+  **改进方向**（按优先级排序）：
+
+  1. **修复 Reward 函数（最关键）**：
+     - 增加最低字数强制：每个 prompt < 20 词时 -0.2 惩罚（当前仅 -0.05），堵死"写短拿分"漏洞
+     - 增加内容质量信号：关键词覆盖奖励 +0.1 × coverage_rate；或利用 reference model 的 log-prob 做流畅度评估
+     - 增加 CoT 完整性奖励：think block 包含 6 字段时 +0.2（当前只奖励闭合，不管内容）
+     - 降低格式分占比：考虑将 tag 奖励从 +0.2/tag 降至 +0.1/tag，让内容质量信号有更大影响力
+  2. **增大 NUM_GENERATIONS**：从 2 提高到 4 或 8，增加 group 内 reward 方差，让模型能区分好坏回复
+  3. **提高学习率**：尝试 1e-5 或 2e-5，配合更好的 reward 函数加速学习
+  4. **定位思考**：DPO 的 pairwise preference 信号对"格式+内容质量"类任务更直接高效；GRPO 若要追上 DPO，必须先修 reward 函数让 training signal 与评估指标对齐
+
 ### 11. ZeRO-2 + QLoRA（第二次，修复 adapter 加载问题后）
 - **状态**：待测试
 - **配置**：`run_grpo_stable_scaleup.sh`，ZeRO-2 + QLoRA 4bit，无 vllm，merged model，无旧 adapter
@@ -929,11 +976,44 @@ result = self._outlines_generator(input_text, max_tokens=max_new_tokens)
 
 ---
 
+## 2026-04-08: vLLM 0.19.0 Server 模式成功启动（Plan A 第一阶段）
+
+### 环境
+- **新机器**：8× A100-SXM4-80GB
+- **环境**：torch 2.10.0+cu126, vllm 0.19.0, ms-swift 4.1.0.dev0, trl 0.28.0, transformers 4.57.6
+- **FusedMoE._load_w2 bug 已确认修复**：vllm 0.19.0 (PR #37010) 在 Qwen3-30B-A3B TP=2 上正常加载
+
+### 服务器启动成功
+- **命令**：`CUDA_VISIBLE_DEVICES=0,1 bash start_rollout_server.sh`
+- **配置**：`swift rollout`, TP=2, GPU memory utilization=0.90
+- **启动耗时**：~62.5 秒（Engine init）
+- **KV cache 容量**：905,120 tokens
+- **CUDA graph**：51 piecewise + 35 full graphs captured
+- **服务端口**：`http://0.0.0.0:8000`（Uvicorn running）
+- **状态**：✅ 正常运行，等待训练端连接
+
+### 已确认修复的问题
+- ✅ vLLM FusedMoE._load_w2 TP bug（#17, #18）— vllm 0.19.0 PR #37010
+- ✅ VLLM_MODE 环境变量泄露（#16）— train_swift_grpo.sh 中已清除
+
+### 剩余风险点
+1. **训练数据异常样本**：`grpo_train.jsonl` line 189 有 ~345K chars (~98K tokens)，完整网页内容。可能导致 OOM 或训练阻塞。建议训练前清除
+2. **NCCL 重入风险**：ms-swift 4.1.0.dev0 + vllm 0.19.0 的 v1 EngineCore 架构下，swift PyNcclCommunicator 与 vllm 内部 NCCL comm 是否存在重入冲突，需实际训练验证
+3. **MoE 全量权重同步开销**：MoE 模型不支持 LoRA adapter sync，每轮 rollout 需要 merge → sync 全量权重（base + LoRA），预计 30-90s/rollout
+4. **ZeRO-2 + QLoRA 生成去同步**：不同 GPU 上生成输出长度不一致可能导致 NCCL timeout（#15 的变体）
+
+### 下一步
+- Terminal B 启动训练：`bash run_grpo_server_mode.sh`
+- 建议先清理训练数据异常样本（line 189）
+
+---
+
 ## 待办
 1. ~~在新机器上执行环境升级（0.10.2）~~（已完成但 bug 未修复）
-2. 在新机器上重建环境：vllm 0.19.0 + torch 2.10.0+cu126
-3. 验证 vllm 0.19.0 + Qwen3MoE TP=2 能否正常启动 `swift rollout`
-4. 重跑 Plan A：`start_rollout_server.sh` + `run_grpo_server_mode.sh`
-5. **重跑方案十（canary）**：`MAX_COMPLETION_LENGTH=1024`，观察 clipped_ratio 是否下降、reward 是否出现上升趋势
-6. 如果 Plan A 仍有问题，在原机器跑 Plan B：`run_grpo_stable_scaleup.sh`（已有超时修复）
-7. 若成功：对比 GRPO 训后 reward 与 SFT baseline（0.211）
+2. ~~在新机器上重建环境：vllm 0.19.0 + torch 2.10.0+cu126~~（已完成）
+3. ~~验证 vllm 0.19.0 + Qwen3MoE TP=2 能否正常启动 `swift rollout`~~（已完成 ✅）
+4. **重跑 Plan A**：`start_rollout_server.sh`（✅ 已启动） + `run_grpo_server_mode.sh`（⬜ 待启动）
+5. **清理训练数据异常样本**：`grpo_train.jsonl` line 189（~345K chars）
+6. **重跑方案十（canary）**：`MAX_COMPLETION_LENGTH=1024`，观察 clipped_ratio 是否下降、reward 是否出现上升趋势
+7. 如果 Plan A 仍有问题，在原机器跑 Plan B：`run_grpo_stable_scaleup.sh`（已有超时修复）
+8. 若成功：对比 GRPO 训后 reward 与 SFT baseline（0.211）
