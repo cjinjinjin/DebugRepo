@@ -39,6 +39,9 @@ def main():
     parser.add_argument("--max_tokens",   type=int, default=2048)
     parser.add_argument("--enable_reasoning", action="store_true", default=False,
                         help="Enable reasoning parser for Qwen3 thinking mode")
+    parser.add_argument("--quantization", default="gptq",
+                        choices=["gptq", "gptq_marlin", "awq", "none"],
+                        help="Quantization type (default: gptq)")
     args = parser.parse_args()
 
     try:
@@ -50,11 +53,12 @@ def main():
     print(f"[INFO] Loading tokenizer: {args.model}")
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
 
-    print(f"[INFO] Loading quantized model (tp={args.tp}): {args.model}")
+    print(f"[INFO] Loading quantized model (tp={args.tp}, quant={args.quantization}): {args.model}")
+    quant = None if args.quantization == "none" else args.quantization
     llm = LLM(
         model=args.model,
         tensor_parallel_size=args.tp,
-        quantization="gptq",
+        **({"quantization": quant} if quant else {}),
         trust_remote_code=True,
         max_model_len=8192,
         enable_reasoning=args.enable_reasoning,
