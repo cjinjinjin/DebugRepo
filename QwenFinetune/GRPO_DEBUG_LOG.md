@@ -1008,12 +1008,105 @@ result = self._outlines_generator(input_text, max_tokens=max_new_tokens)
 
 ---
 
+## 2026-04-08: Reward 函数 v2 设计（修复 reward hacking）
+
+### 问题回顾
+
+GRPO comp2048 ckpt-6 在 190 条评估上表现极差：
+- Fully compliant 22.6%（低于 SFT baseline ~30%）
+- Avg word count 仅 18.7（DPO ckpt-1 为 68.2）
+- 根因：**reward hacking** — v1 reward 格式分（tag 闭合 +1.0）占满分 69%，模型学会写 5 个极短空壳 tag 拿高分
+
+### v1 → v2 变更对比
+
+| 组件 | v1 (旧) | v2 (新) | 变更原因 |
+|------|---------|---------|---------|
+| `_score_prompt_tags` | +0.2/tag (满分 +1.0) | **+0.1/tag** (满分 +0.5) | 格式分占比太高，降半 |
+| `_score_think_closed` | +0.2 | **+0.1** | 同上，降半 |
+| `_score_prompt_min_length` | ❌ 不存在 | **新增**：<20w → -0.2/prompt, 40-150w → +0.1/prompt | 堵死空壳策略 |
+| `_score_think_cot_fields` | ❌ 不存在 | **新增**：+0.05/field (6 fields), 全部 +0.1 bonus | 激励完整 CoT 推理 |
+| `_score_prompt_descriptiveness` | ❌ 不存在 | **新增**：0.3 × avg content-word ratio | 奖励具体描述性词汇 |
+| `_score_prompt_lengths` (旧) | ±0.05/prompt | ❌ 移除，被 min_length + overlength 替代 | 区分度太弱 |
+| `_penalty_prompt_overlength` | 含在 lengths 中 | **-0.1/prompt >150w** | 只罚不奖 |
+| `_penalty_bigram_repetition` | -2.0 × ratio | 不变 | prompt 变长后有效 |
+| `_penalty_think_length` | -0.3 max | 不变 | |
+
+### v2 分数分布对比
+
+| 场景 | v1 分数 | v2 分数 | 变化 |
+|------|---------|---------|------|
+| 5 个 3 词空壳 tag + 空 think | **+1.45** | **-0.40** | 空壳从高分变负分 ✅ |
+| 5 个 80 词质量 prompt + 完整 CoT | +1.34 | **+1.61** | 好输出分数更高 ✅ |
+| 5 个 30 词 + 部分 CoT | -0.55 | **-1.04** | 中等质量更严格 |
+
+### v2 评分组件详细设计
+
+```
+总分范围：约 -3.0 ~ +2.0
+
+A. 格式分（降半权重）
+   _score_prompt_tags:      +0.1/tag × 5 = 最高 +0.5
+   _score_think_closed:     +0.1（闭合即得）
+
+B. 内容质量分（全新）
+   _score_prompt_min_length:      <20w → -0.2/prompt, 20-39w → 0, 40-150w → +0.1/prompt
+   _score_think_cot_fields:       +0.05 × 6 fields + 0.1 bonus = 最高 +0.4
+   _score_prompt_descriptiveness: 0.3 × avg(content_word_ratio) = 最高 +0.3
+
+C. 惩罚项（保留）
+   _penalty_bigram_repetition:    -2.0 × repetition_ratio
+   _penalty_think_length:         线性惩罚 -0.3 max (>300w)
+   _penalty_prompt_overlength:    -0.1/prompt (>150w)
+```
+
+### 关键设计约束
+
+- **ms-swift GRPO reward 只接收 `completions`**，无法访问原始 prompt/messages → keyword coverage 等需要输入信息的指标无法在 reward 中实现
+- Stopwords 列表：复用 evaluate.py 中的 STOPWORDS（常见功能词），用于计算 descriptiveness ratio
+- CoT 6 字段：`ProductType, SpecificProduct, Category, VisualAnchors, LifestyleVibe, CoreValueSignals`
+
+### 文件变更
+
+| 文件 | 变更 |
+|------|------|
+| `reward_grpo_v1.py` | 新建，v1 备份 |
+| `reward_grpo.py` | 完全重写为 v2 |
+
+### 状态
+
+- ✅ v2 已实现、测试、commit+push（`c4d82f2`）
+- ⬜ 待用 v2 启动新 GRPO 训练
+
+---
+
+## 2026-04-08: GRPO reward v2 训练启动
+
+### 训练配置
+
+基于 `run_grpo_stable_canary_comp2048.sh` 创建新脚本 `run_grpo_reward_v2.sh`：
+
+| 参数 | comp2048 (v1 reward) | reward v2 (新) | 变更原因 |
+|------|---------------------|----------------|---------|
+| EXPERIMENT_NAME | `..._comp2048_gen2` | `grpo_reward_v2_comp2048` | 区分实验 |
+| REWARD_PLUGIN | reward_grpo.py (v1) | reward_grpo.py (v2) | v2 已覆盖 v1 |
+| NUM_GENERATIONS | 2 | 2 | 暂不改，优先验证 reward 效果 |
+| LEARNING_RATE | 5e-6 | 5e-6 | 暂不改 |
+| 其余 | 同 comp2048 | 不变 | |
+
+### 预期效果
+
+- 空壳策略在 v2 下得不到正向 reward（-0.40 vs v1 +1.45），模型应被迫生成有实质内容的 prompt
+- 首步 reward 可能低于 v1 comp2048 的 0.507（因为 v2 标准更高），但应该看到 reward 上升趋势
+- 如果 reward 仍然不涨，下一步考虑提高 LR 或 NUM_GENERATIONS
+
+---
+
 ## 待办
 1. ~~在新机器上执行环境升级（0.10.2）~~（已完成但 bug 未修复）
 2. ~~在新机器上重建环境：vllm 0.19.0 + torch 2.10.0+cu126~~（已完成）
 3. ~~验证 vllm 0.19.0 + Qwen3MoE TP=2 能否正常启动 `swift rollout`~~（已完成 ✅）
 4. **重跑 Plan A**：`start_rollout_server.sh`（✅ 已启动） + `run_grpo_server_mode.sh`（⬜ 待启动）
 5. **清理训练数据异常样本**：`grpo_train.jsonl` line 189（~345K chars）
-6. **重跑方案十（canary）**：`MAX_COMPLETION_LENGTH=1024`，观察 clipped_ratio 是否下降、reward 是否出现上升趋势
-7. 如果 Plan A 仍有问题，在原机器跑 Plan B：`run_grpo_stable_scaleup.sh`（已有超时修复）
-8. 若成功：对比 GRPO 训后 reward 与 SFT baseline（0.211）
+6. ~~重跑方案十（canary）~~：comp1024/comp2048 已完成并行对比
+7. **启动 reward v2 GRPO 训练**：`bash run_grpo_reward_v2.sh`
+8. 若成功：对比 GRPO v2 reward 与 v1 comp2048（~0.49）和 SFT baseline（0.211）
