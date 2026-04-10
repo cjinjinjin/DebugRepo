@@ -5,11 +5,11 @@ Directly uses the same system prompt and eval data from Qwen3 experiments,
 no fine-tuning required.
 
 Usage:
-  # Single query
+  # Single query (only URL + content, matching production fields)
   python Gemma4/inference_gemma4.py \
       --model_id /vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/gemma-4-26B-A4B-it \
       --url "https://example.com/product" \
-      --title "Product Title"
+      --content "Product description text"
 
   # Batch inference from JSONL
   python Gemma4/inference_gemma4.py \
@@ -79,14 +79,6 @@ CoreValueSignals: ...
 
 FIELD_LABELS = {
     "FinalDestinationURLUrl": "URL",
-    "DocumentTitle": "Document Title",
-    "VisualTitle": "Visual Title",
-    "Heading": "Heading",
-    "Title_CB": "Title (CB)",
-    "VisualTitle_CB": "Visual Title (CB)",
-    "Heading_CB": "Heading (CB)",
-    "BestSnippet_CB": "Best Snippet (CB)",
-    "MetaDescription_CB": "Meta Description (CB)",
     "PrimaryContentNoTitleNoHeading": "Primary Content",
 }
 
@@ -330,8 +322,6 @@ def parse_args():
                     help="Disable thinking mode")
     # Single query
     p.add_argument("--url", default="", help="Landing page URL")
-    p.add_argument("--title", default="", help="Document title")
-    p.add_argument("--heading", default="", help="Heading text")
     p.add_argument("--content", default="", help="Primary content text")
     # Batch mode
     p.add_argument("--input_file", default="", help="Input JSONL")
@@ -438,8 +428,6 @@ def main():
         # Single query mode
         lp_fields = {
             "FinalDestinationURLUrl": args.url,
-            "DocumentTitle": args.title,
-            "Heading": args.heading,
             "PrimaryContentNoTitleNoHeading": args.content,
         }
         raw_response = gen.generate(lp_fields, **gen_kwargs)
