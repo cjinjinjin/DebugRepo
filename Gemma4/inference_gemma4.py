@@ -151,10 +151,29 @@ class Gemma4PromptGenerator:
         try:
             from transformers import AutoProcessor
             self.processor = AutoProcessor.from_pretrained(proc_id)
-        except (ValueError, ImportError, OSError):
-            print(f"[WARN] AutoProcessor failed, falling back to AutoTokenizer ...")
+        except (ValueError, ImportError, OSError, AttributeError):
+            print(f"[WARN] AutoProcessor failed, falling back to AutoTokenizer with patched config ...")
             from transformers import AutoTokenizer
-            self.processor = AutoTokenizer.from_pretrained(proc_id)
+            import json as _json, shutil, tempfile
+            _tok_cfg = Path(proc_id) / "tokenizer_config.json"
+            _load_path = proc_id
+            _tmpdir = None
+            if _tok_cfg.exists():
+                with open(_tok_cfg, "r") as _f:
+                    _cfg = _json.load(_f)
+                if isinstance(_cfg.get("extra_special_tokens"), list):
+                    _tmpdir = tempfile.mkdtemp(prefix="tok_patch_")
+                    # Copy all tokenizer files to temp dir
+                    for f in Path(proc_id).iterdir():
+                        if f.is_file() and ("token" in f.name.lower() or f.suffix == ".json" or f.suffix == ".model"):
+                            shutil.copy2(f, _tmpdir)
+                    _cfg["extra_special_tokens"] = {}
+                    with open(Path(_tmpdir) / "tokenizer_config.json", "w") as _f:
+                        _json.dump(_cfg, _f, indent=2, ensure_ascii=False)
+                    _load_path = _tmpdir
+            self.processor = AutoTokenizer.from_pretrained(_load_path)
+            if _tmpdir:
+                shutil.rmtree(_tmpdir, ignore_errors=True)
 
         # Quantization config
         bnb_config = None
