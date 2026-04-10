@@ -59,14 +59,40 @@
 
 ---
 
-## 阶段一：Zero-shot 测试（2026-04-09）
+## 阶段一：Zero-shot 测试（2026-04-10）
+
+### 环境配置
+
+**硬件**：8× A100-SXM4-80GB，CUDA Driver 12.8，nvcc 11.8
+
+**环境搭建记录**：
+1. `bash Gemma4/setup_env.sh` 创建 `gemma4` conda 环境
+2. `huggingface-cli download` 下载模型到本地 `./gemma-4-26B-A4B-it`
+3. 尝试 `cp -r` 到 vc_data 共享存储 → 跨 mount 拷贝极慢，放弃，改用本地路径
+4. `rm -rf` 清理 vc_data 上的残留也很慢（mount 路径 I/O 瓶颈）
+
+**踩坑记录**：
+
+| # | 问题 | 原因 | 解决方案 |
+|---|------|------|----------|
+| 1 | `AutoProcessor.from_pretrained()` 报 `Unrecognized processing class` | `setup_env.sh` 安装的 `transformers==4.57.6` 不支持 Gemma 4 的 `Gemma4Processor` class | `pip install -U transformers` 升级到最新版 |
+| 2 | 升级 transformers 后报 `PyTorch and torchvision compiled with different CUDA major versions` (torch cu130 vs torchvision cu126) | `pip install -U torch` 默认装了 cu130 版本，与 torchvision cu126 不匹配 | `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126 --force-reinstall` |
+| 3 | vc_data 共享存储 `mv` 报 `preserving permissions: Operation not permitted` | mount 路径不支持 permission 保留 | 改用 `cp -r`，但速度太慢；最终决定直接用本地路径 |
+
+**最终依赖版本**（待确认 torch 重装后）：
+```
+torch: 需 cu126 版本
+transformers: 最新版（需支持 Gemma4Processor）
+accelerate: >=1.0.0
+peft: >=0.13.0
+```
 
 ### 配置
-- 模型：`google/gemma-4-26B-A4B-it`（HuggingFace）
+- 模型路径：`./gemma-4-26B-A4B-it`（本地）
 - 方式：直接用现有 system prompt + eval 数据，不做任何训练
-- 推理脚本：`inference_gemma4.py`
+- 推理脚本：`inference_gemma4.py`（使用 `AutoProcessor`，对齐官方 HF card）
 - 评估脚本：复用 `QwenFinetune/evaluate.py`
-- 评估数据：`QwenFinetune/data/sft_eval_cot.jsonl`（格式独立评估）
+- 评估数据：`QwenFinetune/data/sft_eval_cot.jsonl`
 
 ### 运行命令
 

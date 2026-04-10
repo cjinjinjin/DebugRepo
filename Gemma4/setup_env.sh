@@ -56,14 +56,15 @@ else
     conda create -y -n "${ENV_NAME}" python=3.10
 fi
 
-# ── PyTorch ──────────────────────────────────────────────────────────────────
-echo "[INFO] Installing PyTorch 2.10.0 (cu126) ..."
-${PIP} install torch==2.10.0 torchvision torchaudio \
+# ── PyTorch (cu126, 必须与 torchvision 同 CUDA 版本) ────────────────────────
+echo "[INFO] Installing PyTorch + torchvision + torchaudio (cu126) ..."
+${PIP} install torch torchvision torchaudio \
     --index-url https://download.pytorch.org/whl/cu126
 
 # ── Core ML deps ─────────────────────────────────────────────────────────────
-echo "[INFO] Installing transformers + accelerate + peft ..."
-${PIP} install "transformers==4.57.6" "accelerate>=1.0.0" "peft>=0.13.0"
+# transformers 必须用最新版，4.57.6 不支持 Gemma 4 的 Gemma4Processor
+echo "[INFO] Installing transformers (latest, Gemma 4 support) + accelerate + peft ..."
+${PIP} install -U transformers "accelerate>=1.0.0" "peft>=0.13.0"
 
 # ── Gemma 4 specific: AutoProcessor needs pillow + sentencepiece ─────────────
 echo "[INFO] Installing Gemma 4 processor dependencies ..."
@@ -97,9 +98,9 @@ if [ "${INFERENCE_ONLY}" = false ]; then
     echo "[INFO] Installing datasets ..."
     ${PIP} install "datasets>=2.18"
 
-    # Re-pin transformers (ms-swift may override)
-    echo "[INFO] Re-pinning transformers==4.57.6 ..."
-    ${PIP} install "transformers==4.57.6"
+    # Re-pin transformers to latest (ms-swift may downgrade)
+    echo "[INFO] Re-pinning transformers to latest ..."
+    ${PIP} install -U transformers
 fi
 
 # ── Verify ────────────────────────────────────────────────────────────────────

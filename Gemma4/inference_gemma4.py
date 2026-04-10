@@ -167,7 +167,7 @@ class Gemma4PromptGenerator:
             model_id,
             quantization_config=bnb_config,
             device_map=device,
-            torch_dtype=torch_dtype,
+            dtype=torch_dtype,
         )
 
         # Load LoRA adapter if provided
@@ -224,8 +224,19 @@ class Gemma4PromptGenerator:
             outputs[0][input_len:], skip_special_tokens=False
         )
 
+        print(f"\n[DEBUG] Generated {outputs[0].shape[-1] - input_len} new tokens")
+        print(f"[DEBUG] Raw decoded response:\n{repr(response[:500])}")
+
         # Parse thinking vs final answer
         parsed = self.processor.parse_response(response)
+
+        print(f"[DEBUG] parse_response type: {type(parsed)}")
+        if isinstance(parsed, dict):
+            print(f"[DEBUG] parse_response keys: {list(parsed.keys())}")
+            print(f"[DEBUG] thinking (first 200): {repr(str(parsed.get('thinking', ''))[:200])}")
+            print(f"[DEBUG] content (first 200): {repr(str(parsed.get('content', ''))[:200])}")
+        else:
+            print(f"[DEBUG] parse_response value: {repr(str(parsed))[:500]}")
 
         return parsed
 
@@ -259,9 +270,9 @@ def parse_gemma_response(response) -> str:
     evaluate.py that expects Qwen-style output.
     """
     if isinstance(response, dict):
-        # parse_response returns dict with 'thought' and 'response' keys
-        thinking = response.get("thought", "")
-        answer = response.get("response", "")
+        # parse_response returns dict with 'thinking' and 'content' keys
+        thinking = response.get("thinking", "")
+        answer = response.get("content", "")
         if thinking:
             return f"<think>\n{thinking}\n</think>\n{answer}"
         return answer

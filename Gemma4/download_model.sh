@@ -47,9 +47,10 @@ if [ -d "${TARGET_DIR}" ]; then
     echo "[WARN] ${TARGET_DIR} already exists. Skipping move."
     echo "       Delete it first if you want to re-download."
 else
-    echo "[Step 2] Moving to ${TARGET_DIR} ..."
-    mv "${LOCAL_DIR}" "${TARGET_DIR}"
-    echo "[OK] Moved to ${TARGET_DIR}"
+    echo "[Step 2] Copying to ${TARGET_DIR} ..."
+    cp -r "${LOCAL_DIR}" "${TARGET_DIR}"
+    echo "[OK] Copied to ${TARGET_DIR}"
+    echo "[INFO] You can remove the local copy: rm -rf ${LOCAL_DIR}"
 fi
 
 echo ""
