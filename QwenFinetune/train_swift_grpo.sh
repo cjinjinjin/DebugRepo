@@ -114,9 +114,13 @@ cmd=(
     --top_k 50
     --temperature 0.7
     --reward_funcs format_quality
-    --external_plugins "${REWARD_PLUGIN}" "${SCRIPT_DIR}/patch_colocate_rollout.py"
+    --external_plugins "${REWARD_PLUGIN}" "${SCRIPT_DIR}/patch_colocate_rollout.py" ${EXTRA_PLUGINS:-}
     --ddp_timeout 7200
 )
+
+if [[ -n "${EXTRA_CALLBACKS:-}" ]]; then
+    cmd+=(--callbacks ${EXTRA_CALLBACKS})
+fi
 
 if [[ -n "${DEEPSPEED_CONFIG}" ]]; then
     cmd+=(--deepspeed "${DEEPSPEED_CONFIG}")

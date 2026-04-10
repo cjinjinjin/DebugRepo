@@ -26,6 +26,10 @@ unset VLLM_SERVER_PORT
 export LOAD_IN_4BIT="false"
 export REWARD_PLUGIN="${SCRIPT_DIR}/reward_grpo.py"
 
+# Fix for PyTorch 2.8+ / DeepSpeed LR scheduler param_group mismatch (ms-swift #8299)
+export EXTRA_PLUGINS="${SCRIPT_DIR}/fix_lr_scheduler.py"
+export EXTRA_CALLBACKS="fix_lr"
+
 export LORA_RANK="16"
 export LORA_ALPHA="32"
 

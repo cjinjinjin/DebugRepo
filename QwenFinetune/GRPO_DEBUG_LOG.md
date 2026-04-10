@@ -1110,6 +1110,63 @@ C. 惩罚项（保留）
 
 ---
 
+## 2026-04-08: GRPO reward v2 训练 LR Scheduler 崩溃 + 修复
+
+### 崩溃现象
+
+运行 `bash run_grpo_reward_v2.sh` 时训练 crash：
+
+```
+ValueError: zip() argument 2 is longer than argument 1
+  File "torch/optim/lr_scheduler.py", line 296, in _update_lr
+```
+
+训练在 `lr_scheduler.step()` 时崩溃，未进入任何 training step。
+
+### 根因分析
+
+已知 ms-swift bug [#8299](https://github.com/modelscope/ms-swift/issues/8299)：
+
+1. **PyTorch 2.8+** 在 `_update_lr` 中对 `zip(self.optimizer.param_groups, values)` 加了 `strict=True`
+2. **ms-swift** 在 `accelerator.prepare()` 之前创建 LR scheduler
+3. **DeepSpeed** 在 `accelerator.prepare()` 期间重组 optimizer param_groups（可能合并或移除部分 group）
+4. 结果：`scheduler.base_lrs`（准备前的 group 数）> `optimizer.param_groups`（准备后的 group 数）→ zip strict 报错
+
+与 reward v2 无关——crash 发生在 optimizer/scheduler 层，reward function 尚未被调用。
+
+### 修复方案
+
+创建 `fix_lr_scheduler.py` callback plugin：
+
+```python
+class FixLRSchedulerCallback(TrainerCallback):
+    def on_train_begin(self, args, state, control, **kwargs):
+        scheduler = self.trainer.lr_scheduler
+        optimizer = self.trainer.optimizer
+        n_groups = len(optimizer.param_groups)
+        # 截断 scheduler 属性使其与 optimizer 匹配
+        scheduler.base_lrs = scheduler.base_lrs[:n_groups]
+        if hasattr(scheduler, "lr_lambdas"):
+            scheduler.lr_lambdas = scheduler.lr_lambdas[:n_groups]
+        if hasattr(scheduler, "_last_lr"):
+            scheduler._last_lr = scheduler._last_lr[:n_groups]
+```
+
+### 文件变更
+
+| 文件 | 变更 |
+|------|------|
+| `fix_lr_scheduler.py` | 新建，LR scheduler 修复 callback |
+| `train_swift_grpo.sh` | 新增 `EXTRA_PLUGINS` / `EXTRA_CALLBACKS` 环境变量支持 |
+| `run_grpo_reward_v2.sh` | 添加 `EXTRA_PLUGINS=fix_lr_scheduler.py` + `EXTRA_CALLBACKS=fix_lr` |
+
+### 状态
+
+- ✅ 修复已实现
+- ⬜ 待重新运行 `bash run_grpo_reward_v2.sh` 验证
+
+---
+
 ## 待办
 1. ~~在新机器上执行环境升级（0.10.2）~~（已完成但 bug 未修复）
 2. ~~在新机器上重建环境：vllm 0.19.0 + torch 2.10.0+cu126~~（已完成）
