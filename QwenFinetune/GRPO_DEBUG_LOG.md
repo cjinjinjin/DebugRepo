@@ -1162,8 +1162,50 @@ class FixLRSchedulerCallback(TrainerCallback):
 
 ### 状态
 
-- ✅ 修复已实现
-- ⬜ 待重新运行 `bash run_grpo_reward_v2.sh` 验证
+- ✅ 修复已实现并验证通过（8 GPU 均输出 `Truncating scheduler attrs: 2 base_lrs -> 1 param_groups`）
+
+---
+
+## 2026-04-10: GRPO reward v2 训练 Step 1 结果
+
+### 训练环境
+
+- **脚本**：`run_grpo_reward_v2.sh`（含 fix_lr_scheduler.py 修复）
+- **配置**：ZeRO-3 + BF16 + no vLLM，8×A100-80GB，LoRA rank=16
+- **实验目录**：`qwen3_grpo_experiments/grpo_reward_v2_comp2048/v2-20260410-025742`
+
+### Step 1 训练指标
+
+| 指标 | reward v2 step 1 | comp2048 (v1) step 1 | 说明 |
+|------|-----------------|---------------------|------|
+| **reward** | **0.731** | 0.507 | v2 量纲不同（范围 -3~+2），不可直接比较 |
+| **loss** | 0.025 | - | 正常 |
+| **grad_norm** | 0.059 | - | 梯度很小 |
+| **completions/mean_length** | **903 tokens** | ~400-500 | 生成长度大幅增加 ✅ |
+| **completions/min_length** | **737 tokens** | - | 没有空壳输出 ✅ |
+| **completions/max_length** | 1083 tokens | - | |
+| **completions/clipped_ratio** | 0.0 | - | 未触发截断 |
+| **reward_std** | 0.095 | - | 样本间差异小 |
+| **kl** | 0.0 | 0.0 | 首步正常 |
+| **clip_ratio** | 0.0 (all) | - | 首步无 clipping |
+| **memory(GiB)** | 70.11 | - | 接近 80GB 上限 |
+| **step_time** | 10708s (~3h) | - | 单步耗时较长 |
+| **LR** | 2.5e-6 | - | warmup 中（目标 5e-6） |
+
+### 关键发现
+
+1. **reward v2 成功堵死空壳策略**：min_length=737 tokens，说明最短 prompt 惩罚（<20 词 → -0.2）生效，模型被迫生成有实质内容的 prompt
+2. **reward 0.731 > 预期**：v2 的理论满分 ~2.0，0.731 说明模型在内容质量维度（描述性、CoT 字段等）拿到了不错的分数
+3. **生成长度 903 tokens vs comp1024/comp2048 的 ~400-500**：更长的生成意味着更详细的 prompt 内容
+4. **frac_reward_zero_std = 0.0**：每个 batch 内两个 generation 的 reward 都有差异，GRPO 有有效的学习信号
+
+### 速度问题
+
+- **单步 ~6h（含 checkpoint save）**，34 步预计 remaining_time = **8 天 4 小时**
+- 瓶颈：ZeRO-3 + no vLLM = 每个 rank 需要 gather 全量 30B MoE 权重做生成
+- 可能的加速方案：
+  1. 减少 `SAVE_STEPS`（当前每步都保存）
+  2. 新机器上用 vLLM server 模式（Plan A）加速 rollout
 
 ---
 
@@ -1174,5 +1216,6 @@ class FixLRSchedulerCallback(TrainerCallback):
 4. **重跑 Plan A**：`start_rollout_server.sh`（✅ 已启动） + `run_grpo_server_mode.sh`（⬜ 待启动）
 5. **清理训练数据异常样本**：`grpo_train.jsonl` line 189（~345K chars）
 6. ~~重跑方案十（canary）~~：comp1024/comp2048 已完成并行对比
-7. **启动 reward v2 GRPO 训练**：`bash run_grpo_reward_v2.sh`
-8. 若成功：对比 GRPO v2 reward 与 v1 comp2048（~0.49）和 SFT baseline（0.211）
+7. ~~启动 reward v2 GRPO 训练~~：`bash run_grpo_reward_v2.sh`（✅ 正在运行，step 1 reward=0.731）
+8. **监控 reward v2 训练**：跟踪 reward 上升趋势，对比 v1 comp2048（~0.49）和 SFT baseline（0.211）
+9. **考虑 vLLM server 模式加速**：当前单步 ~6h，34 步需 ~8 天
