@@ -220,31 +220,43 @@ def extract_user_content_from_messages(messages):
 
 修复 field extraction bug 后，重新跑 196 条全量推理（8 GPU 并行，no-think 模式）。
 
-**结果**：
+**第一轮（system prompt: ≤150 words）**：
 
 | 指标 | Gemma 4 Zero-shot | Qwen3 DPO v12 (Baseline) |
 |------|-------------------|--------------------------|
 | **Fully compliant** | **93.4%** | 47.9% |
-| All 5 tags present | 93.4% | — |
-| All 5 prompts unique | 93.4% | — |
-| Prompts within 150 words | 4.8 / 5 | — |
 | Avg word count/prompt | 69.1 | 68.2 |
+| Prompts within 150 words | 4.8 / 5 | — |
 | `<think>` block present | 100.0% | — |
 | All 6 CoT fields present | 100.0% | — |
-| Quality hints per sample | 2.5 / 5 | — |
-| Forbidden words per sample | 1.0 / 5 | — |
-| LP keyword coverage | 0.0% | — |
+
+问题：avg 69.1 words 远低于 SFT 训练数据的 111.3 words（80-120 区间占 76%）。
+
+**第二轮（system prompt: 80–150 words）**：
+
+| 指标 | Gemma 4 v2 | Gemma 4 v1 | Qwen3 DPO v12 |
+|------|-----------|-----------|----------------|
+| **Fully compliant** | **95.9%** | 93.4% | 47.9% |
+| All 5 tags present | 95.9% | 93.4% | — |
+| All 5 prompts unique | 95.9% | 93.4% | — |
+| Prompts within 150 words | 4.9 / 5 | 4.8 / 5 | — |
+| **Avg word count/prompt** | **89.9** | 69.1 | 68.2 |
+| `<think>` block present | 100.0% | 100.0% | — |
+| All 6 CoT fields present | 100.0% | 100.0% | — |
+| Quality hints per sample | 2.9 / 5 | 2.5 / 5 | — |
+| Forbidden words per sample | 1.6 / 5 | 1.0 / 5 | — |
+| LP keyword coverage | 0.0% | 0.0% | — |
 
 **关键发现**：
-1. **Format compliance 93.4%** — 远超 Qwen3 DPO v12 的 47.9% baseline，**zero-shot 即接近翻倍**
-2. **CoT 100% 完整** — 所有样本都有完整的 `<think>` block 和 6 字段分析
-3. **Avg word count 69.1** — 与 Qwen3 DPO 的 68.2 几乎一致，说明 prompt 长度控制很好
-4. **150 words 限制** — 平均 4.8/5 个 prompt 在限制内，少数超长
-5. **Keyword coverage 0.0%** — 可能是评估脚本的 LP keyword 提取逻辑问题，需检查
-6. **Forbidden words 1.0/5** — 有改善空间，SFT 可进一步纠正
+1. **Format compliance 95.9%** — 加下限后反而提升 2.5pp，**Qwen3 DPO 最佳的两倍**
+2. **Avg word count 89.9** — 从 69→90，更接近训练数据分布（111），但仍有提升空间
+3. **CoT 100% 完整** — 所有样本都有完整的 `<think>` block 和 6 字段分析
+4. **Quality hints 2.9/5** — 略有提升（更长的 prompt 能容纳更多质量约束描述）
+5. **Forbidden words 1.6/5** — 略有上升，prompt 更长导致更多触发（可通过 SFT 改善）
+6. **Keyword coverage 0.0%** — 评估脚本的 LP keyword 提取逻辑问题，需检查
 
 **结论**：
-- Gemma 4 26B-A4B-it zero-shot **大幅超越** Qwen3 经过 DPO 训练后的最佳结果
+- Gemma 4 26B-A4B-it zero-shot **95.9% fully compliant**，远超 Qwen3 DPO 的 47.9%
 - 无需任何微调，直接可用于生产评估
 - 下一步：inference Random200 进行额外验证
 
