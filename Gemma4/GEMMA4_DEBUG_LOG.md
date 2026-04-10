@@ -468,9 +468,38 @@ Online serving 需要低延迟，AWQ 4-bit 量化可减少显存（50GB → ~13G
 - 报告：`/vc_data/.../Gemma4_results/gemma4_awq_zeroshot_report.json`
 
 ### 技术要点
-- AWQ 预量化模型的量化信息在 `quantization_config.json` 中
-- `AutoModelForCausalLM.from_pretrained()` 自动检测并加载，无需改 inference 代码
-- 只需换模型路径即可
+- AWQ 预量化模型使用 `compressed-tensors` 格式（`quant_method: compressed-tensors`），不是标准 AWQ
+- `AutoModelForCausalLM.from_pretrained()` 自动检测并加载，需要安装 `compressed-tensors` 包
+- Processor 和 tokenizer 文件与原始 BF16 模型完全一致，可直接从 AWQ 模型路径加载
+- 新增 `--processor_id` 参数支持从不同路径加载 processor（备用方案）
+
+### 环境兼容性问题（2026-04-10）
+
+AWQ 模型加载遇到严重的包版本兼容性问题：
+
+| # | 现象 | 原因 | 解决方案 |
+|---|------|------|----------|
+| 1 | `pip install compressed-tensors` 后 `AutoProcessor` 报 `Unrecognized processing class` | `compressed-tensors` 依赖把 `transformers` 降级到 `4.57.6`，该版本没有 `Gemma4Processor` class | — |
+| 2 | `AutoTokenizer` 也报 `AttributeError: 'list' object has no attribute 'keys'` | `transformers 4.57.6` 的 tokenizer 对 Gemma 4 的 `extra_special_tokens` 格式不兼容 | — |
+| 3 | `pip install -U transformers` 升级到 `5.5.3` 后 processor OK，但模型加载报 `AttributeError: 'NoneType' object has no attribute 'get'` | `transformers 5.5.3` 的 `auto.py` 第 270 行 `config.quantization_config` 返回 `None`，与 `compressed-tensors` 量化格式反序列化不兼容 | — |
+| 4 | 用 `compressed-tensors 0.14.0.1`（vllm 要求的版本）模型能加载但大量 UNEXPECTED/MISSING 权重 | 旧版 `compressed-tensors` 与 `transformers 5.5.3` 的权重序列化格式不匹配 | — |
+| 5 | `compressed-tensors 0.15.0.1`（最新版）+ `transformers 5.5.3`，同样有 UNEXPECTED/MISSING 权重 | `transformers 5.x` 对 `compressed-tensors` 格式支持不完善 | ⬜ 调查中 |
+
+**核心矛盾**：
+- `Gemma4Processor` 需要 `transformers >= 5.x`
+- `compressed-tensors` 量化模型加载需要 `transformers` 与 `compressed-tensors` 版本精确匹配
+- 当前没有找到一个同时满足两个条件的版本组合
+
+**当前环境**：
+```
+transformers: 5.5.3
+compressed-tensors: 0.15.0.1（--no-deps 安装，避免降级 transformers）
+```
+
+**待尝试方案**：
+- `transformers==5.4.0` + `compressed-tensors==0.15.0.1`（降一个小版本试试）
+- 使用 vLLM 加载 AWQ 模型（vLLM 原生支持 compressed-tensors）
+- 换一个使用标准 AWQ 格式（非 compressed-tensors）的量化模型
 
 ### 用法
 ```bash

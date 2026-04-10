@@ -144,11 +144,17 @@ class Gemma4PromptGenerator:
         self.model_id = model_id
         self.enable_thinking = enable_thinking
 
-        from transformers import AutoProcessor, AutoModelForCausalLM
+        from transformers import AutoModelForCausalLM
 
         proc_id = processor_id or model_id
         print(f"Loading processor from {proc_id} ...")
-        self.processor = AutoProcessor.from_pretrained(proc_id)
+        try:
+            from transformers import AutoProcessor
+            self.processor = AutoProcessor.from_pretrained(proc_id)
+        except (ValueError, ImportError, OSError):
+            print(f"[WARN] AutoProcessor failed, falling back to AutoTokenizer ...")
+            from transformers import AutoTokenizer
+            self.processor = AutoTokenizer.from_pretrained(proc_id)
 
         # Quantization config
         bnb_config = None
@@ -180,6 +186,22 @@ class Gemma4PromptGenerator:
 
         self.model.eval()
         print("Model ready.")
+
+    @staticmethod
+    def _parse_response_fallback(response: str) -> dict:
+        """Fallback parse_response for when AutoTokenizer is used (no parse_response method).
+        Splits Gemma 4 thinking format: <think>...</think> content"""
+        think_match = re.search(r"<think>(.*?)</think>", response, re.DOTALL)
+        thinking = think_match.group(1).strip() if think_match else ""
+        if think_match:
+            content = response[think_match.end():].strip()
+        else:
+            content = response.strip()
+        # Remove EOS tokens
+        for tok in ("<eos>", "<end_of_turn>", "</s>"):
+            content = content.replace(tok, "").strip()
+            thinking = thinking.replace(tok, "").strip()
+        return {"thinking": thinking, "content": content}
 
     def build_input(self, lp_fields: dict) -> str:
         """Build chat-template formatted input string from LP field dict."""
@@ -251,7 +273,10 @@ class Gemma4PromptGenerator:
         print(f"[DEBUG] Raw decoded response:\n{repr(response[:500])}")
 
         # Parse thinking vs final answer
-        parsed = self.processor.parse_response(response)
+        if hasattr(self.processor, "parse_response"):
+            parsed = self.processor.parse_response(response)
+        else:
+            parsed = self._parse_response_fallback(response)
 
         print(f"[DEBUG] parse_response type: {type(parsed)}")
         if isinstance(parsed, dict):
