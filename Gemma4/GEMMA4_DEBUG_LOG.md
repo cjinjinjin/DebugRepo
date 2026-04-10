@@ -397,4 +397,29 @@ model.config.output_router_logits = True
 2. ✅ 评估 zero-shot 结果，对比 Qwen3 baseline → **93.4% vs 47.9%，大幅超越**
 3. ~~⬜ 如果 < 50% compliant，开始 SFT~~ → 不需要，zero-shot 已达 93.4%
 4. ⬜ 考虑 SFT 微调进一步提升（forbidden words、150-word 限制）
-5. ⬜ inference Random200（`RawData/UHRS2K_SD_Random200_0324.tsv`）进行额外验证
+5. 🔄 inference Random200（`RawData/UHRS2K_SD_Random200_0324.tsv`）进行额外验证
+
+---
+
+## Random200 Inference 准备（2026-04-10）
+
+### 脚本
+- 新建 `Gemma4/eval_gemma4_random200.sh`：TSV → JSONL → 8-GPU 并行推理 → evaluate
+- 数据预处理复用 `QwenFinetune/prepare_infer_input.py`（将 TSV 转为 JSONL）
+- 推理复用 `inference_gemma4_multi_gpu.py`（8 GPU 数据并行）
+
+### 数据流
+1. `QwenFinetune/RawData/UHRS2K_SD_Random200_0324.tsv`（200 条原始数据）
+2. → `Gemma4/data/random200_infer_input.jsonl`（JSONL 中间格式，本地）
+3. → `/vc_data/.../Gemma4_results/gemma4_random200_eval.jsonl`（推理结果，vc_data）
+4. → `/vc_data/.../Gemma4_results/gemma4_random200_report.json`（评估报告，vc_data）
+
+### 注意事项
+- `prepare_infer_input.py` 使用全部 10 个 LP 字段（vs eval 数据只有 2 个生产字段）
+- `inference_gemma4.py` 的 `extract_user_content_from_messages()` 直通 user message，不受字段数量影响
+- 使用 no-think 模式（与 zeroshot eval 一致）
+
+### 用法
+```bash
+bash Gemma4/eval_gemma4_random200.sh
+```
