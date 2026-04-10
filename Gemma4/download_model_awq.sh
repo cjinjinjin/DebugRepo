@@ -29,11 +29,19 @@ echo "Local dir:  ${LOCAL_DIR}"
 echo "Target dir: ${TARGET_DIR}"
 echo ""
 
-# Step 1: Download
+# Step 1: Download using Python snapshot_download (more stable than CLI)
 echo "[Step 1] Downloading from HuggingFace ..."
-hf download "${REPO_ID}" \
-    --local-dir "${LOCAL_DIR}" \
-    --token "${HF_TOKEN}"
+python -c "
+from huggingface_hub import snapshot_download
+snapshot_download(
+    repo_id='${REPO_ID}',
+    repo_type='model',
+    local_dir='${LOCAL_DIR}',
+    local_dir_use_symlinks=False,
+    token='${HF_TOKEN}',
+)
+print('Done!')
+"
 
 echo "[OK] Downloaded to ${LOCAL_DIR}"
 
