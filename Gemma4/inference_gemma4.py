@@ -190,8 +190,23 @@ class Gemma4PromptGenerator:
             bnb_config = BitsAndBytesConfig(load_in_8bit=True)
 
         print(f"Loading model from {model_id} ...")
+        # Workaround: transformers 5.x bug where config.quantization_config is None
+        # for compressed-tensors format. Manually load and inject it.
+        from transformers import AutoConfig
+        _config = AutoConfig.from_pretrained(model_id)
+        if getattr(_config, "quantization_config", None) is None:
+            _qc_path = Path(model_id) / "config.json"
+            if _qc_path.exists():
+                import json as _json
+                with open(_qc_path, "r") as _f:
+                    _raw = _json.load(_f)
+                if "quantization_config" in _raw:
+                    _config.quantization_config = _raw["quantization_config"]
+                    print(f"[INFO] Manually injected quantization_config (quant_method: {_raw['quantization_config'].get('quant_method', 'unknown')})")
+
         self.model = AutoModelForCausalLM.from_pretrained(
             model_id,
+            config=_config,
             quantization_config=bnb_config,
             device_map=device,
             dtype=torch_dtype,
