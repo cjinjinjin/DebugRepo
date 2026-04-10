@@ -8,9 +8,21 @@
 MODEL_ID="${1:-./gemma-4-26B-A4B-it}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-EVAL_DATA="${ROOT_DIR}/QwenFinetune/data/dpo_combined_eval_cot.jsonl"
+EVAL_DATA_COMBINED="${ROOT_DIR}/QwenFinetune/data/dpo_combined_eval_cot.jsonl"
+EVAL_DATA_SFT="${ROOT_DIR}/QwenFinetune/data/sft_eval_cot.jsonl"
 OUTPUT_FILE="${SCRIPT_DIR}/results/gemma4_zeroshot_eval.jsonl"
 REPORT_FILE="${SCRIPT_DIR}/results/gemma4_zeroshot_report.json"
+
+# ── Step 0: select eval data ────────────────────────────────────────────────
+if [ -f "${EVAL_DATA_COMBINED}" ]; then
+    EVAL_DATA="${EVAL_DATA_COMBINED}"
+elif [ -f "${EVAL_DATA_SFT}" ]; then
+    echo "[WARN] Combined eval (190 samples) not found, falling back to sft_eval_cot.jsonl (87 samples)"
+    EVAL_DATA="${EVAL_DATA_SFT}"
+else
+    echo "[ERROR] No eval data found. Need dpo_combined_eval_cot.jsonl or sft_eval_cot.jsonl"
+    exit 1
+fi
 
 echo "============================================"
 echo "Model    : ${MODEL_ID}"
@@ -18,12 +30,6 @@ echo "Eval data: ${EVAL_DATA}"
 echo "Output   : ${OUTPUT_FILE}"
 echo "Report   : ${REPORT_FILE}"
 echo "============================================"
-
-# ── Step 0: generate combined eval data if missing ──────────────────────────
-if [ ! -f "${EVAL_DATA}" ]; then
-    echo "[INFO] ${EVAL_DATA} not found, generating ..."
-    cd "${ROOT_DIR}/QwenFinetune" && python combine_dpo_data.py && cd "${ROOT_DIR}"
-fi
 
 # ── Step 1: 8-GPU parallel inference (no-think mode) ────────────────────────
 python "${SCRIPT_DIR}/inference_gemma4_multi_gpu.py" \
