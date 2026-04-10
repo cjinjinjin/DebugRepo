@@ -298,7 +298,8 @@ model.config.output_router_logits = True
 ---
 
 ## 待办
-1. ⬜ 运行 zero-shot 推理（debug 空输出问题已修复 parse_response key 名）
+1. ⬜ 运行 zero-shot 全量 190 条推理（8 GPU 并行 + no_think 模式）
 2. ⬜ 评估 zero-shot 结果，对比 Qwen3 baseline
 3. ⬜ 如果 < 50% compliant，开始 SFT
 4. ⬜ SFT 后评估，决定是否需要 DPO/GRPO
+5. ⬜ 如果 zero-shot 效果不错，inference Random200（`RawData/UHRS2K_SD_Random200_0324.tsv`）进行额外验证
