@@ -93,6 +93,14 @@ def build_user_message(lp_fields: dict) -> str:
     return "\n".join(lines)
 
 
+def extract_user_content_from_messages(messages: list[dict]) -> str:
+    """Extract user message content from SFT/DPO-format messages."""
+    for msg in messages:
+        if msg.get("role") == "user":
+            return msg["content"]
+    return ""
+
+
 def extract_lp_fields_from_messages(messages: list[dict]) -> dict:
     """Extract LP fields from SFT-format messages (user content with bracket labels)."""
     lp_fields = {}
@@ -172,7 +180,7 @@ class Gemma4PromptGenerator:
         print("Model ready.")
 
     def build_input(self, lp_fields: dict) -> str:
-        """Build chat-template formatted input string."""
+        """Build chat-template formatted input string from LP field dict."""
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": build_user_message(lp_fields)},
@@ -184,18 +192,39 @@ class Gemma4PromptGenerator:
             enable_thinking=self.enable_thinking,
         )
 
+    def build_input_from_content(self, user_content: str) -> str:
+        """Build chat-template formatted input string from raw user message content."""
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ]
+        return self.processor.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=self.enable_thinking,
+        )
+
     @torch.inference_mode()
     def generate(
         self,
-        lp_fields: dict,
+        lp_fields: dict = None,
+        user_content: str = None,
         max_new_tokens: int = 2048,
         temperature: float = 1.0,
         top_p: float = 0.95,
         top_k: int = 64,
         do_sample: bool = True,
     ) -> str:
-        """Generate image prompts for a single LP. Returns raw output string."""
-        input_text = self.build_input(lp_fields)
+        """Generate image prompts for a single LP. Returns raw output string.
+
+        Either lp_fields (dict) or user_content (str) must be provided.
+        If user_content is provided, it is used directly as the user message.
+        """
+        if user_content:
+            input_text = self.build_input_from_content(user_content)
+        else:
+            input_text = self.build_input(lp_fields)
 
         inputs = self.processor(
             text=input_text,
@@ -234,19 +263,27 @@ class Gemma4PromptGenerator:
 
     def generate_batch(
         self,
-        lp_fields_list: list[dict],
+        inputs: list,
+        input_type: str = "lp_fields",
         batch_size: int = 1,
         **gen_kwargs,
     ) -> list[str]:
-        """Batch inference. Returns list of raw output strings."""
+        """Batch inference. Returns list of raw output strings.
+
+        inputs: list of lp_fields dicts (input_type="lp_fields")
+                or list of user content strings (input_type="user_content")
+        """
         results = []
-        for i in range(0, len(lp_fields_list), batch_size):
-            batch = lp_fields_list[i: i + batch_size]
-            for lp_fields in batch:
-                result = self.generate(lp_fields, **gen_kwargs)
+        for i in range(0, len(inputs), batch_size):
+            batch = inputs[i: i + batch_size]
+            for item in batch:
+                if input_type == "user_content":
+                    result = self.generate(user_content=item, **gen_kwargs)
+                else:
+                    result = self.generate(lp_fields=item, **gen_kwargs)
                 results.append(result)
-            done = min(i + batch_size, len(lp_fields_list))
-            print(f"  Processed {done}/{len(lp_fields_list)}")
+            done = min(i + batch_size, len(inputs))
+            print(f"  Processed {done}/{len(inputs)}")
         return results
 
 
@@ -358,19 +395,30 @@ def main():
     if args.input_file:
         # Batch mode
         records = load_jsonl(args.input_file)
-        lp_fields_list = []
+        batch_inputs = []
+        input_type = "lp_fields"
+
         for r in records:
             if "lp_fields" in r:
-                lp_fields_list.append(r["lp_fields"])
+                batch_inputs.append(r["lp_fields"])
             elif "messages" in r:
-                lp_fields_list.append(extract_lp_fields_from_messages(r["messages"]))
+                # Directly use the user message content from SFT/DPO data
+                # instead of extracting fields and rebuilding (avoids label mismatch)
+                user_content = extract_user_content_from_messages(r["messages"])
+                if user_content:
+                    batch_inputs.append(user_content)
+                    input_type = "user_content"
+                else:
+                    batch_inputs.append(extract_lp_fields_from_messages(r["messages"]))
             else:
-                lp_fields_list.append(r)
+                batch_inputs.append(r)
 
         print(f"Loaded {len(records)} records from {args.input_file}")
+        print(f"Input type: {input_type}")
         start_time = time.time()
 
-        raw_outputs = gen.generate_batch(lp_fields_list, batch_size=args.batch_size, **gen_kwargs)
+        raw_outputs = gen.generate_batch(batch_inputs, input_type=input_type,
+                                         batch_size=args.batch_size, **gen_kwargs)
 
         elapsed = time.time() - start_time
         print(f"Total inference time: {elapsed:.1f}s ({elapsed/len(records):.1f}s/sample)")
@@ -410,7 +458,6 @@ def main():
 
             results.append({
                 "id": record.get("id", ""),
-                "lp_fields": lp_fields_list[records.index(record)] if records.index(record) < len(lp_fields_list) else {},
                 "generated_prompts": prompts,
                 "raw_output": raw,
                 "format_compliant": compliant,

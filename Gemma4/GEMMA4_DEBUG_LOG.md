@@ -163,7 +163,58 @@ Content: Our premium wireless headphones deliver studio-quality sound with activ
 - 如果 190 条 eval 能保持类似表现，zero-shot 大概率超越 Qwen3 DPO v12 的 47.9% baseline
 - 需完成全量 190 条评估才能定论
 
-⬜ 全量 190 条评估待运行
+⬜ 全量 196 条评估待运行
+
+#### 全量推理 Bug：0% Format Compliance（2026-04-10）
+
+**现象**：196 条全量推理，format compliance = 0/196 (0%)，与单 case 测试 100% compliance 形成巨大反差。
+
+**根因分析**：
+
+`inference_gemma4.py` 的 `extract_lp_fields_from_messages()` 函数使用 `FIELD_LABELS` 的短标签构造正则来提取 user message 中的字段：
+```python
+FIELD_LABELS = {
+    "FinalDestinationURLUrl": "URL",           # → 正则搜索 [URL]
+    "PrimaryContentNoTitleNoHeading": "Primary Content",  # → 正则搜索 [Primary Content]
+}
+```
+
+但 SFT/DPO eval 数据中的 user message 使用的是**全名 bracket label**：
+```
+[Landing Page URL]
+https://www.example.com/...
+
+[Primary Content]
+Product description...
+```
+
+- `\[URL\]` **匹配不到** `[Landing Page URL]` → URL 字段丢失
+- `\[Primary Content\]` 恰好能匹配（标签名一致） → 但仅靠 content 不够
+- 最终发给模型的 user message 几乎为空 → 模型无法生成有效输出
+
+**单 case 测试为何通过**：单 case 模式直接用 `--url` 和 `--content` CLI 参数构造 `lp_fields` dict，绕过了 `extract_lp_fields_from_messages()`，所以不受影响。
+
+**修复方案**：
+
+新增 `extract_user_content_from_messages()` 函数，直接提取 user message 的 content 透传给模型，而非拆字段再重建。SFT/DPO 数据中的 user message 本身就是格式良好的完整 prompt：
+
+```python
+def extract_user_content_from_messages(messages):
+    for msg in messages:
+        if msg.get("role") == "user":
+            return msg["content"]
+    return ""
+```
+
+批量推理逻辑改为：有 `messages` 的数据 → 直接透传 user content → 不再走 field extraction + rebuild 路径。
+
+**修改文件**：`Gemma4/inference_gemma4.py`
+- 新增 `extract_user_content_from_messages()` 函数
+- `generate()` 方法新增 `user_content` 参数，支持直接传入用户消息内容
+- `generate_batch()` 支持 `input_type="user_content"` 模式
+- `main()` 中 batch 逻辑优先使用 user content 透传
+
+⬜ 需重新运行全量 196 条推理验证修复效果
 
 #### No-think 模式测试（2026-04-10）
 
