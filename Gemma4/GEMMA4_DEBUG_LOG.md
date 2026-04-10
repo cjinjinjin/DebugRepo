@@ -423,3 +423,42 @@ model.config.output_router_logits = True
 ```bash
 bash Gemma4/eval_gemma4_random200.sh
 ```
+
+---
+
+## AWQ 4-bit 量化验证（2026-04-10）
+
+### 背景
+Online serving 需要低延迟，AWQ 4-bit 量化可减少显存（50GB → ~13GB）并提升推理速度。
+使用 `cyankiwi/gemma-4-26B-A4B-it-AWQ-4bit`（HuggingFace, 209k downloads, 28 likes）。
+
+### 对比目标
+| 指标 | BF16 (baseline) | AWQ 4-bit (待验证) |
+|------|-----------------|-------------------|
+| Format Compliance | 95.9% | ? |
+| Avg Word Count | 89.9 | ? |
+| 显存/卡 | ~52GB | ~13GB |
+
+### 脚本
+- 下载：`Gemma4/download_model_awq.sh`
+- 评估：`Gemma4/eval_gemma4_awq_zeroshot.sh`（196 条 DPO eval, 8 GPU, no-think）
+- 输出：`/vc_data/.../Gemma4_results/gemma4_awq_zeroshot_eval.jsonl`
+- 报告：`/vc_data/.../Gemma4_results/gemma4_awq_zeroshot_report.json`
+
+### 技术要点
+- AWQ 预量化模型的量化信息在 `quantization_config.json` 中
+- `AutoModelForCausalLM.from_pretrained()` 自动检测并加载，无需改 inference 代码
+- 只需换模型路径即可
+
+### 用法
+```bash
+# 1. 下载 AWQ 模型
+HF_TOKEN=hf_xxx bash Gemma4/download_model_awq.sh
+
+# 2. 跑 eval
+bash Gemma4/eval_gemma4_awq_zeroshot.sh
+```
+
+### 结果
+⬜ 待运行
+
