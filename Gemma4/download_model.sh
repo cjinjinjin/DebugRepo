@@ -29,7 +29,7 @@ echo ""
 
 # Step 1: Download
 echo "[Step 1] Downloading from HuggingFace ..."
-huggingface-cli download "${REPO_ID}" \
+hf download "${REPO_ID}" \
     --local-dir "${LOCAL_DIR}" \
     --local-dir-use-symlinks False \
     --token "${HF_TOKEN}"
