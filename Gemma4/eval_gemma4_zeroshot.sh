@@ -9,8 +9,14 @@ MODEL_ID="${1:-./gemma-4-26B-A4B-it}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 EVAL_DATA_COMBINED="${ROOT_DIR}/QwenFinetune/data/dpo_combined_eval_cot.jsonl"
-OUTPUT_FILE="${SCRIPT_DIR}/results/gemma4_zeroshot_eval.jsonl"
-REPORT_FILE="${SCRIPT_DIR}/results/gemma4_zeroshot_report.json"
+
+# Final results on vc_data mount; intermediate shard files stay local
+VC_RESULTS="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Gemma4_results"
+OUTPUT_FILE="${VC_RESULTS}/gemma4_zeroshot_eval.jsonl"
+REPORT_FILE="${VC_RESULTS}/gemma4_zeroshot_report.json"
+
+# Create output dir on vc_data
+mkdir -p "${VC_RESULTS}"
 
 # ── Step 0: generate combined eval data if missing ──────────────────────────
 EVAL_DATA="${EVAL_DATA_COMBINED}"

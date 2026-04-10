@@ -42,7 +42,7 @@ SYSTEM_PROMPT = """You are an expert Ad Creative Director and Senior AI Image Pr
 Given a landing page URL and its content fields, your task is to generate five (5) high-quality English image generation prompts for Native Ads.
 
 Each prompt must:
-- Be ≤150 words
+- Be 80–150 words
 - Embed all safety, realism, quality, and exclusion constraints
 - Feel native and non-promotional
 - Show the product outcome or value naturally in context
