@@ -7,20 +7,20 @@ no fine-tuning required.
 Usage:
   # Single query
   python Gemma4/inference_gemma4.py \
-      --model_id google/gemma-4-26B-A4B-it \
+      --model_id /vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/gemma-4-26B-A4B-it \
       --url "https://example.com/product" \
       --title "Product Title"
 
   # Batch inference from JSONL
   python Gemma4/inference_gemma4.py \
-      --model_id google/gemma-4-26B-A4B-it \
+      --model_id /vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/gemma-4-26B-A4B-it \
       --input_file QwenFinetune/data/sft_eval_cot.jsonl \
       --output_file Gemma4/results/gemma4_zeroshot_eval.jsonl \
       --max_new_tokens 2048 --batch_size 1
 
   # With LoRA adapter (after SFT)
   python Gemma4/inference_gemma4.py \
-      --model_id google/gemma-4-26B-A4B-it \
+      --model_id /vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/gemma-4-26B-A4B-it \
       --adapter_path path/to/lora_adapter \
       --input_file QwenFinetune/data/sft_eval_cot.jsonl \
       --output_file Gemma4/results/gemma4_sft_eval.jsonl
@@ -309,7 +309,7 @@ def write_jsonl(records: list[dict], path: str) -> None:
 
 def parse_args():
     p = argparse.ArgumentParser(description="Gemma 4 zero-shot / SFT inference")
-    p.add_argument("--model_id", default="google/gemma-4-26B-A4B-it",
+    p.add_argument("--model_id", default="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/gemma-4-26B-A4B-it",
                     help="HuggingFace model ID or local path")
     p.add_argument("--adapter_path", default="",
                     help="Optional LoRA adapter path (for SFT/DPO checkpoints)")

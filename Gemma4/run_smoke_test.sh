@@ -5,7 +5,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-MODEL_ID="google/gemma-4-26B-A4B-it"
+MODEL_ID="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/gemma-4-26B-A4B-it"
 
 echo "============================================"
 echo "Gemma 4 Quick Smoke Test"

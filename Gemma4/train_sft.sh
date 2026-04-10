@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Model — download to local first or use HF cache
-MODEL_PATH="google/gemma-4-26B-A4B-it"
+MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/gemma-4-26B-A4B-it"
 
 # Data — reuse Qwen3 SFT data (same task, same format)
 DATA_DIR="${ROOT_DIR}/QwenFinetune/data"

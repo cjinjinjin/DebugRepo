@@ -13,7 +13,7 @@ if [ -z "$CHECKPOINT_PATH" ]; then
 fi
 
 EVAL_NAME="${2:-gemma4_eval}"
-MODEL_ID="google/gemma-4-26B-A4B-it"
+MODEL_ID="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/gemma-4-26B-A4B-it"
 
 # Data
 EVAL_DATA="${ROOT_DIR}/QwenFinetune/data/sft_eval_cot.jsonl"

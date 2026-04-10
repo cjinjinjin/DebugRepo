@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Model
-MODEL_ID="google/gemma-4-26B-A4B-it"
+MODEL_ID="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/gemma-4-26B-A4B-it"
 
 # Data — use SFT eval set for fair comparison with Qwen3 baselines
 EVAL_DATA="${ROOT_DIR}/QwenFinetune/data/sft_eval_cot.jsonl"
