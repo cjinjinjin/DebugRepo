@@ -52,6 +52,7 @@ def split_data(records: list[dict], num_shards: int) -> list[list[dict]]:
 def main():
     parser = argparse.ArgumentParser(description="Multi-GPU Gemma 4 inference launcher")
     parser.add_argument("--model_id", required=True, help="Model path")
+    parser.add_argument("--processor_id", default="", help="Optional processor path (for quantized models)")
     parser.add_argument("--adapter_path", default="", help="Optional LoRA adapter path")
     parser.add_argument("--input_file", required=True, help="Input JSONL file")
     parser.add_argument("--output_file", default="Gemma4/results/gemma4_zeroshot_eval.jsonl",
@@ -111,6 +112,8 @@ def main():
         ]
         if args.adapter_path:
             cmd.extend(["--adapter_path", args.adapter_path])
+        if args.processor_id:
+            cmd.extend(["--processor_id", args.processor_id])
         if args.no_think:
             cmd.append("--no_think")
         if args.load_in_4bit:

@@ -133,6 +133,7 @@ class Gemma4PromptGenerator:
     def __init__(
         self,
         model_id: str,
+        processor_id: Optional[str] = None,
         adapter_path: Optional[str] = None,
         device: str = "auto",
         load_in_4bit: bool = False,
@@ -145,8 +146,9 @@ class Gemma4PromptGenerator:
 
         from transformers import AutoProcessor, AutoModelForCausalLM
 
-        print(f"Loading processor from {model_id} ...")
-        self.processor = AutoProcessor.from_pretrained(model_id)
+        proc_id = processor_id or model_id
+        print(f"Loading processor from {proc_id} ...")
+        self.processor = AutoProcessor.from_pretrained(proc_id)
 
         # Quantization config
         bnb_config = None
@@ -351,6 +353,8 @@ def parse_args():
     p = argparse.ArgumentParser(description="Gemma 4 zero-shot / SFT inference")
     p.add_argument("--model_id", default="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/gemma-4-26B-A4B-it",
                     help="HuggingFace model ID or local path")
+    p.add_argument("--processor_id", default="",
+                    help="Optional processor path (use when model dir lacks processor files, e.g. quantized models)")
     p.add_argument("--adapter_path", default="",
                     help="Optional LoRA adapter path (for SFT/DPO checkpoints)")
     p.add_argument("--load_in_4bit", action="store_true", default=False)
@@ -378,6 +382,7 @@ def main():
 
     gen = Gemma4PromptGenerator(
         model_id=args.model_id,
+        processor_id=args.processor_id or None,
         adapter_path=args.adapter_path or None,
         load_in_4bit=args.load_in_4bit,
         load_in_8bit=args.load_in_8bit,

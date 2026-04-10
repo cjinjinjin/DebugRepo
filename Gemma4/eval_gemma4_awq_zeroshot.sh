@@ -8,6 +8,7 @@
 
 CKPT_ROOT="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT"
 MODEL_ID="${1:-${CKPT_ROOT}/gemma-4-26B-A4B-it-AWQ-4bit}"
+PROCESSOR_ID="${CKPT_ROOT}/gemma-4-26B-A4B-it"
 
 # If vc_data path doesn't exist, try local
 if [ ! -d "${MODEL_ID}" ]; then
@@ -54,8 +55,10 @@ fi
 
 # ── Step 1: 8-GPU parallel inference (no-think mode) ───────────────────────
 # AWQ 4-bit ~13GB per replica, fits easily on A100-80GB
+# Use --processor_id to load processor from original BF16 model (AWQ model lacks processor files)
 python "${SCRIPT_DIR}/inference_gemma4_multi_gpu.py" \
     --model_id "${MODEL_ID}" \
+    --processor_id "${PROCESSOR_ID}" \
     --input_file "${EVAL_DATA}" \
     --output_file "${OUTPUT_FILE}" \
     --num_gpus 8 \
