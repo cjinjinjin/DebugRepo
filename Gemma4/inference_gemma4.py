@@ -417,13 +417,7 @@ def main():
         print(f"Input type: {input_type}")
         start_time = time.time()
 
-        raw_outputs = gen.generate_batch(batch_inputs, input_type=input_type,
-                                         batch_size=args.batch_size, **gen_kwargs)
-
-        elapsed = time.time() - start_time
-        print(f"Total inference time: {elapsed:.1f}s ({elapsed/len(records):.1f}s/sample)")
-
-        # Format compliance check
+        # Format compliance regexes
         format_regex = re.compile(
             r"<think>[\s\S]+?</think>\s*"
             r"<Prompt1>[\s\S]+?</Prompt1>\s*"
@@ -442,9 +436,18 @@ def main():
 
         n_compliant = 0
         n_tags = 0
-        results = []
+        total = len(records)
 
-        for record, raw_response in zip(records, raw_outputs):
+        # Stream results: write each record immediately after inference
+        Path(args.output_file).parent.mkdir(parents=True, exist_ok=True)
+        out_f = open(args.output_file, "w", encoding="utf-8")
+
+        for idx, (record, inp) in enumerate(zip(records, batch_inputs)):
+            if input_type == "user_content":
+                raw_response = gen.generate(user_content=inp, **gen_kwargs)
+            else:
+                raw_response = gen.generate(lp_fields=inp, **gen_kwargs)
+
             raw = parse_gemma_response(raw_response)
             prompts = parse_output_prompts(raw)
 
@@ -456,16 +459,24 @@ def main():
             if has_all_tags:
                 n_tags += 1
 
-            results.append({
+            result = {
                 "id": record.get("id", ""),
                 "generated_prompts": prompts,
                 "raw_output": raw,
                 "format_compliant": compliant,
-            })
+            }
+            out_f.write(json.dumps(result, ensure_ascii=False) + "\n")
+            out_f.flush()
 
-        write_jsonl(results, args.output_file)
+            done = idx + 1
+            print(f"  Processed {done}/{total} | compliant: {n_compliant}/{done}")
 
-        total = len(results)
+        out_f.close()
+
+        elapsed = time.time() - start_time
+        print(f"\nTotal inference time: {elapsed:.1f}s ({elapsed/len(records):.1f}s/sample)")
+        print(f"Saved {total} results -> {args.output_file}")
+
         print(f"\n{'='*60}")
         print(f"Format compliance (full): {n_compliant}/{total} ({100*n_compliant/total:.1f}%)")
         print(f"All 5 tags present:       {n_tags}/{total} ({100*n_tags/total:.1f}%)")
