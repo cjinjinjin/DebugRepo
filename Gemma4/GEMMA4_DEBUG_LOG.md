@@ -92,18 +92,22 @@ peft: >=0.13.0
 - 方式：直接用现有 system prompt + eval 数据，不做任何训练
 - 推理脚本：`inference_gemma4.py`（使用 `AutoProcessor`，对齐官方 HF card）
 - 评估脚本：复用 `QwenFinetune/evaluate.py`
-- 评估数据：`QwenFinetune/data/sft_eval_cot.jsonl`
+- 评估数据：`QwenFinetune/data/dpo_combined_eval_cot.jsonl`（190 条，由 `combine_dpo_data.py` 合并 format + quality eval）
 
 ### 运行命令
 
 ```bash
-# Zero-shot 推理（batch 模式）
-python Gemma4/inference_gemma4.py \
-    --model_id google/gemma-4-26B-A4B-it \
-    --input_file QwenFinetune/data/sft_eval_cot.jsonl \
+# 生成 190 条合并 eval 数据（如不存在）
+cd QwenFinetune && python combine_dpo_data.py && cd ..
+
+# Zero-shot 推理（8 GPU 数据并行，推荐 --no_think 模式）
+python Gemma4/inference_gemma4_multi_gpu.py \
+    --model_id ./gemma-4-26B-A4B-it \
+    --input_file QwenFinetune/data/dpo_combined_eval_cot.jsonl \
     --output_file Gemma4/results/gemma4_zeroshot_eval.jsonl \
+    --num_gpus 8 \
     --max_new_tokens 2048 \
-    --batch_size 1
+    --no_think
 
 # 评估
 python QwenFinetune/evaluate.py \
@@ -160,6 +164,36 @@ Content: Our premium wireless headphones deliver studio-quality sound with activ
 - 需完成全量 190 条评估才能定论
 
 ⬜ 全量 190 条评估待运行
+
+#### No-think 模式测试（2026-04-10）
+
+同一 case，加 `--no_think` 关闭 Gemma 原生 thinking 模式。
+
+**对比**：
+| 维度 | Think 模式 | No-think 模式 |
+|------|-----------|--------------|
+| 生成 token 数 | 1951 | **603**（节省 69%） |
+| 格式合规 | ✅ | ✅ |
+| 5 tags 完整 | ✅ | ✅ |
+| Think block | ✅（冗余两层） | ✅（模型自发输出单层） |
+| Prompt 平均字数 | ~95-110 | ~75-90 |
+
+**关键发现**：
+1. **Token 效率提升 ~3x** — 原生 thinking 产生冗余链式推理（草稿 + 自我纠正），no-think 模式完全消除
+2. **模型仍自发输出 `<think>` block** — system prompt 指令驱动，无需原生 thinking
+3. **质量未降** — 场景多样性、摄影语言、Native 感均保持高质量
+4. **字数更紧凑** — 更接近 Qwen3 DPO baseline 的 68.2
+
+**结论**：全量评估使用 `--no_think` 模式。
+
+#### 多 GPU 数据并行方案
+
+新建 `Gemma4/inference_gemma4_multi_gpu.py`：
+- Gemma 4 26B ~50GB bf16，单张 A100-80GB 可装下
+- 8 GPU 各加载独立模型副本，数据 round-robin 分片
+- 用 subprocess 启 8 个 `inference_gemma4.py` 进程
+- 自动合并结果，保持原始顺序
+- 预期 190 条 + no_think ≈ **4-8 分钟**完成
 
 ---
 
