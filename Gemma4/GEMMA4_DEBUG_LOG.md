@@ -117,13 +117,90 @@ python QwenFinetune/evaluate.py \
 
 ---
 
+## 训练调研（2026-04-10）
+
+### 关键发现
+
+#### 1. QLoRA 不适用于 MoE 模型
+BitsAndBytes 4-bit 量化与 MoE 路由不兼容（Unsloth 文档明确指出 "MoE QLoRA not recommended"）。
+**必须用 bf16 LoRA，不能用 QLoRA。**
+
+#### 2. 推荐 LoRA 超参
+
+| 参数 | 推荐值 | 来源 |
+|------|--------|------|
+| LoRA rank | 8（纯文本）/ 32（多模态） | Unsloth |
+| LoRA alpha | = rank | Unsloth |
+| dropout | 0 | Unsloth |
+| 学习率 | 1e-4 ~ 2e-4（LoRA）/ 2e-5（full SFT） | TRL + Unsloth |
+| optimizer | adamw_8bit | Unsloth |
+| target_modules | all-linear（`q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj`） | TRL |
+| gradient accumulation | 4 | Unsloth |
+| warmup | 5 steps | Unsloth |
+| weight decay | 0.001（LoRA）/ 0.01（full） | Unsloth |
+| max grad norm | 1.0（文本）/ 0.3（多模态） | Unsloth |
+| 精度 | **bf16**（MoE 不能用 4-bit） | All |
+| gradient checkpointing | 必须开 | All |
+
+#### 3. DeepSpeed 配置
+- **用 ZeRO Stage 2**，不能用 Stage 3（与 expert parallelism 不兼容）
+- 与 Qwen3 MoE 的 ZeRO-3 死锁问题一致
+- 建议配置：
+```json
+{
+  "zero_optimization": {
+    "stage": 2,
+    "allgather_partitions": true,
+    "reduce_scatter": true,
+    "allgather_bucket_size": 50000000,
+    "reduce_bucket_size": 50000000,
+    "overlap_comm": true,
+    "contiguous_gradients": true,
+    "cpu_offload": true
+  }
+}
+```
+
+#### 4. MoE Router Loss
+如需 load-balancing auxiliary loss 参与训练，设置：
+```python
+model.config.output_router_logits = True
+```
+（TRL SFTTrainer 文档建议对 MoE 模型开启）
+
+#### 5. ms-swift 当前状态（v4.0.4+）
+- Gemma 4 LoRA SFT 已支持（PR #8508，2026-04-03）
+- ⚠️ **Thinking 模式不支持**（issue #9065，open）
+- ⚠️ 全量微调保存模型会 crash（issue #9056，open）
+- LoRA SFT 文本/视觉可用
+
+#### 6. 其他注意事项
+- **冻结 Vision/Audio Tower**：Google/HF 推荐 SFT 时冻结（我们是纯文本任务，不影响）
+- **显存需求**：26B-A4B bf16 LoRA 训练约需 >40GB VRAM，8×A100-80GB 足够
+- **Chat template**：Gemma 4 用 `<|turn>user\n` / `<|turn>model\n` 分隔符
+- **Thinking 格式**：system prompt 含 `<|think|>`，输出 `<|channel>thought\n...<channel|>`
+- **`use_cache` bug**（Unsloth 报告）：gradient checkpointing 强制 `use_cache=False` 时，KV-shared layers 可能丢失共享状态，Unsloth 已修复
+- **response-only training**：用 `assistant_only_loss=True`（TRL），只在 assistant 回复上计算 loss
+
+### 参考链接
+- [HF Blog: Gemma 4](https://huggingface.co/blog/gemma4)
+- [Unsloth Gemma 4 训练指南](https://unsloth.ai/docs/models/gemma-4/train)
+- [TRL SFTTrainer](https://huggingface.co/docs/trl/main/en/sft_trainer)
+- [ms-swift Gemma 4 PR #8508](https://github.com/modelscope/ms-swift/pull/8508)
+- [ms-swift Gemma 4 Issues](https://github.com/modelscope/ms-swift/issues?q=gemma+4)
+- [DeepSpeed MoE Tutorial](https://www.deepspeed.ai/tutorials/mixture-of-experts/)
+
+---
+
 ## 阶段二：SFT 微调（如 zero-shot 效果不理想）
 
 ### 计划
 - 使用 `QwenFinetune/data/sft_train_cot.jsonl`（833 条）
-- LoRA rank 16-32（Gemma 4 密度更低，rank 不需太大）
+- **bf16 LoRA**（不用 QLoRA），rank 8，alpha 8，target all-linear
+- DeepSpeed ZeRO Stage 2
+- 学习率 1e-4，gradient accumulation 4
+- 框架：TRL SFTTrainer（ms-swift thinking 模式暂不支持）
 - 预期训练速度远快于 Qwen3（dense 部分更小，MoE 路由清晰）
-- 框架：ms-swift 或 HuggingFace TRL
 
 ⬜ 待实施
 
@@ -141,7 +218,7 @@ python QwenFinetune/evaluate.py \
 ---
 
 ## 待办
-1. ⬜ 运行 zero-shot 推理
+1. ⬜ 运行 zero-shot 推理（debug 空输出问题已修复 parse_response key 名）
 2. ⬜ 评估 zero-shot 结果，对比 Qwen3 baseline
 3. ⬜ 如果 < 50% compliant，开始 SFT
 4. ⬜ SFT 后评估，决定是否需要 DPO/GRPO
