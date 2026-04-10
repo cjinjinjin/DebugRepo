@@ -397,7 +397,7 @@ model.config.output_router_logits = True
 2. ✅ 评估 zero-shot 结果，对比 Qwen3 baseline → **93.4% vs 47.9%，大幅超越**
 3. ~~⬜ 如果 < 50% compliant，开始 SFT~~ → 不需要，zero-shot 已达 93.4%
 4. ⬜ 考虑 SFT 微调进一步提升（forbidden words、150-word 限制）
-5. 🔄 inference Random200（`RawData/UHRS2K_SD_Random200_0324.tsv`）进行额外验证
+5. ✅ inference Random200（`RawData/UHRS2K_SD_Random200_0324.tsv`）→ **99.0% compliant, avg 94.1 words**
 
 ---
 
@@ -423,6 +423,28 @@ model.config.output_router_logits = True
 ```bash
 bash Gemma4/eval_gemma4_random200.sh
 ```
+
+### Random200 结果（2026-04-10）
+
+| 指标 | DPO 196条 (v2) | Random200 |
+|------|---------------|-----------|
+| Fully Compliant | 95.9% | **99.0%** |
+| All 5 tags present | 95.9% | 99.0% |
+| All 5 prompts unique | 95.9% | 99.0% |
+| Avg word count | 89.9 | **94.1** |
+| Prompts within 150 words | 5.0/5 | 5.0/5 |
+| `<think>` block present | — | 100.0% |
+| All 6 CoT fields | — | 100.0% |
+| Quality hints | — | 3.0/5 |
+| Forbidden words | — | 1.8/5 |
+| LP keyword coverage | — | 0.0% |
+
+**分析**：
+- Random200 使用 10 个 LP 字段输入（vs DPO eval 仅 2 个生产字段），信息更丰富
+- Format compliance 从 95.9% 提升到 99.0%，说明更丰富的输入有助于模型生成
+- 平均字数 94.1，符合 80-150 words 要求
+- CoT 完整性 100%
+- Forbidden words 1.8/5 需关注（后续 SFT 可改善）
 
 ---
 
