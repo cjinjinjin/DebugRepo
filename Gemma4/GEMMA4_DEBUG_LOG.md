@@ -113,7 +113,53 @@ python QwenFinetune/evaluate.py \
 
 ### Zero-shot 结果
 
-⬜ 待运行
+#### 单个 Case 测试（2026-04-10）
+
+**测试输入**：Premium Wireless Headphones 虚构 Landing Page
+
+```
+URL: https://www.example.com/premium-wireless-headphones
+Title: Premium Wireless Headphones - Crystal Clear Sound
+Heading: Experience Music Like Never Before
+Content: Our premium wireless headphones deliver studio-quality sound with active noise cancellation...
+```
+
+**推理统计**：
+- 生成 token 数：1951（偏多，正式内容约需 ~800，thinking 冗余严重）
+- `max_new_tokens=2048`
+
+**格式合规性** — ✅ 通过：
+| 检查项 | 结果 |
+|--------|------|
+| 5 个 `<PromptN>` 标签全部存在且闭合 | ✅ |
+| 5 个 prompt 内容唯一 | ✅ |
+| 所有 prompt ≤ 150 words | ✅（各 ~90-110 words） |
+
+**CoT Think Block** — ✅ 通过（6 字段全部存在）：
+- ProductType: Consumer Electronics / Audio Gear
+- SpecificProduct: Premium Wireless Over-Ear Headphones
+- Category: Audio & Lifestyle
+- VisualAnchors: ✅
+- LifestyleVibe: ✅
+- CoreValueSignals: ✅（但未严格遵循枚举约束）
+
+**内容质量**：
+- 场景多样性好：通勤者(ANC)、远程办公(舒适)、音乐沉浸(音质)、户外(无线自由)、静物(工艺)
+- 摄影语言专业：含具体镜头参数（35mm, f/2.8, Sony A7R IV）、灯光、景深描述
+- Native 感强：所有场景都是生活方式导向，无硬推销
+- 安全约束嵌入完整：包含 "no logos", "no text", "no watermark", "correct anatomy", "natural hands"
+
+**发现的问题**：
+1. **Thinking 冗余** — 输出了两层 `<think>` block：第一层是极长的链式推理（含完整 5 条 prompt 草稿 + 自我纠正），第二层才是结构化 6 字段摘要。Token 浪费约 60%
+2. **CoreValueSignals 枚举约束被忽略** — 应从 `[professional, premium, affordable, efficient, reliable, simple]` 中选择，但模型自由发挥为 "ANC, battery, comfort, studio-quality sound"
+3. **Prompt 字数偏长** — 平均 ~95-105 words，高于 Qwen3 DPO 的 68.2 但仍在 150 限制内
+
+**初步判断**：
+- 单个 case 格式完全合规，内容质量高
+- 如果 190 条 eval 能保持类似表现，zero-shot 大概率超越 Qwen3 DPO v12 的 47.9% baseline
+- 需完成全量 190 条评估才能定论
+
+⬜ 全量 190 条评估待运行
 
 ---
 
