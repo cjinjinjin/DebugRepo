@@ -31,7 +31,6 @@ echo ""
 echo "[Step 1] Downloading from HuggingFace ..."
 hf download "${REPO_ID}" \
     --local-dir "${LOCAL_DIR}" \
-    --local-dir-use-symlinks False \
     --token "${HF_TOKEN}"
 
 echo "[OK] Downloaded to ${LOCAL_DIR}"
