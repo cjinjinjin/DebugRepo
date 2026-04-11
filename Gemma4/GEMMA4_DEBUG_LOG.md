@@ -703,6 +703,26 @@ bash Gemma4/eval_gemma4_gptq_zeroshot.sh
   - 可部署在 RTX 3090/4090（24GB）等消费级卡上
   - vLLM continuous batching + GPTQ = 吞吐量远高于 BF16 单条推理
 
+#### BF16 No-CoT 速度测试（2026-04-11）
+
+单卡 A100-80GB、20 条样本、no-think + no-CoT（system prompt 不要求 `<think>` block）、batch_size=1：
+
+| 指标 | BF16 CoT | BF16 No-CoT | 差异 |
+|------|----------|------------|------|
+| **Avg tok/s** | 11.9 | **12.1** | +2% |
+| Median tok/s | 12.1 | 12.2 | +1% |
+| Min tok/s | — | 10.7 | — |
+| Max tok/s | — | 12.5 | — |
+| Avg time/sample | 63.1s | **52.0s** | **-18%** |
+| Median time/sample | — | 50.8s | — |
+| Avg output tokens | 753 | **632** | **-16%** |
+
+**分析**：
+- 去掉 CoT `<think>` block 后，平均输出 token 从 753 → 632（减少 16%），推理时间从 63s → 52s（缩短 18%）
+- tok/s 基本持平（12.1 vs 11.9），说明生成速度不受 CoT 影响，时间节省完全来自更少的 output tokens
+- input token 变化范围大（307 ~ 3137），但对生成速度影响很小（MoE 激活参数少，prefill 快）
+- No-CoT 模式更适合纯生产场景（不需要 CoT 推理过程），每条可节省 ~11 秒
+
 **Benchmark 脚本**：`Gemma4/benchmark_speed.py`
 
 ### 经验教训
