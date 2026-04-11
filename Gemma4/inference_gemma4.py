@@ -138,6 +138,7 @@ class Gemma4PromptGenerator:
         device: str = "auto",
         load_in_4bit: bool = False,
         load_in_8bit: bool = False,
+        use_gptq: bool = False,
         torch_dtype=torch.bfloat16,
         enable_thinking: bool = True,
     ):
@@ -190,27 +191,31 @@ class Gemma4PromptGenerator:
             bnb_config = BitsAndBytesConfig(load_in_8bit=True)
 
         print(f"Loading model from {model_id} ...")
-        # Workaround: transformers 5.x bug where config.quantization_config is None
-        # for compressed-tensors format. Manually load and inject it.
-        from transformers import AutoConfig
-        _config = AutoConfig.from_pretrained(model_id)
-        if getattr(_config, "quantization_config", None) is None:
-            _qc_path = Path(model_id) / "config.json"
-            if _qc_path.exists():
-                import json as _json
-                with open(_qc_path, "r") as _f:
-                    _raw = _json.load(_f)
-                if "quantization_config" in _raw:
-                    _config.quantization_config = _raw["quantization_config"]
-                    print(f"[INFO] Manually injected quantization_config (quant_method: {_raw['quantization_config'].get('quant_method', 'unknown')})")
+        if use_gptq:
+            from gptqmodel import GPTQModel
+            self.model = GPTQModel.load(model_id, device_map=device)
+        else:
+            # Workaround: transformers 5.x bug where config.quantization_config is None
+            # for compressed-tensors format. Manually load and inject it.
+            from transformers import AutoConfig
+            _config = AutoConfig.from_pretrained(model_id)
+            if getattr(_config, "quantization_config", None) is None:
+                _qc_path = Path(model_id) / "config.json"
+                if _qc_path.exists():
+                    import json as _json
+                    with open(_qc_path, "r") as _f:
+                        _raw = _json.load(_f)
+                    if "quantization_config" in _raw:
+                        _config.quantization_config = _raw["quantization_config"]
+                        print(f"[INFO] Manually injected quantization_config (quant_method: {_raw['quantization_config'].get('quant_method', 'unknown')})")
 
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_id,
-            config=_config,
-            quantization_config=bnb_config,
-            device_map=device,
-            dtype=torch_dtype,
-        )
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_id,
+                config=_config,
+                quantization_config=bnb_config,
+                device_map=device,
+                dtype=torch_dtype,
+            )
 
         # Load LoRA adapter if provided
         if adapter_path and Path(adapter_path).exists():
@@ -418,6 +423,8 @@ def parse_args():
                     help="Optional LoRA adapter path (for SFT/DPO checkpoints)")
     p.add_argument("--load_in_4bit", action="store_true", default=False)
     p.add_argument("--load_in_8bit", action="store_true", default=False)
+    p.add_argument("--use_gptq", action="store_true", default=False,
+                    help="Load model via GPTQModel (for GPTQ quantized checkpoints)")
     p.add_argument("--no_think", action="store_true", default=False,
                     help="Disable thinking mode")
     # Single query
@@ -445,6 +452,7 @@ def main():
         adapter_path=args.adapter_path or None,
         load_in_4bit=args.load_in_4bit,
         load_in_8bit=args.load_in_8bit,
+        use_gptq=args.use_gptq,
         enable_thinking=not args.no_think,
     )
 

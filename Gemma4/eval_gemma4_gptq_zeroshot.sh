@@ -65,7 +65,8 @@ python "${SCRIPT_DIR}/inference_gemma4_multi_gpu.py" \
     --output_file "${OUTPUT_FILE}" \
     --num_gpus 8 \
     --max_new_tokens 2048 \
-    --no_think
+    --no_think \
+    --use_gptq
 
 if [ $? -ne 0 ]; then
     echo "[ERROR] Inference failed. Exiting."
