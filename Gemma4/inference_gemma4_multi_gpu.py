@@ -69,6 +69,8 @@ def main():
                         help="Load model via GPTQModel (for GPTQ quantized checkpoints)")
     parser.add_argument("--no_cot", action="store_true", default=False,
                         help="Use no-CoT system prompt (skip <think> block, output prompts only)")
+    parser.add_argument("--max_lp_chars", type=int, default=0,
+                        help="Truncate Primary Content to this many chars (0=no truncation, recommended: 2000)")
     args = parser.parse_args()
 
     # Load and split data
@@ -128,6 +130,8 @@ def main():
             cmd.append("--use_gptq")
         if args.no_cot:
             cmd.append("--no_cot")
+        if args.max_lp_chars > 0:
+            cmd.extend(["--max_lp_chars", str(args.max_lp_chars)])
 
         print(f"[GPU {gpu_id}] Launching with {len(shards[gpu_id])} samples ...")
         proc = subprocess.Popen(
