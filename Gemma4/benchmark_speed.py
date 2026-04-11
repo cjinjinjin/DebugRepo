@@ -61,6 +61,8 @@ def main():
     parser.add_argument("--no_think", action="store_true", default=False)
     parser.add_argument("--no_cot", action="store_true", default=False,
                         help="Use no-CoT system prompt (skip <think> block)")
+    parser.add_argument("--max_lp_chars", type=int, default=0,
+                        help="Truncate Primary Content to this many chars (0=no truncation)")
     parser.add_argument("--warmup", type=int, default=2, help="Warmup samples (excluded from stats)")
     args = parser.parse_args()
 
@@ -116,13 +118,19 @@ def main():
     try:
         import sys
         sys.path.insert(0, str(Path(__file__).resolve().parent))
-        from inference_gemma4 import SYSTEM_PROMPT, SYSTEM_PROMPT_NO_COT
+        from inference_gemma4 import SYSTEM_PROMPT, SYSTEM_PROMPT_NO_COT, truncate_user_content
     except ImportError:
         SYSTEM_PROMPT = ""
         SYSTEM_PROMPT_NO_COT = ""
+        truncate_user_content = None
 
     system_prompt = SYSTEM_PROMPT_NO_COT if args.no_cot else SYSTEM_PROMPT
     enable_thinking = not args.no_think
+
+    # Apply LPContext truncation
+    if args.max_lp_chars > 0 and truncate_user_content:
+        user_contents = [truncate_user_content(c, args.max_lp_chars) for c in user_contents]
+        print(f"Truncated LP content to max {args.max_lp_chars} chars")
 
     # --- Benchmark ---
     timings = []
