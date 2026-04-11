@@ -1209,6 +1209,60 @@ class FixLRSchedulerCallback(TrainerCallback):
 
 ---
 
+## 2026-04-11: Base Model（无微调）评估结果
+
+在 190 样本验证集上评估 Qwen3-30B-A3B 官方 checkpoint（无任何微调），作为 baseline。
+
+| 指标 | Base Model | SFT ckpt-50 | GRPO v1 ckpt-6 |
+|------|-----------|-------------|----------------|
+| fully_compliant_rate | **14.8%** | ~30% | 22.6% |
+| all_5_tags_present_rate | 16.3% | — | — |
+| all_unique_rate | 14.8% | — | — |
+| avg_word_count | 10.2 | — | 18.7 |
+| avg_prompts_within_150_words | 90.3% | — | — |
+| think_block_present_rate | 39.8% | — | — |
+| all_cot_fields_present_rate | 4.6% | — | — |
+| avg_keyword_coverage | 3.8% | — | — |
+| avg_prompts_with_constraints | 17.9% | — | — |
+| avg_prompts_with_forbidden | 24.0% | — | — |
+
+### 分析
+
+1. **fully_compliant = 14.8%**：远低于 SFT（~30%），说明 SFT 确实教会了模型输出格式
+2. **avg_word_count = 10.2**：base model 生成的 prompt 非常短（平均仅 10 词），甚至低于 GRPO v1 的 18.7
+3. **think_block_present = 39.8%**：不到一半的样本有 think block，说明 base model 不稳定地遵循 CoT 指令
+4. **all_cot_fields = 4.6%**：几乎没有样本包含完整的 6 个 CoT 字段
+5. **keyword_coverage = 3.8%**：base model 几乎不关注输入中的关键词
+6. **constraints/forbidden 覆盖率低**：base model 不理解 quality constraints 和 forbidden elements
+
+### 根因分析：think block 重复循环导致 token 耗尽
+
+检查实际输出发现，**低分的主要原因不是 max_new_tokens 不够，而是 base model 在 think block 中陷入重复循环**，将 4096 token 全部耗尽，导致 Prompt 输出被截断或根本无法生成。
+
+典型失败模式（从 `eval_swift_output.jsonl` 中观察）：
+
+| 样本 | think block 内容 | 结果 |
+|------|-----------------|------|
+| 样本 1 (Knob Creek) | "The product is a whiskey." 重复数百次 | think 耗尽 4096 token，Prompt 部分被截断在 labels 中可见完整输出 |
+| 样本 2 (Drain My Yard) | 数字垃圾 "000000..." 无限重复 | 同上，完全没有有效 Prompt 输出 |
+| 样本 3 (Salisbury School) | "I'm not sure if I can say that..." 无限重复 | 同上，think 循环吃掉全部 token |
+
+**对比 ground truth（labels 字段）**：think block 仅 6-8 行，简洁提取 ProductType/VisualAnchors 等字段后立即输出 5 个 Prompt。
+
+### 结论
+
+Base model 的核心缺陷：
+1. **重复循环（repetition collapse）**：未经 SFT 的 base model 极易在 think block 中陷入 token 级重复，这是 autoregressive 模型的已知问题
+2. **Token 预算被浪费**：4096 max_new_tokens 被重复内容耗尽，Prompt 输出被截断或完全缺失
+3. **格式理解不足**：即使没有重复的样本，也不稳定地遵循 `<think>` + `<Prompt1>...<Prompt5>` 格式
+
+SFT 的核心价值：
+- **抑制重复**：教模型控制 think block 长度，避免循环
+- **学习输出格式**：14.8% → ~30% fully compliant
+- **为 GRPO 提供可优化的起点**：base model 的输出质量太差，无法直接用 GRPO 优化
+
+---
+
 ## 待办
 1. ~~在新机器上执行环境升级（0.10.2）~~（已完成但 bug 未修复）
 2. ~~在新机器上重建环境：vllm 0.19.0 + torch 2.10.0+cu126~~（已完成）
