@@ -725,6 +725,38 @@ bash Gemma4/eval_gemma4_gptq_zeroshot.sh
 
 **Benchmark 脚本**：`Gemma4/benchmark_speed.py`
 
+#### BF16 No-CoT + 截断 2000 + 固定 1024 output tokens（2026-04-11）
+
+单卡 A100-80GB、20 条样本、no-think + no-CoT、`--max_lp_chars 2000`、`--max_new_tokens 1024`、batch_size=1：
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python Gemma4/benchmark_speed.py \
+    --model_id /vc_data/.../gemma-4-26B-A4B-it \
+    --input_file QwenFinetune/data/dpo_combined_eval_cot.jsonl \
+    --num_samples 20 \
+    --no_cot \
+    --max_lp_chars 2000 \
+    --max_new_tokens 1024
+```
+
+| 指标 | 值 |
+|------|-----|
+| Avg output tokens | 1024（固定） |
+| Avg time/sample | 82.65s |
+| Median time/sample | 82.58s |
+| **Avg tok/s** | **12.4** |
+| Median tok/s | 12.4 |
+| Min tok/s | 12.2 |
+| Max tok/s | 12.5 |
+| Input token 范围 | 305 ~ 1264 |
+
+**分析**：
+- 固定 1024 output tokens，每条延迟非常稳定（82.0-84.3s），方差极小
+- tok/s 稳定在 12.2-12.5，**与输入长度完全无关**（input 305 vs 1264 tokens，tok/s 差异 <2%）
+- 进一步验证：**瓶颈完全在 decode，prefill 对延迟几乎无贡献**
+- 截断到 2000 chars 后 input token 范围 305-1264，均为短输入，prefill 可忽略
+- 对比自然输出（avg 632 tokens, 52.0s）：1024 tokens / 632 tokens ≈ 1.62x，82.65s / 52.0s ≈ 1.59x，**延迟与输出长度成线性关系**
+
 ### 经验教训
 
 1. **先搜后试**：遇到第三方包兼容性问题时，应先搜索 GitHub Issues 了解已知问题和可行方案，再动手尝试。AWQ 问题本可通过搜索 `compressed-tensors` + `transformers 5.x` 的 issues 更早发现死路。
