@@ -789,3 +789,113 @@ python Gemma4/inference_gemma4.py --max_lp_chars 2000 ...
 - [ ] 对比 `--max_lp_chars 2000` vs 不截断的 format compliance 和 prompt 质量
 - [ ] 测试截断后的推理速度提升幅度
 
+---
+
+## vLLM Serving 部署与 Benchmark（2026-04-11）
+
+### 背景
+
+单条推理延迟 ~60s（BF16 CoT）/ ~52s（BF16 No-CoT），无法满足线上 8 req/s 吞吐量目标。
+同事使用 Qwen-VL-30B-A3B + vLLM 实现了 2-3s/request（短输出场景），说明 vLLM continuous batching 是关键。
+
+### 环境搭建
+
+**硬件**：8× A100-SXM4-80GB（新机器 node-0）
+
+**Conda 环境**：
+```bash
+# 重要：切换 conda 环境前必须先重启 shell
+conda init bash && exec bash
+conda create -n gemma4-vllm python=3.10 -y
+conda activate gemma4-vllm
+pip install vllm
+pip install "transformers>=5.5.0"
+```
+
+**踩坑**：
+- 直接 `conda activate` 可能不生效，`pip` 仍指向旧环境（如 `ptca`），导致安装到错误位置并报 `Permission denied`
+- 解决方案：`conda init bash && exec bash` 重启 shell 后再 activate
+- 确认方式：`which pip` 应指向 `/home/aiscuser/.conda/envs/gemma4-vllm/bin/pip`
+
+**最终依赖版本**：
+```
+Python: 3.10
+vllm: 0.19.x
+transformers: 5.5.x
+```
+
+### vLLM 服务启动
+
+```bash
+# BF16 模型，4 卡 tensor parallel
+vllm serve /vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/gemma-4-26B-A4B-it \
+    --tensor-parallel-size 4 \
+    --max-model-len 96000 \
+    --port 8000
+```
+
+**启动日志关键信息**：
+- 模型加载 + CUDA graph capture 约需 110s
+- KV cache: 982,992 tokens（56.25 GiB per worker）
+- 最大并发（96K tokens/request）: 52.93x
+- 每卡显存占用: ~76GB（模型 + KV cache + CUDA graphs）
+- GPU 4-7 空闲（仅 GPU 0-3 用于 TP=4）
+
+### 初步 Benchmark 结果（TP=4, with-CoT, 8 并发）
+
+**配置**：
+- 模型：BF16 Gemma 4 26B-A4B-it
+- Tensor Parallel: 4
+- Concurrency: 8
+- Mode: with-CoT（system prompt 含 `<think>` block）
+- Max tokens: 2048
+- 数据：`dpo_combined_eval_cot.jsonl`（190 条，用户消息平均 5643 chars）
+
+**前 15 条结果**：
+
+| 样本 | Output Tokens | 延迟 (s) |
+|------|--------------|----------|
+| 1-8 (首批) | 715-816 | 186-220 |
+| 9-15 (第二批) | 737-823 | 151-174 |
+
+**分析**：
+- 单条延迟 ~150-220s，**远高于 transformers 单卡的 ~60s**
+- 原因：TP=4 的跨卡通信开销 + 输入过长（平均 5643 chars ≈ 2000+ tokens，prefill 慢）
+- vLLM TP 模式为降低单卡显存而设计，不是为减少单条延迟
+- 8 并发总吞吐量约 8 / 200s ≈ 0.04 req/s，离 8 req/s 目标差距巨大
+
+### 问题分析与优化方向
+
+**当前瓶颈**：
+1. **TP=4 通信开销**：BF16 模型 ~50GB，TP=4 每卡只存 ~12GB 模型权重，但每次 decode step 需要 4 卡 all-reduce，通信延迟大
+2. **输入过长**：用户消息平均 5643 chars（含完整网页内容），prefill 阶段占用大量时间
+3. **输出过长**：CoT 模式平均 750 tokens output，生成时间长
+
+**优化方向**：
+
+| 方向 | 预期效果 | 风险 |
+|------|---------|------|
+| **减少 TP 数量**（TP=2 或 TP=1） | 减少通信开销，单条延迟可能降低 | TP=1 需 80GB 放 50GB 模型 + KV cache，可能 OOM |
+| **限制 max-model-len**（`--max-model-len 4096`） | 减少 KV cache 占用，留更多空间给 batch | 截断过长输入 |
+| **截断输入内容**（`--max_lp_chars 2000`） | 减少 prefill 时间 | 需验证质量影响 |
+| **No-CoT 模式** | 输出 tokens 从 ~750 降到 ~400-500 | 需验证 compliance |
+| **量化模型**（FP8/GPTQ） | 减少显存占用，可用 TP=1 | vLLM GPTQ 支持实验性 |
+| **多副本部署**（非 TP） | 每卡独立副本，无通信开销 | 需量化到单卡装得下 |
+
+### 待实验
+
+- [ ] TP=2 + `--max-model-len 4096` 重新 benchmark
+- [ ] No-CoT 模式 benchmark
+- [ ] 截断输入（`--max_lp_chars 2000`）benchmark
+- [ ] FP8 量化模型（`RedHatAI/gemma-4-26B-A4B-it-FP8-Dynamic`）vLLM 部署
+- [ ] 多 GPTQ 副本部署（单卡 13GB，可放 4-6 副本/机器）
+
+### Benchmark 脚本
+
+`Gemma4/benchmark_vllm.py` — 基于 asyncio + aiohttp 的并发 benchmark 工具：
+- 支持 `--concurrency N` 设置并发数
+- 支持 `--no_cot` 切换 system prompt
+- 自动发现 vLLM 模型名称
+- 输出：吞吐量（req/s）、延迟分布（avg/median/p95）、每条 tok/s
+- 可导出详细 JSON 结果
+
