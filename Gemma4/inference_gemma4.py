@@ -102,14 +102,43 @@ FIELD_LABELS = {
 }
 
 
-def build_user_message(lp_fields: dict) -> str:
+def truncate_lp_content(text: str, max_chars: int) -> str:
+    """Truncate LP content to max_chars, cutting at last word boundary."""
+    if max_chars <= 0 or len(text) <= max_chars:
+        return text
+    truncated = text[:max_chars].rsplit(" ", 1)[0]
+    return truncated + " ..."
+
+
+def build_user_message(lp_fields: dict, max_lp_chars: int = 0) -> str:
     """Build user message from LP fields."""
     lines = ["Generate 5 image prompts for the following landing page:\n"]
     for key, label in FIELD_LABELS.items():
         val = lp_fields.get(key, "").strip()
         if val:
+            if max_lp_chars > 0 and key == "PrimaryContentNoTitleNoHeading":
+                val = truncate_lp_content(val, max_lp_chars)
             lines.append(f"- {label}: {val}")
     return "\n".join(lines)
+
+
+def truncate_user_content(content: str, max_chars: int) -> str:
+    """Truncate the main content section within a raw user message string.
+    Handles various label formats: Primary Content, Page Content, etc."""
+    if max_chars <= 0:
+        return content
+    # Match the longest content section in various formats
+    content_labels = ["Primary Content", "Page Content", "PrimaryContentNoTitleNoHeading"]
+    for label in content_labels:
+        for pattern in [
+            rf"(\[{re.escape(label)}\]\n)(.*?)(\n\[|\Z)",
+            rf"(- {re.escape(label)}: )(.*?)(\n- |\Z)",
+        ]:
+            m = re.search(pattern, content, re.DOTALL)
+            if m and len(m.group(2)) > max_chars:
+                truncated = truncate_lp_content(m.group(2), max_chars)
+                return content[:m.start(2)] + truncated + content[m.start(3):]
+    return content
 
 
 def extract_user_content_from_messages(messages: list[dict]) -> str:
@@ -159,12 +188,14 @@ class Gemma4PromptGenerator:
         load_in_8bit: bool = False,
         use_gptq: bool = False,
         no_cot: bool = False,
+        max_lp_chars: int = 0,
         torch_dtype=torch.bfloat16,
         enable_thinking: bool = True,
     ):
         self.model_id = model_id
         self.enable_thinking = enable_thinking
         self.system_prompt = SYSTEM_PROMPT_NO_COT if no_cot else SYSTEM_PROMPT
+        self.max_lp_chars = max_lp_chars
 
         from transformers import AutoModelForCausalLM
 
@@ -267,7 +298,7 @@ class Gemma4PromptGenerator:
         """Build chat-template formatted input string from LP field dict."""
         messages = [
             {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": build_user_message(lp_fields)},
+            {"role": "user", "content": build_user_message(lp_fields, self.max_lp_chars)},
         ]
         return self.processor.apply_chat_template(
             messages,
@@ -278,6 +309,8 @@ class Gemma4PromptGenerator:
 
     def build_input_from_content(self, user_content: str) -> str:
         """Build chat-template formatted input string from raw user message content."""
+        if self.max_lp_chars > 0:
+            user_content = truncate_user_content(user_content, self.max_lp_chars)
         messages = [
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": user_content},
@@ -450,6 +483,8 @@ def parse_args():
                     help="Disable thinking mode")
     p.add_argument("--no_cot", action="store_true", default=False,
                     help="Use no-CoT system prompt (skip <think> block, output prompts only)")
+    p.add_argument("--max_lp_chars", type=int, default=0,
+                    help="Truncate Primary Content to this many chars (0=no truncation, recommended: 2000)")
     # Single query
     p.add_argument("--url", default="", help="Landing page URL")
     p.add_argument("--content", default="", help="Primary content text")
@@ -477,6 +512,7 @@ def main():
         load_in_8bit=args.load_in_8bit,
         use_gptq=args.use_gptq,
         no_cot=args.no_cot,
+        max_lp_chars=args.max_lp_chars,
         enable_thinking=not args.no_think,
     )
 

@@ -737,3 +737,55 @@ bash Gemma4/eval_gemma4_gptq_zeroshot.sh
 
 5. **vLLM 是线上最优解**：对于生产部署，`vllm/vllm-openai:gemma4-cu130` Docker 镜像内部处理了所有版本兼容性问题，是最稳定的方案。本地用 GPTQ + `gptqmodel` 做离线验证。
 
+---
+
+## LPContext 长度分析与截断优化
+
+### 背景
+
+LPContext（Landing Page Content）是模型输入中最长的部分。过长的 LPContext 增加推理时间但增益有限——模型只需要核心产品信息即可生成高质量 prompt。
+
+### 数据集 LPContext 长度分布
+
+统计对象：user message 中所有内容的总字符数。
+
+| 数据集 | 样本数 | 平均 | 中位数 | P90 | P95 | 最大 |
+|--------|--------|------|--------|------|------|--------|
+| sft_eval_cot | 87 | 4,689 | 4,055 | 8,618 | 10,988 | 17,187 |
+| sft_train_cot | 833 | 5,186 | 3,779 | — | — | 343,978 |
+| grpo_train | 1,100 | 3,867 | 2,890 | — | — | 35,687 |
+
+**按字符数分桶（sft_eval_cot 87 条为例）：**
+
+| 截断阈值 | 覆盖比例 | 说明 |
+|----------|---------|------|
+| ≤ 500 | 1.1% | 几乎所有样本都超过 |
+| ≤ 1,000 | 8.0% | — |
+| ≤ 2,000 | 16.1% | — |
+| ≤ 3,000 | 32.2% | 约 1/3 不需要截断 |
+| ≤ 5,000 | 63.2% | — |
+| ≤ 10,000 | 92.0% | 极少数超长尾 |
+
+### 截断方案
+
+新增 `--max_lp_chars` 参数（默认 0 = 不截断，推荐 2000）：
+
+```bash
+python Gemma4/inference_gemma4.py --max_lp_chars 2000 ...
+```
+
+**实现逻辑：**
+- `build_user_message()` 模式：截断 `PrimaryContentNoTitleNoHeading` 字段
+- `user_content` 直通模式：自动识别 `[Page Content]`、`[Primary Content]`、`- Primary Content:` 等格式并截断
+- 截断在最后一个完整单词处断开，追加 ` ...`
+
+**预期效果（截断到 2000 字符）：**
+- 约 84% 样本的内容会被截断（sft_eval_cot 中仅 16.1% ≤ 2000）
+- 输入 token 数大幅减少 → 推理更快
+- 核心产品信息通常在前 1000-2000 字符内，对 prompt 质量影响极小
+
+### 待实验
+
+- [ ] 对比 `--max_lp_chars 2000` vs 不截断的 format compliance 和 prompt 质量
+- [ ] 测试截断后的推理速度提升幅度
+
