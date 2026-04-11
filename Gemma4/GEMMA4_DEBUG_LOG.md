@@ -882,12 +882,51 @@ vllm serve /vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichA
 | **量化模型**（FP8/GPTQ） | 减少显存占用，可用 TP=1 | vLLM GPTQ 支持实验性 |
 | **多副本部署**（非 TP） | 每卡独立副本，无通信开销 | 需量化到单卡装得下 |
 
+### Benchmark 2: TP=2, No-CoT, 8 并发（2026-04-11）
+
+**配置**：
+- Tensor Parallel: 2（GPU 0-1）
+- `--max-model-len 8192`
+- Concurrency: 8
+- Mode: no-CoT
+- Max tokens: 1024
+- 数据：20 条
+
+**结果**：
+
+| 指标 | 值 |
+|------|-----|
+| Successful | 20/20 |
+| Total wall time | 126.3s |
+| **Throughput** | **0.16 req/s** |
+| Avg latency | 42.0s |
+| Median latency | 41.2s |
+| P95 latency | 49.8s |
+| Min / Max latency | 34.6s / 51.6s |
+| Avg output tokens | 631 |
+| **Avg tok/s** | **15.2** |
+| Median tok/s | 15.2 |
+
+**横向对比**：
+
+| 指标 | Transformers 单卡 (No-CoT) | vLLM TP=4 CoT | vLLM TP=2 No-CoT |
+|------|---------------------------|---------------|-------------------|
+| Avg 延迟 | 52.0s | ~170-220s | **42.0s** |
+| Avg tok/s | 12.1 | ~4 | **15.2** |
+| 吞吐量 | ~0.02 req/s | ~0.04 req/s | **0.16 req/s** |
+| Avg output tokens | 632 | ~750 | 631 |
+
+**分析**：
+- TP=2 比 TP=4 延迟大幅降低（42s vs 170-220s），通信开销减半
+- tok/s 提升 26%（15.2 vs 12.1），vLLM 的 CUDA graph + continuous batching 发挥作用
+- 8 并发吞吐量是 transformers 单条的 8 倍
+- **瓶颈仍是输出长度**：631 tokens / 15.2 tok/s ≈ 42s/request，要 8 req/s 需要延迟 < 1s
+
 ### 待实验
 
-- [ ] TP=2 + `--max-model-len 4096` 重新 benchmark
-- [ ] No-CoT 模式 benchmark
-- [ ] 截断输入（`--max_lp_chars 2000`）benchmark
-- [ ] FP8 量化模型（`RedHatAI/gemma-4-26B-A4B-it-FP8-Dynamic`）vLLM 部署
+- [ ] 提高并发数（32/64），测吞吐量是否线性增长
+- [ ] 截断输入（减少 prefill 时间）
+- [ ] FP8 量化模型 vLLM 部署
 - [ ] 多 GPTQ 副本部署（单卡 13GB，可放 4-6 副本/机器）
 
 ### Benchmark 脚本
