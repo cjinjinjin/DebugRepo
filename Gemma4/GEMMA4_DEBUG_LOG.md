@@ -496,10 +496,54 @@ transformers: 5.5.3
 compressed-tensors: 0.15.0.1（--no-deps 安装，避免降级 transformers）
 ```
 
-**待尝试方案**：
-- `transformers==5.4.0` + `compressed-tensors==0.15.0.1`（降一个小版本试试）
-- 使用 vLLM 加载 AWQ 模型（vLLM 原生支持 compressed-tensors）
-- 换一个使用标准 AWQ 格式（非 compressed-tensors）的量化模型
+**已尝试的所有方案和结果**：
+
+| # | 方案 | 结果 |
+|---|------|------|
+| 1 | `transformers 4.57.6` + `compressed-tensors 0.15.0.1` | 模型权重加载正常（无警告），但 `AutoModelForCausalLM` 不认识 `gemma4` 架构（`KeyError: 'gemma4'`） |
+| 2 | `transformers 5.5.3` + `compressed-tensors 0.15.0.1` | 认识 `gemma4` 架构，但 `config.quantization_config` 返回 `None`（`auto.py:270` bug） |
+| 3 | 方案 2 + 手动注入 `quantization_config` | 注入成功，但 `compressed-tensors` 解压 `ignore` 列表中的层时 `group_size=0` 触发 pydantic 校验错误 |
+| 4 | `transformers 5.5.3` + `compressed-tensors 0.14.1a20260326`（模型量化时用的版本） | 同方案 3，同样的 `group_size=0` 错误 |
+| 5 | `transformers 5.5.3` + `compressed-tensors 0.14.0.1` | 模型能加载但大量 UNEXPECTED/MISSING 权重 |
+
+**根本原因分析**：
+- `compressed-tensors` 在 `transformers 5.x` 下解压权重时，会对 `ignore` 列表中的层（不该量化的层）也执行解压，这些层没有 `group_size`（默认为 0），触发 `QuantizationArgs` 的 pydantic 校验
+- `transformers 4.57.6` 走了不同的加载路径，不会触发这个问题，但该版本没有 `gemma4` 模型架构注册
+- 这是 `compressed-tensors` 与 `transformers 5.x` 交互的 bug
+
+### vLLM 方案调研（2026-04-10）
+
+**GitHub Issues 发现**：
+- [vllm#39133](https://github.com/vllm-project/vllm/issues/39133)：有人成功用 `cyankiwi/gemma-4-31B-it-AWQ-4bit`（同系列）在 vLLM 上 serve，用 2×RTX 3090 TP=2
+- [vllm#39204](https://github.com/vllm-project/vllm/issues/39204)：`vllm 0.19.0` 要求 `transformers<5`，但 `gemma4` 需要 `>=5`，存在同样的版本冲突
+- [vllm#39392](https://github.com/vllm-project/vllm/issues/39392)：Gemma4 tool-call-parser 在并发请求下会产生 `<pad>` token
+- HuggingFace 模型卡上用户用 `vllm/vllm-openai:gemma4-cu130` Docker 镜像成功 serve
+
+**vLLM 可行方案**：
+1. 使用专门的 Docker 镜像 `vllm/vllm-openai:gemma4-cu130`（已有人验证可用）
+2. vLLM serve 配置参考（来自 HuggingFace 讨论）：
+   ```yaml
+   model: cyankiwi/gemma-4-26B-A4B-it-AWQ-4bit
+   container_image: vllm/vllm-openai:gemma4-cu130
+   serve_args:
+     trust-remote-code: true
+     dtype: auto
+     tensor-parallel-size: 1  # AWQ 4-bit ~13GB，单卡即可
+     gpu-memory-utilization: 0.9
+     max-model-len: 120000
+     reasoning-parser: gemma4
+   ```
+3. Eval 脚本通过 OpenAI-compatible API 调用 vLLM 服务
+4. vLLM 原生支持 `compressed-tensors` AWQ 格式，不需要绕版本兼容性问题
+
+**vLLM 已知问题**：
+- tool calling 在并发下可能不稳定（[vllm#39392](https://github.com/vllm-project/vllm/issues/39392)）
+- 需要专门的 Docker 镜像（`gemma4-cu130`），普通 `pip install vllm` 不够
+
+**下一步计划**：
+- 线上环境有 Docker 后，用 `vllm/vllm-openai:gemma4-cu130` 启动 serving
+- 写基于 OpenAI API 的 eval 脚本调用 vLLM 服务
+- 对比 AWQ 4-bit vs BF16 的 compliance 和 word count
 
 ### 用法
 ```bash
