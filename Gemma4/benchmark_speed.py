@@ -59,6 +59,8 @@ def main():
     parser.add_argument("--max_new_tokens", type=int, default=2048)
     parser.add_argument("--use_gptq", action="store_true", default=False)
     parser.add_argument("--no_think", action="store_true", default=False)
+    parser.add_argument("--no_cot", action="store_true", default=False,
+                        help="Use no-CoT system prompt (skip <think> block)")
     parser.add_argument("--warmup", type=int, default=2, help="Warmup samples (excluded from stats)")
     args = parser.parse_args()
 
@@ -111,14 +113,15 @@ def main():
     print(f"Loaded {len(user_contents)} samples ({args.warmup} warmup + {args.num_samples} benchmark)")
 
     # --- System prompt ---
-    # Import from inference_gemma4 if available, otherwise use empty
     try:
         import sys
         sys.path.insert(0, str(Path(__file__).resolve().parent))
-        from inference_gemma4 import SYSTEM_PROMPT
+        from inference_gemma4 import SYSTEM_PROMPT, SYSTEM_PROMPT_NO_COT
     except ImportError:
         SYSTEM_PROMPT = ""
+        SYSTEM_PROMPT_NO_COT = ""
 
+    system_prompt = SYSTEM_PROMPT_NO_COT if args.no_cot else SYSTEM_PROMPT
     enable_thinking = not args.no_think
 
     # --- Benchmark ---
@@ -126,7 +129,7 @@ def main():
 
     for i, content in enumerate(user_contents):
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": content},
         ]
 
@@ -186,8 +189,9 @@ def main():
     output_tokens_list = [t["output_tokens"] for t in timings]
 
     model_type = "GPTQ-4bit" if args.use_gptq else "BF16"
+    cot_label = "no-CoT" if args.no_cot else "with-CoT"
     print(f"\n{'='*60}")
-    print(f"Speed Benchmark Summary — {model_type}")
+    print(f"Speed Benchmark Summary — {model_type} ({cot_label})")
     print(f"{'='*60}")
     print(f"Samples:           {len(timings)}")
     print(f"Avg output tokens: {np.mean(output_tokens_list):.0f}")

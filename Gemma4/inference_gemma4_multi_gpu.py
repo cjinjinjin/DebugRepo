@@ -67,6 +67,8 @@ def main():
     parser.add_argument("--load_in_8bit", action="store_true", default=False)
     parser.add_argument("--use_gptq", action="store_true", default=False,
                         help="Load model via GPTQModel (for GPTQ quantized checkpoints)")
+    parser.add_argument("--no_cot", action="store_true", default=False,
+                        help="Use no-CoT system prompt (skip <think> block, output prompts only)")
     args = parser.parse_args()
 
     # Load and split data
@@ -124,6 +126,8 @@ def main():
             cmd.append("--load_in_8bit")
         if args.use_gptq:
             cmd.append("--use_gptq")
+        if args.no_cot:
+            cmd.append("--no_cot")
 
         print(f"[GPU {gpu_id}] Launching with {len(shards[gpu_id])} samples ...")
         proc = subprocess.Popen(

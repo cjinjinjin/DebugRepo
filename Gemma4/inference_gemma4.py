@@ -72,6 +72,25 @@ CoreValueSignals: ...
 <Prompt4>...</Prompt4>
 <Prompt5>...</Prompt5>"""
 
+SYSTEM_PROMPT_NO_COT = """You are an expert Ad Creative Director and Senior AI Image Prompt Engineer, specialized in high-performing Native Advertisement visuals.
+
+Given a landing page URL and its content fields, your task is to generate five (5) high-quality English image generation prompts for Native Ads.
+
+Each prompt must:
+- Be 80–150 words
+- Embed all safety, realism, quality, and exclusion constraints
+- Feel native and non-promotional
+- Show the product outcome or value naturally in context
+- Avoid stereotypes, text/logos in image, and stock-photo aesthetics
+- Ensure correct anatomy, natural hands, sharp focus, clean composition
+
+Output exactly 5 prompts in this format (no reasoning, no thinking, just the prompts):
+<Prompt1>...</Prompt1>
+<Prompt2>...</Prompt2>
+<Prompt3>...</Prompt3>
+<Prompt4>...</Prompt4>
+<Prompt5>...</Prompt5>"""
+
 
 # ---------------------------------------------------------------------------
 # Field mapping (same as Qwen3 inference.py)
@@ -139,11 +158,13 @@ class Gemma4PromptGenerator:
         load_in_4bit: bool = False,
         load_in_8bit: bool = False,
         use_gptq: bool = False,
+        no_cot: bool = False,
         torch_dtype=torch.bfloat16,
         enable_thinking: bool = True,
     ):
         self.model_id = model_id
         self.enable_thinking = enable_thinking
+        self.system_prompt = SYSTEM_PROMPT_NO_COT if no_cot else SYSTEM_PROMPT
 
         from transformers import AutoModelForCausalLM
 
@@ -245,7 +266,7 @@ class Gemma4PromptGenerator:
     def build_input(self, lp_fields: dict) -> str:
         """Build chat-template formatted input string from LP field dict."""
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": build_user_message(lp_fields)},
         ]
         return self.processor.apply_chat_template(
@@ -258,7 +279,7 @@ class Gemma4PromptGenerator:
     def build_input_from_content(self, user_content: str) -> str:
         """Build chat-template formatted input string from raw user message content."""
         messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": user_content},
         ]
         return self.processor.apply_chat_template(
@@ -427,6 +448,8 @@ def parse_args():
                     help="Load model via GPTQModel (for GPTQ quantized checkpoints)")
     p.add_argument("--no_think", action="store_true", default=False,
                     help="Disable thinking mode")
+    p.add_argument("--no_cot", action="store_true", default=False,
+                    help="Use no-CoT system prompt (skip <think> block, output prompts only)")
     # Single query
     p.add_argument("--url", default="", help="Landing page URL")
     p.add_argument("--content", default="", help="Primary content text")
@@ -453,6 +476,7 @@ def main():
         load_in_4bit=args.load_in_4bit,
         load_in_8bit=args.load_in_8bit,
         use_gptq=args.use_gptq,
+        no_cot=args.no_cot,
         enable_thinking=not args.no_think,
     )
 
