@@ -683,7 +683,27 @@ bash Gemma4/eval_gemma4_gptq_zeroshot.sh
 - 字数、CoT、质量约束基本持平
 - **可接受用于线上 serving** — 显存从 ~52GB 降到 ~13GB，质量损失在噪点范围内
 
-⬜ 速度对比评估待运行（见下方速度评估方案）
+### 速度对比（2026-04-11）
+
+单卡（A100-80GB）、20 条样本、no-think 模式、batch_size=1：
+
+| 指标 | BF16 | GPTQ 4-bit | 差异 |
+|------|------|------------|------|
+| **Avg tok/s** | **11.9** | **10.2** | **-14%** |
+| Median tok/s | 12.1 | 10.3 | -15% |
+| Avg time/sample | 63.1s | 73.2s | +16% |
+| Avg output tokens | 753 | 750 | ~0 |
+| 显存占用 | ~52GB | ~13GB | **-75%** |
+
+**分析**：
+- GPTQ 4-bit 单卡推理比 BF16 慢 ~15%，反量化计算开销 > 减少显存带宽的收益
+- MoE 模型本身只激活 ~4B 参数，BF16 生成速度已经不慢（12 tok/s）
+- GPTQ 的优势不在单条推理速度，而在**显存节省 75%**：
+  - 同一张 A100-80GB 可跑 4-6 个 GPTQ 副本（vs BF16 只能 1 个）
+  - 可部署在 RTX 3090/4090（24GB）等消费级卡上
+  - vLLM continuous batching + GPTQ = 吞吐量远高于 BF16 单条推理
+
+**Benchmark 脚本**：`Gemma4/benchmark_speed.py`
 
 ### 经验教训
 
