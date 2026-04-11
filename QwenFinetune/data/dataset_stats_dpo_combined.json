@@ -1,0 +1,24 @@
+{
+  "combined_train": 1772,
+  "combined_eval": 190,
+  "source_dist_train": {
+    "format": 1698,
+    "quality": 74
+  },
+  "source_dist_eval": {
+    "format": 182,
+    "quality": 8
+  },
+  "corruption_type_dist": {
+    "bloated_think": 195,
+    "copy_paste_prompts": 226,
+    "drop_all_prompts": 224,
+    "drop_one_prompt": 185,
+    "drop_two_prompts": 216,
+    "high_repetition": 213,
+    "no_think": 214,
+    "overly_long_prompt": 213,
+    "quality_preference": 82,
+    "unclosed_think": 194
+  }
+}
