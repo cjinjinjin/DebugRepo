@@ -934,7 +934,104 @@ vllm serve /vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichA
 `Gemma4/benchmark_vllm.py` — 基于 asyncio + aiohttp 的并发 benchmark 工具：
 - 支持 `--concurrency N` 设置并发数
 - 支持 `--no_cot` 切换 system prompt
+- 支持 `--max_lp_chars N` 截断输入内容
 - 自动发现 vLLM 模型名称
 - 输出：吞吐量（req/s）、延迟分布（avg/median/p95）、每条 tok/s
 - 可导出详细 JSON 结果
+
+### Benchmark 3: TP=2, No-CoT, C=32（2026-04-11）
+
+**配置**：
+- Tensor Parallel: 2（GPU 0-1）
+- `--max-model-len 8192`
+- Concurrency: **32**
+- Mode: no-CoT
+- Max tokens: 1024
+- 数据：50 条
+
+**结果**：
+
+| 指标 | 值 |
+|------|-----|
+| Successful | 50/50 |
+| Total wall time | 156.5s |
+| **Throughput** | **0.32 req/s** |
+| Avg latency | 58.2s |
+| Median latency | 53.2s |
+| P95 latency | 91.2s |
+| Avg output tokens | 636 |
+| **Avg tok/s** | **10.9** |
+| Median tok/s | 11.3 |
+
+**与 C=8 对比**：
+
+| 指标 | C=8 (20条) | C=32 (50条) | 变化 |
+|------|-----------|-------------|------|
+| **Throughput** | 0.16 req/s | **0.32 req/s** | **+100%** |
+| Avg latency | 42.0s | 58.2s | +39% |
+| Avg tok/s | 15.2 | 10.9 | -28% |
+| Avg output tokens | 631 | 636 | ~0 |
+
+**分析**：
+- 并发从 8→32 后，吞吐量翻倍（0.16→0.32 req/s），vLLM continuous batching 有效利用了 GPU 计算
+- 代价是单条延迟上升 39%（42→58s），每条 tok/s 下降 28%（15.2→10.9）
+- P95 延迟达到 91s，长尾效应明显（batch 中后排请求等待时间长）
+- 输出 token 量不变（~636），说明并发不影响生成内容
+
+### Benchmark 4: TP=2, No-CoT, C=8, 截断 2000 字符（2026-04-11）
+
+**配置**：
+- Tensor Parallel: 2（GPU 0-1）
+- `--max-model-len 8192`
+- Concurrency: 8
+- Mode: no-CoT
+- Max tokens: 1024
+- **`--max_lp_chars 2000`**（截断 LP 内容到 2000 字符）
+- 数据：20 条
+
+**结果**：
+
+| 指标 | 值 |
+|------|-----|
+| Successful | 20/20 |
+| Total wall time | 132.3s |
+| **Throughput** | **0.15 req/s** |
+| Avg latency | 44.5s |
+| Median latency | 43.2s |
+| P95 latency | 53.1s |
+| Avg output tokens | 647 |
+| **Avg tok/s** | **14.6** |
+| Median tok/s | 14.8 |
+
+**与不截断（Benchmark 2）对比**：
+
+| 指标 | 不截断 | 截断 2000 | 变化 |
+|------|--------|-----------|------|
+| Avg latency | 42.0s | 44.5s | +6% |
+| Avg tok/s | 15.2 | 14.6 | -4% |
+| Throughput | 0.16 req/s | 0.15 req/s | -6% |
+| Avg output tokens | 631 | 647 | +3% |
+
+**分析**：
+- 对当前 20 条样本（平均输入 ~5600 chars），截断到 2000 后**平均延迟无改善**
+- 原因：这批数据的主要瓶颈在 **decode（逐 token 生成 ~640 tokens ≈ 42s）**，prefill 占比很小
+- 但**截断对超长输入仍有价值**：P95/P99 的超长 LP（10K-300K+ chars）prefill 时间显著，截断可降低这些 case 的延迟和显存峰值
+- 截断后模型输出略长（647 vs 631），可能是信息减少后模型更易发散
+- **建议线上保留截断**：对尾部超长 case 有防御作用，对普通 case 无负面影响
+
+### 吞吐量优化总结
+
+| 方案 | Throughput | Avg Latency | Avg tok/s | 效果 |
+|------|-----------|-------------|-----------|------|
+| TP=4, CoT, C=8 | ~0.04 req/s | ~200s | ~4 | 基线 |
+| TP=2, No-CoT, C=8 | 0.16 req/s | 42.0s | 15.2 | **4x** |
+| TP=2, No-CoT, C=32 | **0.32 req/s** | 58.2s | 10.9 | **8x** |
+| TP=2, No-CoT, C=8, 截断 2000 | 0.15 req/s | 44.5s | 14.6 | 平均无效，超长 case 有防御作用 |
+
+**关键结论**：
+1. **TP=4→TP=2 是最大优化**：通信开销减半，延迟从 200s 降到 42s
+2. **提高并发有效但延迟增加**：C=32 吞吐翻倍到 0.32 req/s，但单条延迟增加 39%
+3. **截断输入对平均 case 无效，但对超长输入有防御价值**：主要瓶颈是 decode，但超长 LP（10K+ chars）的 prefill 时间和显存峰值不可忽视，建议线上保留截断
+4. **BF16 单实例极限约 0.3 req/s**：要达到 8 req/s 需要 ~25 个并行实例
+5. **要大幅降低延迟，只有两条路**：减少输出 tokens 或 提高 decode 速度（量化/更小模型/硬件升级）
 
