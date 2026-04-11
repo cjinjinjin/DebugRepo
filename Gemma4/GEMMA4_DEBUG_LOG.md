@@ -555,5 +555,126 @@ bash Gemma4/eval_gemma4_awq_zeroshot.sh
 ```
 
 ### 结果
+⬜ AWQ 方案已放弃（见上方根本原因分析），改用 GPTQ
+
+---
+
+## GPTQ 4-bit 量化验证（2026-04-10）
+
+### 背景
+AWQ `compressed-tensors` 格式与 `transformers 5.x` 存在不可解决的兼容性问题（见上），改用 GPTQ 格式。
+使用 `raydelossantos/gemma-4-26B-A4B-it-GPTQ-Int4`（HuggingFace）。
+
+### 对比目标
+| 指标 | BF16 (baseline) | GPTQ 4-bit (待验证) |
+|------|-----------------|---------------------|
+| Format Compliance | 95.9% | ? |
+| Avg Word Count | 89.9 | ? |
+| 显存/卡 | ~52GB | ~13GB |
+
+### 专用环境：`gemma4-quant`
+
+AWQ/GPTQ 量化推理的依赖与原始 `gemma4` 环境冲突（`transformers` 版本、`gptqmodel` vs `auto-gptq`），
+**必须用独立 conda 环境**，避免污染原始推理/训练环境。
+
+```bash
+conda create -n gemma4-quant python=3.10 -y
+conda activate gemma4-quant
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+pip install "transformers>=5.5" accelerate
+pip install gptqmodel optimum==1.24.0
+```
+
+**最终依赖版本**：
+```
+Python:          3.10
+torch:           2.11.0+cu126
+transformers:    5.5.3
+gptqmodel:       6.0.3
+optimum:         1.24.0
+accelerate:      最新
+```
+
+### 踩坑记录
+
+| # | 问题 | 原因 | 解决方案 |
+|---|------|------|----------|
+| 1 | `huggingface-hub>=0.34.0,<1.0 is required for gptqmodel` | `pip install gptqmodel` 默认拉了 `huggingface-hub 1.10.1` | `pip install "huggingface-hub>=0.34.0,<1.0"` |
+| 2 | `AutoTokenizer` 报 `'list' object has no attribute 'keys'` on `extra_special_tokens` | Gemma 4 的 `tokenizer_config.json` 中 `extra_special_tokens` 是 list 格式，`transformers 5.x` 期望 dict | 在 `inference_gemma4.py` 中加 fallback：复制 tokenizer 到临时目录，把 list 转为 dict `{}` |
+| 3 | `KeyError: 'gemma4'` （transformers 4.57.6） | `transformers 4.57.6` 没有注册 `gemma4` 模型架构 | 必须用 `transformers >= 5.x` |
+| 4 | `NameError: 'QuantizeConfig' not defined` （optimum 2.1.0） | `optimum 2.x` 对 GPTQ 的 API 不兼容 | `pip install optimum==1.24.0` |
+| 5 | `ImportError: cannot import name 'no_init_weights'` （auto-gptq 0.7.1） | `auto-gptq` 与 `transformers 5.x` 不兼容（`no_init_weights` 在 5.x 中被移除） | 卸载 `auto-gptq`，改用 `gptqmodel` |
+| 6 | `ValueError: Block pattern could not be match` （optimum） | `optimum` 不识别 Gemma 4 MoE 架构的 block 结构 | 不走 `AutoModelForCausalLM.from_pretrained()`，直接用 `GPTQModel.load()` |
+| 7 | `ImportError: requires gptqmodel` | 缺少 `gptqmodel` 包 | `pip install gptqmodel` |
+
+### 关键技术发现
+
+1. **GPTQ 模型加载必须用 `GPTQModel.load()`**，不能用 `AutoModelForCausalLM.from_pretrained()`
+   - `transformers` + `optimum` 走的 `auto.py` 路径不认识 Gemma 4 MoE 的 block 结构
+   - `gptqmodel` 库有专门的 `Gemma4ForConditionalGenerationGPTQ` 实现
+
+2. **`auto-gptq` 已废弃，用 `gptqmodel` 替代**
+   - `auto-gptq` 最新版（0.7.1）与 `transformers 5.x` 不兼容
+   - `gptqmodel` 是 `auto-gptq` 的继任者，API 类似但维护更积极
+   - `GPTQModel.load()` 对应原来的 `AutoGPTQForCausalLM.from_quantized()`
+
+3. **`optimum` 版本必须是 `1.24.0`**
+   - `optimum 2.x` 的 `QuantizeConfig` API 变更导致 NameError
+   - `1.24.0` 与 `gptqmodel 6.0.3` 配合正常
+
+4. **模型加载验证成功**：
+   ```python
+   from gptqmodel import GPTQModel
+   model = GPTQModel.load('./gemma-4-26B-A4B-it-GPTQ-Int4', device_map='auto')
+   # → <class 'gptqmodel.models.definitions.gemma4.Gemma4ForConditionalGenerationGPTQ'>
+   ```
+
+### 代码改动
+
+在现有 inference pipeline 中新增 `--use_gptq` 参数：
+
+- **`Gemma4/inference_gemma4.py`**：
+  - `Gemma4PromptGenerator.__init__()` 新增 `use_gptq: bool` 参数
+  - GPTQ 分支：`from gptqmodel import GPTQModel; self.model = GPTQModel.load(model_id, device_map=device)`
+  - 非 GPTQ 分支：保持原有 `AutoModelForCausalLM.from_pretrained()` 路径
+  - argparse 新增 `--use_gptq` flag
+
+- **`Gemma4/inference_gemma4_multi_gpu.py`**：
+  - argparse 新增 `--use_gptq`，透传给子进程
+
+- **`Gemma4/eval_gemma4_gptq_zeroshot.sh`**：
+  - 调用时加 `--use_gptq` flag
+  - `--processor_id` 指向 BF16 原始模型的 processor（GPTQ 模型目录可能缺少 processor 文件）
+
+### 脚本
+- 下载：`Gemma4/download_model_gptq.sh`
+- 评估：`Gemma4/eval_gemma4_gptq_zeroshot.sh`（196 条 DPO eval, 8 GPU, no-think, `--use_gptq`）
+- 输出：`/vc_data/.../Gemma4_results/gemma4_gptq_zeroshot_eval.jsonl`
+- 报告：`/vc_data/.../Gemma4_results/gemma4_gptq_zeroshot_report.json`
+
+### 注意事项
+- multi-GPU launcher 给每个子进程设 `CUDA_VISIBLE_DEVICES=N`（单卡），`GPTQModel.load(device_map='auto')` 会自动映射到该可见卡
+- GPTQ 4-bit ~13GB/卡，A100-80GB 绑定没有问题
+- 如遇问题可先用 `--num_gpus 1` 单卡测试
+
+### 用法
+```bash
+conda activate gemma4-quant
+bash Gemma4/eval_gemma4_gptq_zeroshot.sh
+```
+
+### 结果
 ⬜ 待运行
+
+### 经验教训
+
+1. **先搜后试**：遇到第三方包兼容性问题时，应先搜索 GitHub Issues 了解已知问题和可行方案，再动手尝试。AWQ 问题本可通过搜索 `compressed-tensors` + `transformers 5.x` 的 issues 更早发现死路。
+
+2. **独立环境隔离**：量化推理的依赖栈（`gptqmodel`/`optimum`/`compressed-tensors`）与训练环境（`trl`/`peft`/`deepspeed`）有大量冲突。**任何实验性依赖都应在独立 conda 环境中安装**，避免破坏已有工作环境。
+
+3. **AWQ `compressed-tensors` 格式是死路**：`transformers 4.x` 能加载权重但不认识 `gemma4` 架构；`transformers 5.x` 认识架构但 `compressed-tensors` 解压 `ignore` 层时 `group_size=0` 报错。两个版本都走不通。这是上游 bug。
+
+4. **GPTQ 是可行的后备方案**：`gptqmodel` 库有专门的 Gemma 4 MoE 支持（`Gemma4ForConditionalGenerationGPTQ`），绕过了 `transformers` + `optimum` 的架构识别问题。关键是用 `GPTQModel.load()` 直接加载，不走 `AutoModel` 路径。
+
+5. **vLLM 是线上最优解**：对于生产部署，`vllm/vllm-openai:gemma4-cu130` Docker 镜像内部处理了所有版本兼容性问题，是最稳定的方案。本地用 GPTQ + `gptqmodel` 做离线验证。
 
