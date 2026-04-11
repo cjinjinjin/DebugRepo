@@ -663,8 +663,27 @@ conda activate gemma4-quant
 bash Gemma4/eval_gemma4_gptq_zeroshot.sh
 ```
 
-### 结果
-⬜ 待运行
+### 结果（2026-04-11）
+
+| 指标 | BF16 (baseline) | GPTQ 4-bit | 差异 |
+|------|-----------------|------------|------|
+| **Fully Compliant** | **95.9%** | **92.9%** | **-3.0pp** |
+| All 5 tags present | 95.9% | 92.9% | -3.0pp |
+| All 5 prompts unique | 95.9% | 92.9% | -3.0pp |
+| Avg Word Count | 89.9 | 90.9 | +1.0 |
+| Prompts ≤150 words | 4.9/5 | 4.8/5 | -0.1 |
+| `<think>` block present | 100% | 100% | 0 |
+| All 6 CoT fields | 100% | 100% | 0 |
+| Quality hints | 2.9/5 | 2.8/5 | -0.1 |
+| Forbidden words | 1.6/5 | 1.7/5 | +0.1 |
+| LP keyword coverage | 0.0% | 0.0% | 0 |
+
+**结论**：
+- GPTQ 4-bit 质量损失很小（-3pp），92.9% 仍远超 Qwen3 DPO 的 47.9%
+- 字数、CoT、质量约束基本持平
+- **可接受用于线上 serving** — 显存从 ~52GB 降到 ~13GB，质量损失在噪点范围内
+
+⬜ 速度对比评估待运行（见下方速度评估方案）
 
 ### 经验教训
 
