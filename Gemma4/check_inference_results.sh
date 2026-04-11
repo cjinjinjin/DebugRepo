@@ -1,33 +1,23 @@
 #!/bin/bash
 # 检查 Gemma 4 推理中间结果：查看各 GPU shard 进度、合格率、样例内容
 #
-# 推理过程中，各 GPU 的中间结果在 /tmp/gemma4_shards_xxx/ 下
-# 推理完成后，合并结果在 vc_data 输出路径下
+# 自动查找 /tmp/gemma4_shards_* 下最新修改的目录
 #
 # Usage:
-#   bash Gemma4/check_inference_results.sh              # 自动查找 /tmp 下最新 shard 目录
-#   bash Gemma4/check_inference_results.sh <output_jsonl>  # 检查指定文件（合并后的结果）
+#   bash Gemma4/check_inference_results.sh                # 查看 /tmp 下最新 shard 进度
+#   bash Gemma4/check_inference_results.sh <output.jsonl>  # 检查合并后的最终结果
 
 set -e
 
-# ── 判断输入：指定文件 or 自动查找 /tmp shards ────────────────────────────
+# ── 判断输入 ──────────────────────────────────────────────────────────────
 if [ -n "${1:-}" ] && [ -f "${1}" ]; then
-    # 指定了单个文件
     OUTPUT_FILE="$1"
     MODE="single"
 else
-    # 查找 /tmp 下最新的 gemma4_shards 目录
-    SHARD_DIR=$(ls -dt /tmp/gemma4_shards_* 2>/dev/null | head -1)
+    # 找 /tmp 下最近修改的 gemma4_shards 目录
+    SHARD_DIR=$(find /tmp -maxdepth 1 -name 'gemma4_shards_*' -type d -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
     if [ -z "${SHARD_DIR}" ]; then
-        echo "[ERROR] 未找到 /tmp/gemma4_shards_* 目录，也未指定输出文件"
-        echo ""
-        echo "用法:"
-        echo "  bash Gemma4/check_inference_results.sh                    # 查找 /tmp shards"
-        echo "  bash Gemma4/check_inference_results.sh <output.jsonl>     # 指定文件"
-        echo ""
-        VC_RESULTS="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/Gemma4_results"
-        echo "可用的最终结果文件:"
-        ls -lh "${VC_RESULTS}"/gemma4_random200*.jsonl 2>/dev/null || echo "  (无)"
+        echo "[ERROR] 未找到 /tmp/gemma4_shards_* 目录"
         exit 1
     fi
     MODE="shards"
@@ -35,39 +25,37 @@ fi
 
 echo "============================================"
 if [ "${MODE}" = "shards" ]; then
-    echo "检查中间结果 (shards): ${SHARD_DIR}"
+    echo "检查中间结果: ${SHARD_DIR}"
 else
     echo "检查推理结果: $(basename "${OUTPUT_FILE}")"
 fi
 echo "============================================"
 
-# ── Shard 模式：逐个检查各 GPU 的输出进度 ─────────────────────────────────
+# ── Shard 模式 ────────────────────────────────────────────────────────────
 if [ "${MODE}" = "shards" ]; then
     echo ""
     echo "--- 各 GPU shard 进度 ---"
     TOTAL_DONE=0
-    SHARD_FILES=""
-    for f in "${SHARD_DIR}"/shard_*_output.jsonl; do
-        if [ -f "$f" ]; then
-            GPU_ID=$(basename "$f" | grep -o '[0-9]\+')
-            LINES=$(wc -l < "$f")
-            SIZE=$(du -h "$f" | cut -f1)
-            echo "  GPU ${GPU_ID}: ${LINES} samples done (${SIZE})"
-            TOTAL_DONE=$((TOTAL_DONE + LINES))
-            SHARD_FILES="${SHARD_FILES} ${f}"
-        fi
-    done
-    INPUT_TOTAL=0
-    for f in "${SHARD_DIR}"/shard_*_input.jsonl; do
-        if [ -f "$f" ]; then
-            INPUT_TOTAL=$((INPUT_TOTAL + $(wc -l < "$f")))
+    TOTAL_INPUT=0
+    for i in 0 1 2 3 4 5 6 7; do
+        inp="${SHARD_DIR}/shard_${i}_input.jsonl"
+        out="${SHARD_DIR}/shard_${i}_output.jsonl"
+        if [ -f "$inp" ]; then
+            IN_LINES=$(wc -l < "$inp")
+            TOTAL_INPUT=$((TOTAL_INPUT + IN_LINES))
+            if [ -f "$out" ]; then
+                OUT_LINES=$(wc -l < "$out")
+                TOTAL_DONE=$((TOTAL_DONE + OUT_LINES))
+                echo "  GPU ${i}: ${OUT_LINES}/${IN_LINES} done"
+            else
+                echo "  GPU ${i}: 0/${IN_LINES} (no output yet)"
+            fi
         fi
     done
     echo ""
-    echo "  总进度: ${TOTAL_DONE}/${INPUT_TOTAL}"
-    echo ""
+    echo "  总进度: ${TOTAL_DONE}/${TOTAL_INPUT}"
 
-    # 合并所有 shard 输出统计
+    echo ""
     echo "--- 合格率统计 (所有已完成 shard) ---"
     python3 -c "
 import json, sys, glob
@@ -105,8 +93,9 @@ print(f'  All 5 tags:        {n_tags}/{total} ({100*n_tags/total:.1f}%)')
 print(f'  平均输出长度:      {sum(output_lens)/len(output_lens):.0f} chars')
 print(f'  最短/最长输出:     {min(output_lens)}/{max(output_lens)} chars')
 "
-    # 取第一个 shard 的最后一条作为样例
-    SAMPLE_FILE=$(ls "${SHARD_DIR}"/shard_*_output.jsonl 2>/dev/null | head -1)
+
+    # 取最后一个 shard 的最后一条作为样例
+    SAMPLE_FILE=$(ls "${SHARD_DIR}"/shard_*_output.jsonl 2>/dev/null | tail -1)
     if [ -n "${SAMPLE_FILE}" ]; then
         OUTPUT_FILE="${SAMPLE_FILE}"
     else
@@ -116,11 +105,6 @@ fi
 
 # ── 单文件模式 ────────────────────────────────────────────────────────────
 if [ "${MODE}" = "single" ]; then
-    if [ ! -f "${OUTPUT_FILE}" ]; then
-        echo "[ERROR] 文件不存在: ${OUTPUT_FILE}"
-        exit 1
-    fi
-
     TOTAL=$(wc -l < "${OUTPUT_FILE}")
     FILE_SIZE=$(du -h "${OUTPUT_FILE}" | cut -f1)
     echo ""
@@ -165,7 +149,7 @@ print(f'  最短/最长输出:     {min(output_lens)}/{max(output_lens)} chars')
 "
 fi
 
-# ── 最后几条样本摘要 ──────────────────────────────────────────────────────
+# ── 最后 3 条样本摘要 ────────────────────────────────────────────────────
 echo ""
 echo "--- 最后 3 条样本摘要 ---"
 python3 -c "
