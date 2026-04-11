@@ -18,6 +18,7 @@ Usage:
 import argparse
 import asyncio
 import json
+import re
 import time
 from pathlib import Path
 
@@ -99,6 +100,31 @@ def extract_user_content(record):
     return ""
 
 
+def truncate_lp_content(text, max_chars):
+    """Truncate text to max_chars, cutting at last word boundary."""
+    if max_chars <= 0 or len(text) <= max_chars:
+        return text
+    truncated = text[:max_chars].rsplit(" ", 1)[0]
+    return truncated + " ..."
+
+
+def truncate_user_content(content, max_chars):
+    """Truncate the main content section within a raw user message string."""
+    if max_chars <= 0:
+        return content
+    content_labels = ["Primary Content", "Page Content", "PrimaryContentNoTitleNoHeading"]
+    for label in content_labels:
+        for pattern in [
+            rf"(\[{re.escape(label)}\]\n)(.*?)(\n\[|\Z)",
+            rf"(- {re.escape(label)}: )(.*?)(\n- |\Z)",
+        ]:
+            m = re.search(pattern, content, re.DOTALL)
+            if m and len(m.group(2)) > max_chars:
+                truncated = truncate_lp_content(m.group(2), max_chars)
+                return content[:m.start(2)] + truncated + content[m.start(3):]
+    return content
+
+
 async def send_request(session, base_url, model_name, system_prompt,
                        user_content, max_tokens, sample_idx):
     """Send a single chat completion request and return timing info."""
@@ -154,6 +180,9 @@ async def run_benchmark(args):
     records = load_jsonl(args.input_file, max_records=args.num_samples)
     user_contents = [extract_user_content(r) for r in records]
 
+    if args.max_lp_chars > 0:
+        user_contents = [truncate_user_content(c, args.max_lp_chars) for c in user_contents]
+
     system_prompt = SYSTEM_PROMPT_NO_COT if args.no_cot else SYSTEM_PROMPT
     cot_label = "no-CoT" if args.no_cot else "with-CoT"
 
@@ -161,6 +190,7 @@ async def run_benchmark(args):
     print(f"Concurrency: {args.concurrency}")
     print(f"Mode: {cot_label}")
     print(f"Max tokens: {args.max_tokens}")
+    print(f"Max LP chars: {args.max_lp_chars if args.max_lp_chars > 0 else 'unlimited'}")
     print(f"Server: {args.base_url}")
     print()
 
@@ -286,6 +316,8 @@ def main():
     parser.add_argument("--base_url", default="http://localhost:8000")
     parser.add_argument("--no_cot", action="store_true", default=False,
                         help="Use no-CoT system prompt")
+    parser.add_argument("--max_lp_chars", type=int, default=0,
+                        help="Truncate LP content to N chars (0 = no truncation)")
     parser.add_argument("--output_file", default="",
                         help="Save detailed results JSON")
     args = parser.parse_args()
