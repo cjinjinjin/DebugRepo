@@ -7,12 +7,14 @@
 #   bash Gemma4/eval_gemma4_gptq_zeroshot.sh [model_path]
 
 CKPT_ROOT="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT"
-MODEL_ID="${1:-${CKPT_ROOT}/gemma-4-26B-A4B-it-GPTQ-Int4}"
+MODEL_ID="${1:-./gemma-4-26B-A4B-it-GPTQ-Int4}"
 PROCESSOR_ID="${CKPT_ROOT}/gemma-4-26B-A4B-it"
+# Remote paths (uncomment when running on vc_data):
+# MODEL_ID="${1:-${CKPT_ROOT}/gemma-4-26B-A4B-it-GPTQ-Int4}"
 
-# If vc_data path doesn't exist, try local
+# If local path doesn't exist, try vc_data
 if [ ! -d "${MODEL_ID}" ]; then
-    MODEL_ID="./gemma-4-26B-A4B-it-GPTQ-Int4"
+    MODEL_ID="${CKPT_ROOT}/gemma-4-26B-A4B-it-GPTQ-Int4"
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
