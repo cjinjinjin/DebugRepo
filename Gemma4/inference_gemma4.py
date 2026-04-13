@@ -191,6 +191,7 @@ class Gemma4PromptGenerator:
         max_lp_chars: int = 0,
         torch_dtype=torch.bfloat16,
         enable_thinking: bool = True,
+        attn_impl: str = "",
     ):
         self.model_id = model_id
         self.enable_thinking = enable_thinking
@@ -261,13 +262,17 @@ class Gemma4PromptGenerator:
                         _config.quantization_config = _raw["quantization_config"]
                         print(f"[INFO] Manually injected quantization_config (quant_method: {_raw['quantization_config'].get('quant_method', 'unknown')})")
 
-            self.model = AutoModelForCausalLM.from_pretrained(
-                model_id,
-                config=_config,
-                quantization_config=bnb_config,
-                device_map=device,
-                dtype=torch_dtype,
-            )
+            load_kwargs = {
+                "config": _config,
+                "quantization_config": bnb_config,
+                "device_map": device,
+                "dtype": torch_dtype,
+            }
+            if attn_impl:
+                load_kwargs["attn_implementation"] = attn_impl
+                print(f"Attention implementation: {attn_impl}")
+
+            self.model = AutoModelForCausalLM.from_pretrained(model_id, **load_kwargs)
 
         # Load LoRA adapter if provided
         if adapter_path and Path(adapter_path).exists():
@@ -485,6 +490,8 @@ def parse_args():
                     help="Use no-CoT system prompt (skip <think> block, output prompts only)")
     p.add_argument("--max_lp_chars", type=int, default=0,
                     help="Truncate Primary Content to this many chars (0=no truncation, recommended: 2000)")
+    p.add_argument("--attn_impl", type=str, default="",
+                    help="Attention implementation: sdpa, flash_attention_2, eager (default: model default)")
     # Single query
     p.add_argument("--url", default="", help="Landing page URL")
     p.add_argument("--content", default="", help="Primary content text")
@@ -514,6 +521,7 @@ def main():
         no_cot=args.no_cot,
         max_lp_chars=args.max_lp_chars,
         enable_thinking=not args.no_think,
+        attn_impl=args.attn_impl,
     )
 
     gen_kwargs = {
