@@ -186,7 +186,7 @@ def parse_args():
     p.add_argument("--num_calls", type=int, default=5,
                     help="Number of parallel samples per input (default: 5)")
     # Generation params
-    p.add_argument("--max_new_tokens", type=int, default=1024)
+    p.add_argument("--max_new_tokens", type=int, default=512)
     p.add_argument("--temperature", type=float, default=1.2)
     p.add_argument("--top_p", type=float, default=0.95)
     p.add_argument("--top_k", type=int, default=64)
@@ -242,6 +242,8 @@ def main():
         elif "messages" in r:
             uc = extract_user_content_from_messages(r["messages"])
             if uc:
+                # Replace "Generate 5" with "Generate 1" to match single-prompt system prompt
+                uc = re.sub(r"Generate \d+ image", "Generate 1 image", uc, count=1)
                 if args.max_lp_chars > 0:
                     uc = truncate_user_content(uc, args.max_lp_chars)
                 user_contents.append(uc)

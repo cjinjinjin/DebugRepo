@@ -231,6 +231,8 @@ def main():
         elif "messages" in r:
             user_content = extract_user_content_from_messages(r["messages"])
             if user_content:
+                # Replace "Generate 5" with "Generate 1" to match single-prompt system prompt
+                user_content = re.sub(r"Generate \d+ image", "Generate 1 image", user_content, count=1)
                 batch_inputs.append(user_content)
                 input_type = "user_content"
             else:
