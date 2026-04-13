@@ -1419,3 +1419,54 @@ python QwenFinetune/evaluate.py \
 4. **Quality hints 偏低**（1.5/5）：prompt 中很少主动嵌入 "sharp focus", "correct anatomy" 等质量关键词
 5. **结论**：E4B 格式能力合格，但**内容质量明显弱于大模型**（约束遵循和细节丰富度不足），不建议直接替代 26B-A4B-it 用于生产
 
+---
+
+## Two-Step Benchmark：无 stop_strings、默认 max_new_tokens 基线结果
+
+**日期**：2026-04-13
+**配置**：
+- 模型：gemma-4-26B-A4B-it BF16
+- Step 1：`max_new_tokens=128`，无 `stop_strings`
+- Step 2：`max_new_tokens=256`（batch=5），无 `stop_strings`
+- 4 benchmark samples + 2 warmup
+
+### 原始输出
+
+```
+  [WARMUP] S1: prefill=0.14s decode=11.20s (97tok) | S2: prefill=4.47s decode=12.0s (330tok) | Total: 27.8s
+  [WARMUP] S1: prefill=0.02s decode=8.36s (87tok) | S2: prefill=2.58s decode=40.0s (1280tok) | Total: 51.0s
+  [Sample 1/4] S1: prefill=0.02s decode=7.84s (84tok) | S2: prefill=2.45s decode=38.3s (1280tok) | Total: 48.6s
+  [Sample 2/4] S1: prefill=0.02s decode=8.10s (92tok) | S2: prefill=1.69s decode=9.7s (325tok) | Total: 19.5s
+  [Sample 3/4] S1: prefill=0.02s decode=7.62s (89tok) | S2: prefill=0.83s decode=34.4s (1280tok) | Total: 42.9s
+  [Sample 4/4] S1: prefill=0.02s decode=7.24s (84tok) | S2: prefill=1.18s decode=38.8s (1280tok) | Total: 47.2s
+```
+
+### 汇总统计
+
+| 指标 | 值 |
+|------|-----|
+| **Step 1 Avg prefill** | 0.019s |
+| **Step 1 Avg decode** | 7.70s (87 tokens, 11.3 tok/s) |
+| **Step 2 Avg prefill** | 1.539s |
+| **Step 2 Avg decode** | 30.3s (1041 tokens, 34.3 tok/s) |
+| **Avg total time** | **39.6s/sample** |
+| **Median total time** | 45.1s |
+| **P95 total time** | 48.4s |
+
+### 时间分解
+
+| 阶段 | 时间 | 占比 |
+|------|------|------|
+| Step 1 prefill | 0.02s | 0% |
+| Step 1 decode | 7.70s | 19% |
+| Step 2 prefill | 1.54s | 4% |
+| Step 2 decode | 30.30s | **77%** |
+| **Total** | **39.6s** | 100% |
+
+### 关键发现
+
+1. **Step 2 decode 是瓶颈**（77% 时间），4 个 sample 中有 3 个 Step 2 打满 1280 tokens（256 × 5 sequences）
+2. **大量无用输出**：实际有用 prompt 内容 ~60-80 tokens/prompt（30-50 词），5 个合计 ~300-400 tokens，但模型平均输出 1041 tokens
+3. **根因**：模型在输出 `</Prompt>` 标签后继续生成无用内容直到 max_new_tokens 上限
+4. **优化方案**：添加 `stop_strings=["</Prompt>"]` + 降低 `max_new_tokens`（Step 1: 128→80, Step 2: 256→128），预计总时间从 39.6s → ~20s
+

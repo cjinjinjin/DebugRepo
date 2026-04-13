@@ -118,13 +118,43 @@ def generate_two_step(
     # --- Step 1: Generate 5 scene concepts ---
     print("\n[TWO-STEP] Step 1: Generating 5 scene concepts...")
     gen.system_prompt = SYSTEM_PROMPT_STEP1_SCENES
-    step1_response = gen.generate(
-        user_content=user_content,
-        lp_fields=lp_fields,
-        max_new_tokens=128,
-        **gen_kwargs,
+
+    # Build input and tokenize
+    if user_content:
+        step1_input_text = gen.build_input_from_content(user_content)
+    elif lp_fields:
+        step1_input_text = gen.build_input_from_content(
+            build_user_message(lp_fields, gen.max_lp_chars)
+        )
+    else:
+        step1_input_text = gen.build_input_from_content("")
+
+    if hasattr(gen.processor, "tokenizer"):
+        tokenizer = gen.processor.tokenizer
+    else:
+        tokenizer = gen.processor
+
+    step1_inputs = tokenizer(step1_input_text, return_tensors="pt").to(gen.model.device)
+    step1_input_len = step1_inputs["input_ids"].shape[-1]
+
+    with torch.inference_mode():
+        step1_outputs = gen.model.generate(
+            **step1_inputs,
+            max_new_tokens=80,
+            **gen_kwargs,
+            stop_strings=["</Scene5>"],
+            tokenizer=tokenizer,
+        )
+
+    step1_response_text = tokenizer.decode(
+        step1_outputs[0][step1_input_len:], skip_special_tokens=False
     )
-    step1_text = step1_response.get("content", "") if isinstance(step1_response, dict) else str(step1_response)
+    # Parse using processor if available
+    if hasattr(gen.processor, "parse_response"):
+        parsed = gen.processor.parse_response(step1_response_text)
+    else:
+        parsed = gen._parse_response_fallback(step1_response_text)
+    step1_text = parsed.get("content", "") if isinstance(parsed, dict) else str(parsed)
     scenes = parse_scenes(step1_text)
     print(f"[TWO-STEP] Parsed {len(scenes)} scenes")
     for i, s in enumerate(scenes, 1):
@@ -182,11 +212,13 @@ def generate_two_step(
     with torch.inference_mode():
         outputs = gen.model.generate(
             **batch_inputs,
-            max_new_tokens=256,
+            max_new_tokens=128,
             temperature=temperature,
             top_p=top_p,
             top_k=top_k,
             do_sample=do_sample,
+            stop_strings=["</Prompt>"],
+            tokenizer=tokenizer,
         )
 
     tokenizer.padding_side = orig_padding_side
