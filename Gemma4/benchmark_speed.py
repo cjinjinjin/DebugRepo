@@ -72,7 +72,7 @@ def load_processor(proc_id):
                 with open(Path(tmpdir) / "tokenizer_config.json", "w") as f:
                     json.dump(cfg, f, indent=2, ensure_ascii=False)
                 load_path = tmpdir
-        processor = AutoTokenizer.from_pretrained(load_path)
+        processor = AutoTokenizer.from_pretrained(load_path, local_files_only=True)
         if tmpdir:
             shutil.rmtree(tmpdir, ignore_errors=True)
         return processor
