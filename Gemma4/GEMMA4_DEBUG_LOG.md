@@ -1150,3 +1150,96 @@ LP Chars | Avg Input Tokens | Avg TTFT | Avg Decode | Avg Total | Avg tok/s
 
 ⬜ 待运行
 
+---
+
+## 两步生成（Two-Step）速度 Benchmark（2026-04-13）
+
+### 背景
+
+两步生成方案将 prompt 生成拆为两步：
+1. **Step 1（Scene Planning）**：生成 5 个不同视角的场景描述（batch=1，max_new_tokens=256）
+2. **Step 2（Batch Expand）**：将 5 个场景批量扩展为完整 prompt（batch=5，max_new_tokens=512）
+
+目标是通过场景预规划提升 5 个 prompt 的多样性。
+
+### 脚本
+
+- 推理脚本：`Gemma4/inference_gemma4_two_step.py`
+- 速度 benchmark：`Gemma4/benchmark_speed_two_step.py`
+  - Step 1 TTFT 使用 `TextIteratorStreamer` 测量
+  - Step 2 prefill 使用单独 `model.forward()` 测量
+  - 输出 prefill/decode 分离计时
+
+### 运行命令
+
+```bash
+conda activate gemma4
+
+# 推理测试（5 条）
+CUDA_VISIBLE_DEVICES=0 python Gemma4/inference_gemma4_two_step.py \
+    --model_id /vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/gemma-4-26B-A4B-it/ \
+    --input_file QwenFinetune/data/dpo_combined_eval_cot.jsonl \
+    --num_samples 5 \
+    --no_think \
+    --temperature 1.0 \
+    --output_file /vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/Gemma4_results/gemma4_two_step_nothink_test.jsonl
+
+# 速度 benchmark（4 条 + 2 warmup）
+CUDA_VISIBLE_DEVICES=0 python Gemma4/benchmark_speed_two_step.py \
+    --model_id /vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/gemma-4-26B-A4B-it/ \
+    --input_file QwenFinetune/data/dpo_combined_eval_cot.jsonl \
+    --num_samples 4 \
+    --warmup 2 \
+    --no_think \
+    --output_file /vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/Gemma4_results/benchmark_two_step.json
+```
+
+### 推理质量测试结果（5 条）
+
+- Format compliance: **100%**（5/5）
+- 5 个场景覆盖不同视角（close-up / lifestyle / environmental / outcome / mood）
+- 扩展后的 prompt 字数均在 108-132 words，符合 80-150 words 要求
+- Step 2 batch=5 输出 tokens 对齐（均为 176-179 tokens），batch padding 行为正常
+
+### 速度 Benchmark 结果（单卡 A100-80GB, BF16, no-think）
+
+| 阶段 | Avg Prefill | Avg Decode | Avg Output Tokens | Avg tok/s |
+|------|-------------|------------|-------------------|-----------|
+| Step 1（场景规划, batch=1） | 0.02s | 10.29s | 116 | 11.3 |
+| Step 2（批量扩展, batch=5） | 1.56s | 38.19s* | 1304（5 条合计） | 35.5 |
+| **总计** | — | — | 1420 | — |
+
+*Step 2 decode 含一个异常值（Sample 1: 2560 tok / 79.9s，5 个序列全部 hit max_new_tokens=512 上限）
+
+**排除异常值后 Step 2 正常值**：~25s, ~885 tok, ~36 tok/s
+
+#### 时间分解（avg per sample）
+
+```
+Step1 prefill:  0.02s  ( 0%)
+Step1 decode:   10.29s (21%)
+Step2 prefill:  1.56s  ( 3%)
+Step2 decode:   38.19s (76%)
+─────────────────────────────
+Total:          50.1s
+```
+
+#### 与一步生成对比
+
+| 指标 | 一步生成（No-CoT） | 两步生成 | 变化 |
+|------|-------------------|---------|------|
+| Avg time/sample | 52.0s | ~35.5s* | **-32%** |
+| Avg output tokens | 632 | ~1000* | +58% |
+| Step 1 时间 | — | 10.3s | — |
+| Step 2 时间 | — | ~25s* | — |
+| Decode tok/s | 12.1 | 35.5（batch=5 aggregate） | **+194%** |
+
+*排除异常值
+
+**分析**：
+- Step 2 batch=5 的 aggregate decode tok/s（35.5）约为单序列（11.3）的 **3 倍**，batch 并行有效利用 GPU
+- 总 output tokens 更多（~1000 vs 632），但由于 batch 并行，总耗时反而可能更少
+- Step 1 prefill 极快（0.02s），Step 2 prefill 1.5s（5 条序列，含完整 LP 内容）
+- **76% 时间在 Step 2 decode**，这是主要瓶颈
+- 个别 sample 会 hit max_new_tokens 上限导致极慢（2560 tok / 80s），后续可考虑降低 max_new_tokens 或加 stop token
+
