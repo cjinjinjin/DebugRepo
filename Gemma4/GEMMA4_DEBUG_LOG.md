@@ -1421,6 +1421,97 @@ python QwenFinetune/evaluate.py \
 
 ---
 
+## Gemma 4 E2B-it 速度 Benchmark + 质量评估（2026-04-13）
+
+### 背景
+
+测试 Gemma 4 E2B-it（Dense, 2B 有效参数）的推理速度和输出质量，与 E4B-it 和 26B-A4B-it 对比。
+
+### 模型信息
+
+| 维度 | gemma-4-26B-A4B-it | gemma-4-E4B-it | gemma-4-E2B-it |
+|------|-------------------|----------------|----------------|
+| 架构 | MoE, 激活 3.8B | Dense, 4.5B 有效 | **Dense, 2B 有效** |
+| 总参数 | 25.2B | 8B | ~4B |
+| 上下文 | 256K | 128K | 128K |
+
+### 配置
+- 硬件：单卡 A100-SXM4-80GB
+- 精度：BF16
+- 模式：No-CoT, no-think
+- Attention: SDPA
+- 数据：`dpo_combined_eval_cot.jsonl`，10 条 benchmark + 2 warmup
+
+### 运行命令
+
+```bash
+conda activate gemma4
+bash Gemma4/benchmark_speed_e2b.sh
+```
+
+### Speed Benchmark 结果
+
+| 指标 | E2B-it | E4B-it | 26B-A4B-it | E2B vs E4B | E2B vs 26B |
+|------|--------|--------|------------|------------|------------|
+| Avg input tokens | 1257 | 1257 | ~1095 | — | — |
+| **Avg output tokens** | **522** | **559** | **632** | -7% | -17% |
+| **Avg tok/s** | **15.9** | **12.9** | **12.1** | **+23%** | **+31%** |
+| Median tok/s | 15.9 | 12.8 | 12.2 | +24% | +30% |
+| Min tok/s | 15.7 | 12.7 | — | — | — |
+| Max tok/s | 16.1 | 13.0 | — | — | — |
+| **Avg time/sample** | **32.7s** | **43.5s** | **52.0s** | **-25%** | **-37%** |
+| Median time/sample | 32.9s | 43.4s | — | — | — |
+| TTFT (prefill) | 0.02s | 0.02s | 0.02s | 0 | 0 |
+
+### Evaluate.py 质量评估
+
+```bash
+python QwenFinetune/evaluate.py \
+    --generated_file .../gemma4_e2b_benchmark.jsonl \
+    --gt_file QwenFinetune/data/dpo_combined_eval_cot.jsonl \
+    --report_file .../gemma4_e2b_eval_report.json
+```
+
+| 指标 | E2B-it | E4B-it | 说明 |
+|------|--------|--------|------|
+| All 5 tags present | **100%** | 100% | 格式完全合规 |
+| All 5 prompts unique | **100%** | 100% | 无重复 |
+| Fully compliant | **100%** | 100% | 全部通过 |
+| Prompts within 150 words | **5.0 / 5** | 5.0 / 5 | 全部在限制内 |
+| Avg word count per prompt | **82.4** | 82.4 | 几乎一致，都刚踩下限 |
+| Prompts with quality hints | **1.5 / 5** | 1.5 / 5 | 相同，偏低 |
+| Prompts with forbidden words | **2.1 / 5** | 2.1 / 5 | 相同，偏高 |
+| Avg LP keyword coverage | 0% | 0% | N/A：benchmark 输出无 lp_fields |
+
+### 三模型速度 vs 质量综合对比
+
+| 维度 | E2B-it (2B) | E4B-it (4.5B) | 26B-A4B-it (3.8B act) |
+|------|-------------|---------------|----------------------|
+| **Decode tok/s** | **15.9** | 12.9 | 12.1 |
+| **Avg time/sample** | **32.7s** | 43.5s | 52.0s |
+| Format compliance | 100% | 100% | — |
+| Avg word count | 82.4 | 82.4 | ~100+ |
+| Quality hints | 1.5/5 | 1.5/5 | — |
+| Forbidden words | 2.1/5 | 2.1/5 | — |
+| 显存 (BF16 估算) | **~8GB** | ~16GB | ~52GB |
+
+### 分析
+
+1. **E2B 速度显著快于 E4B**：15.9 vs 12.9 tok/s（+23%），总耗时 32.7s vs 43.5s（-25%）
+2. **E2B vs 26B-A4B**：tok/s +31%，总耗时 -37%，速度优势明显
+3. **E2B 和 E4B 输出质量几乎一致**：format compliance、word count、quality hints、forbidden words 完全相同
+4. **E2B 显存优势极大**：~8GB，单张 A100 可跑 8-10 个副本
+5. **E4B 没有存在价值**：E2B 速度更快、显存更小，质量一样 — E4B 处于尴尬中间位
+
+### 关键结论
+
+- **如果质量够用**：E2B 是最优选择（最快、最省显存、质量与 E4B 一样）
+- **质量瓶颈**：E2B/E4B 的 forbidden words（2.1/5）和 quality hints（1.5/5）明显弱于预期，可能需要 system prompt 优化或 fine-tune
+- **26B-A4B 仍是质量标杆**：需要在 26B-A4B benchmark 输出上跑 evaluate.py 做直接对比
+- **下一步**：跑 26B-A4B evaluate.py 做完整质量对比；如果 E2B 质量差距太大，考虑 fine-tune E2B
+
+---
+
 ## Two-Step Benchmark：无 stop_strings、默认 max_new_tokens 基线结果
 
 **日期**：2026-04-13
