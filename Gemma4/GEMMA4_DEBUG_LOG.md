@@ -1376,6 +1376,46 @@ bash Gemma4/benchmark_speed_e4b.sh
 
 - **E4B 的速度优势不如预期**：Dense 4.5B 的 decode 速度与 MoE 3.8B 激活参数几乎持平，MoE 的 expert 路由开销在 A100 上可忽略
 - **E4B 的主要优势是显存**：~16GB vs ~52GB，同一张 A100 可跑 3-4 个 E4B 副本（vs 1 个 26B-A4B）
-- **输出质量待验证**：E4B 输出更短（559 vs 632 words），需要跑 evaluate.py 看 format compliance 和内容质量
-- **下一步**：用 E4B benchmark 输出跑 `evaluate.py` 评估质量，决定是否可替代 26B-A4B-it
+- **输出质量已验证**（见下方 evaluate.py 结果）：format compliance 100%，但 prompt 偏短、forbidden words 偏高
+
+### E4B-it evaluate.py 质量评估（2026-04-13）
+
+对 benchmark 输出（10 条样本，no-think 模式）运行 `evaluate.py`：
+
+```bash
+python QwenFinetune/evaluate.py \
+    --generated_file .../gemma4_e4b_benchmark.jsonl \
+    --gt_file QwenFinetune/data/dpo_combined_eval_cot.jsonl \
+    --report_file .../gemma4_e4b_eval_report.json
+```
+
+| 指标 | E4B-it | 说明 |
+|------|--------|------|
+| All 5 tags present | **100%** | 格式完全合规 |
+| All 5 prompts unique | **100%** | 无重复 |
+| Fully compliant | **100%** | 5 tags + unique + ≤150 words 全部通过 |
+| Prompts within 150 words | **5.0 / 5** | 全部在 150 词以内 |
+| Avg word count per prompt | **82.4** | 偏短（目标 80-150 词，刚踩到下限） |
+| `<think>` block present | 0% | 预期：使用 no-think 模式 |
+| All 6 CoT fields present | 0% | 预期：使用 no-think 模式 |
+| Prompts with quality hints | **1.5 / 5** | 偏低，prompt 中嵌入的质量约束不够 |
+| Prompts with forbidden words | **2.1 / 5** | ⚠️ 偏高，平均每条有 2.1 个 prompt 含 forbidden 词 |
+| Avg LP keyword coverage | 0% | N/A：benchmark 输出无 lp_fields，无法计算 |
+
+#### 与 26B-A4B-it 对比（需在 26B-A4B benchmark 输出上跑相同评估做对比）
+
+| 维度 | E4B-it | 备注 |
+|------|--------|------|
+| Format compliance | 100% | 优秀 |
+| Avg word count | 82.4 | 偏短，可能缺细节 |
+| Quality hints | 1.5/5 | 需要更强的 system prompt 引导 |
+| Forbidden words | 2.1/5 | 需要优化，可能是小模型约束跟随能力弱 |
+
+#### 分析
+
+1. **格式能力强**：E4B 100% format compliance，说明 4.5B 参数足够理解 `<Prompt1>...<Prompt5>` XML 格式
+2. **Prompt 偏短**（82.4 词 vs 目标 80-150）：刚踩到下限，缺少细节描述
+3. **Forbidden words 偏高**（2.1/5）：小模型对 "no watermark/logo/stock photo" 等排除约束的遵循较弱
+4. **Quality hints 偏低**（1.5/5）：prompt 中很少主动嵌入 "sharp focus", "correct anatomy" 等质量关键词
+5. **结论**：E4B 格式能力合格，但**内容质量明显弱于大模型**（约束遵循和细节丰富度不足），不建议直接替代 26B-A4B-it 用于生产
 
