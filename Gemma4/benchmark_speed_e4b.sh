@@ -12,7 +12,7 @@ set -e
 
 # Remote shared storage (use after copying model there):
 # MODEL_ID="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/gemma-4-E4B-it"
-MODEL_ID="./gemma-4-E4B-it"
+MODEL_ID="$(pwd)/gemma-4-E4B-it"
 INPUT_FILE="QwenFinetune/data/dpo_combined_eval_cot.jsonl"
 SAVE_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/Gemma4_results"
 
