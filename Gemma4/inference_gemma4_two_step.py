@@ -140,7 +140,7 @@ def generate_two_step(
     with torch.inference_mode():
         step1_outputs = gen.model.generate(
             **step1_inputs,
-            max_new_tokens=80,
+            max_new_tokens=120,
             **gen_kwargs,
             stop_strings=["</Scene5>"],
             tokenizer=tokenizer,

@@ -160,7 +160,7 @@ def benchmark_two_step(
 
     step1_gen_kwargs = {**gen_kwargs, "stop_strings": ["</Scene5>"], "tokenizer": tokenizer}
     step1_outputs, t1_start, t1_first_token, t1_end = generate_with_ttft(
-        gen.model, step1_inputs, tokenizer, max_new_tokens=80, gen_kwargs=step1_gen_kwargs,
+        gen.model, step1_inputs, tokenizer, max_new_tokens=120, gen_kwargs=step1_gen_kwargs,
     )
 
     step1_new_tokens = step1_outputs[0].shape[-1] - step1_input_len if step1_outputs is not None else 0
@@ -334,7 +334,7 @@ def print_summary(timings):
     print(f"Samples:              {len(timings)}")
 
     print(f"\n{'-'*70}")
-    print(f"Step 1 — Scene Planning (batch=1, max_new_tokens=80)")
+    print(f"Step 1 — Scene Planning (batch=1, max_new_tokens=120)")
     print(f"{'-'*70}")
     print(f"  Prefill (TTFT):")
     print(f"    Avg:              {s1_prefill['avg']:.3f}s")
