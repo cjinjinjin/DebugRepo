@@ -40,7 +40,7 @@ The prompt must:
 - Avoid stereotypes, text/logos in image, and stock-photo aesthetics
 - Ensure correct anatomy, natural hands, sharp focus, clean composition
 
-Output exactly one prompt (no reasoning, no thinking):
+IMPORTANT: Output ONLY the prompt inside tags. No explanations, no options, no reasoning, no commentary. Just:
 <Prompt>...</Prompt>"""
 
 SYSTEM_PROMPT_SINGLE_COT = """You are an expert Ad Creative Director and Senior AI Image Prompt Engineer, specialized in high-performing Native Advertisement visuals.
@@ -186,7 +186,7 @@ def parse_args():
     p.add_argument("--num_calls", type=int, default=5,
                     help="Number of parallel samples per input (default: 5)")
     # Generation params
-    p.add_argument("--max_new_tokens", type=int, default=512)
+    p.add_argument("--max_new_tokens", type=int, default=1024)
     p.add_argument("--temperature", type=float, default=1.2)
     p.add_argument("--top_p", type=float, default=0.95)
     p.add_argument("--top_k", type=int, default=64)

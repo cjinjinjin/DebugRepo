@@ -50,7 +50,7 @@ The prompt must:
 - Avoid stereotypes, text/logos in image, and stock-photo aesthetics
 - Ensure correct anatomy, natural hands, sharp focus, clean composition
 
-Output exactly one prompt (no reasoning, no thinking):
+IMPORTANT: Output ONLY the prompt inside tags. No explanations, no options, no reasoning, no commentary. Just:
 <Prompt>...</Prompt>"""
 
 SYSTEM_PROMPT_SINGLE_COT = """You are an expert Ad Creative Director and Senior AI Image Prompt Engineer, specialized in high-performing Native Advertisement visuals.
