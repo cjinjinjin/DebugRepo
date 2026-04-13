@@ -1146,9 +1146,46 @@ LP Chars | Avg Input Tokens | Avg TTFT | Avg Decode | Avg Total | Avg tok/s
  5000    |     1854         |   2.1s   |   51.5s    |   53.6s   |   12.2
 ```
 
+### 结果（2026-04-13）
+
+| LP Chars | Avg Input Tok | Avg TTFT | Avg Decode | Avg Total | Avg tok/s |
+|----------|--------------|----------|------------|-----------|-----------|
+| 400 | 533 | 0.02s | 54.8s | 54.8s | 11.8 |
+| 1000 | 636 | 0.02s | 53.9s | 53.9s | 11.7 |
+| 2000 | 779 | 0.02s | 54.1s | 54.1s | 11.7 |
+| 5000 | 1032 | 0.02s | 51.7s | 51.7s | 11.9 |
+| unlimited | 1095 | 0.02s | 52.2s | 52.2s | 12.2 |
+
+**关键发现**：
+- **LP 截断长度对单卡推理速度几乎没有影响**
+- Input tokens 从 533→1095 翻了一倍，但总耗时基本持平（54.8s vs 52.2s）
+- TTFT 固定 0.02s，prefill 开销可忽略不计
+- 瓶颈完全在 decode 阶段：output tokens 数量差不多（616~647），所以总时间差不多
+- unlimited 甚至略快（12.2 tok/s），可能因为更丰富的上下文让模型更快收敛到 EOS
+- **结论**：BF16 单 GPU 下，截断 LP 内容对吞吐几乎无加速效果。截断主要价值在于：(1) 节省显存/KV cache；(2) 满足 context window 限制；(3) 对超长 LP（10K+ chars）的 prefill 防御
+
+---
+
+## Random200 No-CoT + 截断 2000 结果（2026-04-13）
+
+### 配置
+- 模型：BF16 Gemma 4 26B-A4B-it
+- 模式：No-CoT + `--max_lp_chars 2000`
+- 数据：Random200（200 条）
+- 8 GPU 数据并行
+
 ### 结果
 
-⬜ 待运行
+| 指标 | Random200 CoT | Random200 No-CoT+Trunc2000 | 差异 |
+|------|--------------|---------------------------|------|
+| **Fully Compliant** | 99.0% | **98.5%** | -0.5pp |
+| All 5 tags present | 99.0% | 98.5% | -0.5pp |
+| Total time | — | 1702s (8.5s/sample effective) | — |
+
+**分析**：
+- No-CoT + 截断 2000 后 compliance 仅下降 0.5pp（99.0% → 98.5%），几乎无影响
+- 8 GPU 并行有效吞吐 8.5s/sample（vs 单卡 ~52s）
+- 3 条不合规样本需检查具体原因（格式问题 or 截断导致信息丢失）
 
 ---
 
@@ -1242,4 +1279,42 @@ Total:          50.1s
 - Step 1 prefill 极快（0.02s），Step 2 prefill 1.5s（5 条序列，含完整 LP 内容）
 - **76% 时间在 Step 2 decode**，这是主要瓶颈
 - 个别 sample 会 hit max_new_tokens 上限导致极慢（2560 tok / 80s），后续可考虑降低 max_new_tokens 或加 stop token
+
+### Step 1 单步使用场景：仅场景规划（~30 词输出）
+
+如果业务只需要简短的场景描述（不需要完整的 80-150 word prompt），可以只运行 Step 1（场景规划），跳过 Step 2（扩展）。
+
+**Step 1 输出格式**：5 个场景描述，每个 8-15 词，总输出约 50-70 英文单词。
+
+**示例输出**（来自推理质量测试）：
+```
+<Scene1>Close-up of premium wireless headphones on marble surface with warm light</Scene1>
+<Scene2>Young professional commuting on train, wearing headphones, peaceful expression</Scene2>
+<Scene3>Headphones resting on home office desk beside laptop and coffee</Scene3>
+<Scene4>Person relaxing in park, eyes closed, immersed in music</Scene4>
+<Scene5>Moody evening scene with headphones silhouetted against golden hour window</Scene5>
+```
+
+**速度数据**（来自 benchmark_speed_two_step.py，单卡 A100-80GB, BF16, no-think）：
+
+| 指标 | 值 |
+|------|-----|
+| Avg output tokens | 116 |
+| Avg prefill (TTFT) | 0.02s |
+| Avg decode time | 10.29s |
+| **Avg total time** | **~10.3s** |
+| Decode tok/s | 11.3 |
+
+**对比完整两步生成和一步生成**：
+
+| 方案 | 输出内容 | 总 output tokens | Avg time/sample |
+|------|---------|-----------------|-----------------|
+| Step 1 only（仅场景规划） | 5 个短场景描述（~30 词/场景） | ~116 | **~10.3s** |
+| 一步生成（No-CoT） | 5 个完整 prompt（80-150 词/prompt） | ~632 | ~52.0s |
+| 两步生成完整流程 | 5 个完整 prompt + 场景规划 | ~1000-1400 | ~35-50s |
+
+**适用场景**：
+- 快速生成创意方向/大纲，由人工或下游系统扩展为完整 prompt
+- 低延迟场景（~10s vs ~50s），牺牲 prompt 细节换取速度
+- 批量生成大量场景方向后筛选，再对优选场景做 Step 2 扩展
 
