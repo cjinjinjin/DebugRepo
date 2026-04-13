@@ -1474,13 +1474,13 @@ python QwenFinetune/evaluate.py \
 
 | 指标 | E2B-it | E4B-it | 说明 |
 |------|--------|--------|------|
-| All 5 tags present | **100%** | 100% | 格式完全合规 |
-| All 5 prompts unique | **100%** | 100% | 无重复 |
-| Fully compliant | **100%** | 100% | 全部通过 |
-| Prompts within 150 words | **5.0 / 5** | 5.0 / 5 | 全部在限制内 |
-| Avg word count per prompt | **82.4** | 82.4 | 几乎一致，都刚踩下限 |
-| Prompts with quality hints | **1.5 / 5** | 1.5 / 5 | 相同，偏低 |
-| Prompts with forbidden words | **2.1 / 5** | 2.1 / 5 | 相同，偏高 |
+| All 5 tags present | **20%** | 100% | ⚠️ E2B 仅 2/10 样本输出完整 5 个标签 |
+| All 5 prompts unique | **20%** | 100% | 仅完整样本可判断 |
+| Fully compliant | **20%** | 100% | E2B 格式合规率极低 |
+| Prompts within 150 words | **4.2 / 5** | 5.0 / 5 | E2B 部分 prompt 超长或缺失 |
+| Avg word count per prompt | **75.9** | 82.4 | E2B 更短 |
+| Prompts with quality hints | **2.4 / 5** | 1.5 / 5 | E2B 反而更多嵌入质量关键词 |
+| Prompts with forbidden words | **1.4 / 5** | 2.1 / 5 | E2B 反而更少含 forbidden 词 |
 | Avg LP keyword coverage | 0% | 0% | N/A：benchmark 输出无 lp_fields |
 
 ### 三模型速度 vs 质量综合对比
@@ -1489,26 +1489,26 @@ python QwenFinetune/evaluate.py \
 |------|-------------|---------------|----------------------|
 | **Decode tok/s** | **15.9** | 12.9 | 12.1 |
 | **Avg time/sample** | **32.7s** | 43.5s | 52.0s |
-| Format compliance | 100% | 100% | — |
-| Avg word count | 82.4 | 82.4 | ~100+ |
-| Quality hints | 1.5/5 | 1.5/5 | — |
-| Forbidden words | 2.1/5 | 2.1/5 | — |
+| Format compliance | **20%** | 100% | — |
+| Avg word count | 75.9 | 82.4 | ~100+ |
+| Quality hints | 2.4/5 | 1.5/5 | — |
+| Forbidden words | 1.4/5 | 2.1/5 | — |
 | 显存 (BF16 估算) | **~8GB** | ~16GB | ~52GB |
 
 ### 分析
 
-1. **E2B 速度显著快于 E4B**：15.9 vs 12.9 tok/s（+23%），总耗时 32.7s vs 43.5s（-25%）
-2. **E2B vs 26B-A4B**：tok/s +31%，总耗时 -37%，速度优势明显
-3. **E2B 和 E4B 输出质量几乎一致**：format compliance、word count、quality hints、forbidden words 完全相同
-4. **E2B 显存优势极大**：~8GB，单张 A100 可跑 8-10 个副本
-5. **E4B 没有存在价值**：E2B 速度更快、显存更小，质量一样 — E4B 处于尴尬中间位
+1. **E2B 速度最快**：15.9 vs 12.9 tok/s（+23%），总耗时 32.7s vs 43.5s（-25%）
+2. **E2B 格式合规率极差**：仅 20%（2/10）样本正确输出全部 5 个 `<PromptN>` 标签，说明 2B 参数不足以可靠遵循复杂 XML 格式指令
+3. **E2B 内容质量反而更好**：quality hints 2.4/5 vs E4B 1.5/5，forbidden words 1.4/5 vs E4B 2.1/5 — 但格式不合规导致无法使用
+4. **E4B 是小模型中的最优选**：100% format compliance + 合理速度，E2B 格式不可靠不适合生产
 
 ### 关键结论
 
-- **如果质量够用**：E2B 是最优选择（最快、最省显存、质量与 E4B 一样）
-- **质量瓶颈**：E2B/E4B 的 forbidden words（2.1/5）和 quality hints（1.5/5）明显弱于预期，可能需要 system prompt 优化或 fine-tune
+- **E2B 不可用于生产**：格式合规率仅 20%，80% 的输出无法正确解析出 5 个 prompt
+- **E4B 是小模型最优选**：100% format compliance，速度尚可（12.9 tok/s），显存友好（~16GB）
+- **格式遵循能力是模型选择的硬门槛**：E2B 内容质量指标反而更好，但格式不合规导致完全不可用
 - **26B-A4B 仍是质量标杆**：需要在 26B-A4B benchmark 输出上跑 evaluate.py 做直接对比
-- **下一步**：跑 26B-A4B evaluate.py 做完整质量对比；如果 E2B 质量差距太大，考虑 fine-tune E2B
+- **下一步**：跑 26B-A4B evaluate.py 做完整质量对比
 
 ---
 
