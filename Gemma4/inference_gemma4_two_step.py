@@ -50,7 +50,7 @@ Each scene must use a DIFFERENT visual approach:
 4. One outcome/result-focused scene showing the benefit
 5. One mood/atmosphere-driven composition
 
-Each scene description should be one concise sentence (8-15 words) that captures the setting, subject, and mood.
+Each scene description should be a SHORT phrase (5-10 words) that captures the setting, subject, and mood.
 
 Output exactly 5 scene descriptions (no reasoning, no thinking):
 <Scene1>...</Scene1>
@@ -64,8 +64,7 @@ SYSTEM_PROMPT_STEP2_EXPAND = """You are an expert Ad Creative Director and Senio
 Given a landing page and a scene concept, expand the scene into a detailed image generation prompt for a Native Ad.
 
 The prompt must:
-- Be 80–150 words
-- Embed all safety, realism, quality, and exclusion constraints
+- Be 30–50 words
 - Feel native and non-promotional
 - Show the product outcome or value naturally in context
 - Avoid stereotypes, text/logos in image, and stock-photo aesthetics
@@ -122,7 +121,7 @@ def generate_two_step(
     step1_response = gen.generate(
         user_content=user_content,
         lp_fields=lp_fields,
-        max_new_tokens=256,
+        max_new_tokens=128,
         **gen_kwargs,
     )
     step1_text = step1_response.get("content", "") if isinstance(step1_response, dict) else str(step1_response)
@@ -183,7 +182,7 @@ def generate_two_step(
     with torch.inference_mode():
         outputs = gen.model.generate(
             **batch_inputs,
-            max_new_tokens=512,
+            max_new_tokens=256,
             temperature=temperature,
             top_p=top_p,
             top_k=top_k,

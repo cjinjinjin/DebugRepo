@@ -159,7 +159,7 @@ def benchmark_two_step(
     step1_input_len = step1_inputs["input_ids"].shape[-1]
 
     step1_outputs, t1_start, t1_first_token, t1_end = generate_with_ttft(
-        gen.model, step1_inputs, tokenizer, max_new_tokens=256, gen_kwargs=gen_kwargs,
+        gen.model, step1_inputs, tokenizer, max_new_tokens=128, gen_kwargs=gen_kwargs,
     )
 
     step1_new_tokens = step1_outputs[0].shape[-1] - step1_input_len if step1_outputs is not None else 0
@@ -245,7 +245,7 @@ def benchmark_two_step(
     with torch.inference_mode():
         step2_outputs = gen.model.generate(
             **batch_inputs,
-            max_new_tokens=512,
+            max_new_tokens=256,
             **gen_kwargs,
         )
     if torch.cuda.is_available():
@@ -331,7 +331,7 @@ def print_summary(timings):
     print(f"Samples:              {len(timings)}")
 
     print(f"\n{'-'*70}")
-    print(f"Step 1 — Scene Planning (batch=1, max_new_tokens=256)")
+    print(f"Step 1 — Scene Planning (batch=1, max_new_tokens=128)")
     print(f"{'-'*70}")
     print(f"  Prefill (TTFT):")
     print(f"    Avg:              {s1_prefill['avg']:.3f}s")
@@ -346,7 +346,7 @@ def print_summary(timings):
     print(f"    Avg output tokens:{s1_out_tok['avg']:.0f}")
 
     print(f"\n{'-'*70}")
-    print(f"Step 2 — Batch Expand (batch=5, max_new_tokens=512)")
+    print(f"Step 2 — Batch Expand (batch=5, max_new_tokens=256)")
     print(f"{'-'*70}")
     print(f"  Prefill (forward pass):")
     print(f"    Avg:              {s2_prefill['avg']:.3f}s")
