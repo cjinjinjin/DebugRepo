@@ -1318,3 +1318,64 @@ Total:          50.1s
 - 低延迟场景（~10s vs ~50s），牺牲 prompt 细节换取速度
 - 批量生成大量场景方向后筛选，再对优选场景做 Step 2 扩展
 
+---
+
+## Gemma 4 E4B-it 速度 Benchmark（2026-04-13）
+
+### 背景
+
+测试 Gemma 4 E4B-it（Dense, 4.5B 有效参数 / 8B 总参数）的推理速度，与 26B-A4B-it（MoE, 3.8B 激活 / 25.2B 总参数）对比。
+
+### 模型信息
+
+| 维度 | gemma-4-26B-A4B-it | gemma-4-E4B-it |
+|------|-------------------|----------------|
+| 架构 | MoE, 激活 3.8B | **Dense, 4.5B 有效** |
+| 总参数 | 25.2B | 8B（含 PLE 嵌入表） |
+| 上下文 | 256K | 128K |
+| 多模态 | Text + Image | Text + Image + **Audio** |
+| License | — | Apache 2.0 |
+
+### 配置
+- 硬件：单卡 A100-SXM4-80GB
+- 精度：BF16
+- 模式：No-CoT, no-think
+- Attention: SDPA
+- 数据：`dpo_combined_eval_cot.jsonl`，10 条 benchmark + 2 warmup
+
+### 运行命令
+
+```bash
+conda activate gemma4
+bash Gemma4/benchmark_speed_e4b.sh
+```
+
+### 结果
+
+| 指标 | E4B-it | 26B-A4B-it (No-CoT) | 差异 |
+|------|--------|---------------------|------|
+| Avg input tokens | 1257 | ~1095 | — |
+| **Avg output tokens** | **559** | **632** | **-12%** |
+| **Avg tok/s** | **12.9** | **12.1** | **+7%** |
+| Median tok/s | 12.8 | 12.2 | +5% |
+| Min tok/s | 12.7 | — | — |
+| Max tok/s | 13.0 | — | — |
+| **Avg time/sample** | **43.5s** | **52.0s** | **-16%** |
+| Median time/sample | 43.4s | — | — |
+| TTFT (prefill) | 0.02s | 0.02s | 0 |
+
+### 分析
+
+1. **tok/s 几乎相同**（12.9 vs 12.1，仅 +7%）— E4B 虽然模型更小（4.5B vs 3.8B 激活），但 Dense 架构 vs MoE 架构在 A100 上单条推理速度差异不大
+2. **总耗时减少 16%**（43.5s vs 52.0s）— 主要原因是 E4B 输出更短（559 vs 632 tokens），而非 decode 速度显著更快
+3. **TTFT 完全一致**（0.02s）— 两个模型的 prefill 开销都可忽略
+4. **tok/s 极其稳定**（12.7-13.0 范围）— 与输入长度无关（input 564-2345 tokens），瓶颈完全在 decode
+5. **E4B 显存优势显著**：8B 总参数 BF16 ~16GB vs 26B ~52GB，单卡可多副本部署
+
+### 关键结论
+
+- **E4B 的速度优势不如预期**：Dense 4.5B 的 decode 速度与 MoE 3.8B 激活参数几乎持平，MoE 的 expert 路由开销在 A100 上可忽略
+- **E4B 的主要优势是显存**：~16GB vs ~52GB，同一张 A100 可跑 3-4 个 E4B 副本（vs 1 个 26B-A4B）
+- **输出质量待验证**：E4B 输出更短（559 vs 632 words），需要跑 evaluate.py 看 format compliance 和内容质量
+- **下一步**：用 E4B benchmark 输出跑 `evaluate.py` 评估质量，决定是否可替代 26B-A4B-it
+
