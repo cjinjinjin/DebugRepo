@@ -449,7 +449,9 @@ def main():
 
     # --- Load data ---
     total_needed = args.num_samples + args.warmup
-    records = load_jsonl(args.input_file, max_records=total_needed)
+    records = load_jsonl(args.input_file)
+    if len(records) > total_needed:
+        records = records[:total_needed]
 
     batch_inputs = []
     input_type = "lp_fields"
