@@ -1067,3 +1067,86 @@ vllm serve /vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichA
 4. **BF16 单实例极限约 0.3 req/s**：要达到 8 req/s 需要 ~25 个并行实例
 5. **要大幅降低延迟，只有两条路**：减少输出 tokens 或 提高 decode 速度（量化/更小模型/硬件升级）
 
+---
+
+## Benchmark 脚本升级：TTFT + LP 长度 Sweep + 加速选项（2026-04-13）
+
+### 背景
+
+之前的 `benchmark_speed.py` 无法区分 prefill 和 decode 耗时，也无法验证不同 LP 长度对延迟的影响。需要：
+1. 测量 TTFT（Time to First Token）分离 prefill vs decode
+2. 按 LP content 长度（400/1000/2000/5000 chars）分组测试
+3. 探索加速选项（SDPA、Flash Attention 2、torch.compile）
+
+### 改动
+
+#### `Gemma4/benchmark_speed.py`（完全重写）
+
+核心改动：
+
+1. **TTFT 计量**：使用 `TextIteratorStreamer` + threading，在单独线程中 `model.generate()`，主线程监听 streamer 拿到 first token 的时间
+   - `t_start` → `t_first_token`：TTFT（prefill 时间）
+   - `t_first_token` → `t_end`：decode 时间
+   - 每条输出 `ttft_ms`、`decode_s`、`decode_tok_s`、`total_s`
+
+2. **LP 长度 Sweep**：新增 `--lp_char_lengths` 参数（逗号分隔），对每个长度值截断 LP content 并分别跑全部样本，输出对比表
+
+3. **加速选项**：
+   - `--attn_impl`：选择 attention 实现（`sdpa`/`flash_attention_2`/`eager`，默认 `sdpa`）
+   - `--torch_compile`：启用 `torch.compile(model, mode="reduce-overhead")`
+
+4. **默认 No-CoT**：`--no_cot` 改为默认 True，新增 `--cot` 可显式启用 CoT
+
+5. **输出保存**：`--save_outputs` 将每条输入输出保存到 JSONL，用于后续检查输出质量
+
+#### `Gemma4/inference_gemma4.py`（小改动）
+
+新增 `attn_impl` 参数传入模型加载：
+```python
+if attn_impl:
+    load_kwargs["attn_implementation"] = attn_impl
+```
+
+### 运行环境
+
+```
+conda 环境: gemma4
+transformers: 5.5.3（TextIteratorStreamer 可用）
+torch: 2.11.0+cu126（torch.compile 可用）
+flash-attn: 未安装（CUDA 版本不匹配：系统 11.8 vs PyTorch 12.6，安装报错）
+```
+
+### 运行命令
+
+```bash
+conda activate gemma4
+
+CUDA_VISIBLE_DEVICES=0 python Gemma4/benchmark_speed.py \
+    --model_id /vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/gemma-4-26B-A4B-it/ \
+    --input_file QwenFinetune/data/dpo_combined_eval_cot.jsonl \
+    --num_samples 20 \
+    --lp_char_lengths 400,1000,2000,5000 \
+    --save_outputs /vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/Gemma4_results/gemma4_bf16_nocot_lpsweep_ttft_benchmark.jsonl
+```
+
+### 预期输出
+
+每条样本：
+```
+[Sample 1/20] 634 tokens in 52.3s | TTFT: 1.2s | Decode: 51.1s (12.4 tok/s) | Input: 1024 tokens | LP: 2000 chars
+```
+
+LP 长度对比表：
+```
+LP Chars | Avg Input Tokens | Avg TTFT | Avg Decode | Avg Total | Avg tok/s
+---------|------------------|----------|------------|-----------|----------
+  400    |      312         |   0.8s   |   51.0s    |   51.8s   |   12.5
+ 1000    |      587         |   1.0s   |   51.2s    |   52.2s   |   12.4
+ 2000    |      923         |   1.3s   |   51.3s    |   52.6s   |   12.3
+ 5000    |     1854         |   2.1s   |   51.5s    |   53.6s   |   12.2
+```
+
+### 结果
+
+⬜ 待运行
+

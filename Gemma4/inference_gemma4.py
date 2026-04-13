@@ -499,6 +499,8 @@ def parse_args():
     p.add_argument("--input_file", default="", help="Input JSONL")
     p.add_argument("--output_file", default="Gemma4/results/gemma4_output.jsonl")
     p.add_argument("--batch_size", type=int, default=1)
+    p.add_argument("--num_samples", type=int, default=0,
+                    help="Limit number of samples to process (0=all)")
     # Generation params (Gemma 4 recommended defaults)
     p.add_argument("--max_new_tokens", type=int, default=2048)
     p.add_argument("--temperature", type=float, default=1.0)
@@ -535,6 +537,8 @@ def main():
     if args.input_file:
         # Batch mode
         records = load_jsonl(args.input_file)
+        if args.num_samples and args.num_samples < len(records):
+            records = records[:args.num_samples]
         batch_inputs = []
         input_type = "lp_fields"
 
