@@ -63,10 +63,21 @@ def extract_raw_output(record: dict) -> tuple[str, list[str], dict]:
     """
     Normalise a record to (raw_output, generated_prompts, lp_fields).
 
-    Supports two formats:
+    Supports three formats:
       - inference.py output: keys "raw_output", "generated_prompts", "lp_fields"
       - swift infer output:  keys "response" (and optionally "messages" for lp_fields)
+      - benchmark_speed.py output: key "output_text" (raw model output)
     """
+    # benchmark_speed.py format: output_text contains raw model output
+    if "output_text" in record and "raw_output" not in record and "response" not in record:
+        raw = record["output_text"]
+        prompts = []
+        for i in range(1, 6):
+            m = re.search(rf"<Prompt{i}>(.*?)</Prompt{i}>", raw, re.DOTALL)
+            if m:
+                prompts.append(m.group(1).strip())
+        return raw, prompts, {}
+
     if "raw_output" in record:
         raw = record.get("raw_output", "")
         prompts = record.get("generated_prompts", [])
