@@ -50,31 +50,34 @@ def extract_user_content(record):
 
 
 def load_processor(proc_id):
-    """Load processor with fallback to AutoTokenizer."""
+    """Load processor with fallback to AutoTokenizer.
+
+    Always patches tokenizer_config.json into a temp dir so that
+    AutoTokenizer sees a clean local path (avoids HF repo-ID validation
+    errors with absolute paths in transformers 5.x).
+    """
     try:
         from transformers import AutoProcessor
         return AutoProcessor.from_pretrained(proc_id)
     except Exception:
         from transformers import AutoTokenizer
         import shutil, tempfile
-        tok_cfg = Path(proc_id) / "tokenizer_config.json"
-        load_path = proc_id
-        tmpdir = None
+        tmpdir = tempfile.mkdtemp(prefix="tok_patch_")
+        # Copy all tokenizer-related files to temp dir
+        for fp in Path(proc_id).iterdir():
+            if fp.is_file() and ("token" in fp.name.lower() or fp.suffix in (".json", ".model")):
+                shutil.copy2(fp, tmpdir)
+        # Patch extra_special_tokens if needed
+        tok_cfg = Path(tmpdir) / "tokenizer_config.json"
         if tok_cfg.exists():
             with open(tok_cfg, "r") as f:
                 cfg = json.load(f)
             if isinstance(cfg.get("extra_special_tokens"), list):
-                tmpdir = tempfile.mkdtemp(prefix="tok_patch_")
-                for fp in Path(proc_id).iterdir():
-                    if fp.is_file() and ("token" in fp.name.lower() or fp.suffix in (".json", ".model")):
-                        shutil.copy2(fp, tmpdir)
                 cfg["extra_special_tokens"] = {}
-                with open(Path(tmpdir) / "tokenizer_config.json", "w") as f:
+                with open(tok_cfg, "w") as f:
                     json.dump(cfg, f, indent=2, ensure_ascii=False)
-                load_path = tmpdir
-        processor = AutoTokenizer.from_pretrained(load_path, local_files_only=True)
-        if tmpdir:
-            shutil.rmtree(tmpdir, ignore_errors=True)
+        processor = AutoTokenizer.from_pretrained(tmpdir)
+        shutil.rmtree(tmpdir, ignore_errors=True)
         return processor
 
 
