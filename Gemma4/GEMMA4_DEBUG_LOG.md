@@ -1561,3 +1561,64 @@ python QwenFinetune/evaluate.py \
 3. **根因**：模型在输出 `</Prompt>` 标签后继续生成无用内容直到 max_new_tokens 上限
 4. **优化方案**：添加 `stop_strings=["</Prompt>"]` + 降低 `max_new_tokens`（Step 1: 128→80, Step 2: 256→128），预计总时间从 39.6s → ~20s
 
+---
+
+## Two-Step Benchmark：添加 stop_strings + 降低 max_new_tokens 优化后结果
+
+**日期**：2026-04-13
+**配置**：
+- 模型：gemma-4-26B-A4B-it BF16
+- Step 1：`max_new_tokens=120`，`stop_strings=["</Scene5>"]`
+- Step 2：`max_new_tokens=128`（batch=5），`stop_strings=["</Prompt>"]`
+- 4 benchmark samples + 2 warmup
+
+### 原始输出
+
+```
+  [WARMUP] S1: prefill=0.29s decode=12.45s (93tok) | S2: prefill=4.16s decode=12.2s (295tok) | Total: 29.1s
+  [WARMUP] S1: prefill=0.20s decode=10.30s (92tok) | S2: prefill=2.42s decode=12.0s (340tok) | Total: 24.9s
+  [Sample 1/4] S1: prefill=0.18s decode=9.56s (85tok) | S2: prefill=2.25s decode=10.6s (295tok) | Total: 22.5s
+  [Sample 2/4] S1: prefill=0.17s decode=10.09s (94tok) | S2: prefill=1.61s decode=10.6s (315tok) | Total: 22.5s
+  [Sample 3/4] S1: prefill=0.17s decode=9.15s (85tok) | S2: prefill=0.81s decode=9.8s (325tok) | Total: 20.0s
+  [Sample 4/4] S1: prefill=0.16s decode=8.56s (77tok) | S2: prefill=1.10s decode=9.9s (310tok) | Total: 19.7s
+```
+
+### 汇总统计
+
+| 指标 | 值 |
+|------|-----|
+| **Step 1 Avg prefill** | 0.169s |
+| **Step 1 Avg decode** | 9.34s (85 tokens, 9.1 tok/s) |
+| **Step 2 Avg prefill** | 1.445s |
+| **Step 2 Avg decode** | 10.2s (311 tokens, 30.5 tok/s) |
+| **Avg total time** | **21.2s/sample** |
+| **Median total time** | 21.2s |
+| **P95 total time** | 22.5s |
+
+### 时间分解
+
+| 阶段 | 时间 | 占比 |
+|------|------|------|
+| Step 1 prefill | 0.17s | 1% |
+| Step 1 decode | 9.34s | 44% |
+| Step 2 prefill | 1.45s | 7% |
+| Step 2 decode | 10.23s | 48% |
+| **Total** | **21.2s** | 100% |
+
+### 优化前后对比
+
+| 指标 | 优化前 | 优化后 | 提升 |
+|------|--------|--------|------|
+| **Avg total time** | 39.6s | **21.2s** | **-46%** |
+| Step 2 output tokens | 1041 | 311 | -70% |
+| Step 2 decode time | 30.3s | 10.2s | -66% |
+| Step 2 decode 占比 | 77% | 48% | 均衡 |
+| 错误率 | 3/4 打满 token cap | 0 errors | 全部正常停止 |
+
+### 关键结论
+
+1. **stop_strings 生效**：Step 2 不再打满 max_new_tokens，所有 sample 在 `</Prompt>` 后立即停止
+2. **Step 2 decode 时间下降 66%**（30.3s → 10.2s），无用 token 被完全消除
+3. **时间分布均衡**：Step 1 decode (44%) 和 Step 2 decode (48%) 各占一半，无明显瓶颈
+4. **总时间减半**：39.6s → 21.2s，接近单步生成速度（~19s），两步方案的额外开销可控
+
