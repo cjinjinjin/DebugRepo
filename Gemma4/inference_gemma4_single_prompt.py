@@ -2,7 +2,7 @@
 Gemma 4 single-prompt inference: generate ONE prompt per call, N parallel samples.
 
 Tests diversity and LP-relevance by generating N independent single-prompt
-samples in one batched model.generate() call (num_return_sequences=N).
+samples in one batched model.generate() call (batch input expansion).
 The N prompts are combined into <Prompt1>...<PromptN> format, compatible with
 evaluate.py.
 
@@ -242,7 +242,7 @@ def main():
     total = len(records)
     print(f"Loaded {total} records from {args.input_file}")
     print(f"Input type: {input_type}")
-    print(f"Mode: single-prompt x {num_calls} parallel samples (num_return_sequences)")
+    print(f"Mode: single-prompt x {num_calls} parallel samples (batch decoding)")
     print(f"Temperature: {args.temperature}")
 
     # Format compliance regex (combined output should have Prompt1..PromptN)
