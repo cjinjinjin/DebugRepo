@@ -111,10 +111,10 @@ def generate_n_samples(
     top_k: int = 64,
     do_sample: bool = True,
 ) -> list[str]:
-    """Generate N independent single-prompt samples in one model.generate() call.
+    """Generate N independent single-prompt samples via true batch decoding.
 
-    Uses num_return_sequences=N so all N samples are produced in parallel
-    from the same input, each with independent sampling.
+    Replicates the same input N times into a batch so all N sequences are
+    decoded in parallel in a single model.generate() call.
     Returns a list of N raw decoded strings.
     """
     if user_content:
@@ -122,20 +122,25 @@ def generate_n_samples(
     else:
         input_text = gen.build_input(lp_fields)
 
-    inputs = gen.processor(
+    # Tokenize once, then replicate to batch of N
+    single = gen.processor(
         text=input_text,
         return_tensors="pt",
-    ).to(gen.model.device)
-    input_len = inputs["input_ids"].shape[-1]
+    )
+    input_len = single["input_ids"].shape[-1]
+
+    # Expand to (num_samples, seq_len)
+    batch_input_ids = single["input_ids"].expand(num_samples, -1).contiguous().to(gen.model.device)
+    batch_attention = single["attention_mask"].expand(num_samples, -1).contiguous().to(gen.model.device)
 
     outputs = gen.model.generate(
-        **inputs,
+        input_ids=batch_input_ids,
+        attention_mask=batch_attention,
         max_new_tokens=max_new_tokens,
         temperature=temperature,
         top_p=top_p,
         top_k=top_k,
         do_sample=do_sample,
-        num_return_sequences=num_samples,
     )
 
     # outputs shape: (num_samples, seq_len)
