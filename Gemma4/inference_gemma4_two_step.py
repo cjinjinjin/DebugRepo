@@ -22,6 +22,8 @@ import re
 import time
 from pathlib import Path
 
+import torch
+
 from inference_gemma4 import (
     Gemma4PromptGenerator,
     build_user_message,
@@ -135,8 +137,8 @@ def generate_two_step(
         gen.system_prompt = orig_system_prompt
         return {"thinking": "", "content": step1_text}
 
-    # --- Step 2: Expand each scene into a full prompt ---
-    print("\n[TWO-STEP] Step 2: Expanding each scene into a full prompt...")
+    # --- Step 2: Batch-expand all 5 scenes in parallel ---
+    print("\n[TWO-STEP] Step 2: Batch-expanding 5 scenes in parallel...")
     gen.system_prompt = SYSTEM_PROMPT_STEP2_EXPAND
 
     if user_content:
@@ -148,23 +150,63 @@ def generate_two_step(
     else:
         base_content = ""
 
-    expanded_prompts = []
-    for i, scene in enumerate(scenes, 1):
-        print(f"\n[TWO-STEP] Expanding scene {i}/5...")
+    # Build 5 input texts
+    input_texts = []
+    for scene in scenes:
         scene_content = (
             f"{base_content}\n\n"
             f"Expand this scene concept into a detailed prompt:\n"
             f"<Scene>{scene}</Scene>"
         )
-        step2_response = gen.generate(
-            user_content=scene_content,
+        input_texts.append(gen.build_input_from_content(scene_content))
+
+    # Tokenize with left-padding for batch generation
+    tokenizer = gen.processor
+    orig_padding_side = getattr(tokenizer, "padding_side", "right")
+    tokenizer.padding_side = "left"
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+
+    batch_inputs = tokenizer(
+        input_texts,
+        return_tensors="pt",
+        padding=True,
+    ).to(gen.model.device)
+    input_lens = (batch_inputs["attention_mask"]).sum(dim=1).tolist()
+
+    print(f"  Batch size: {len(input_texts)}, max input len: {batch_inputs['input_ids'].shape[1]}")
+
+    with torch.inference_mode():
+        outputs = gen.model.generate(
+            **batch_inputs,
             max_new_tokens=512,
-            **gen_kwargs,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            do_sample=do_sample,
         )
-        step2_text = step2_response.get("content", "") if isinstance(step2_response, dict) else str(step2_response)
-        prompt = parse_single_prompt(step2_text)
+
+    tokenizer.padding_side = orig_padding_side
+
+    # Decode each sequence
+    expanded_prompts = []
+    for i in range(len(scenes)):
+        # Skip padding + input tokens
+        seq_len = outputs[i].shape[0]
+        pad_len = batch_inputs["input_ids"].shape[1] - input_lens[i]
+        gen_start = pad_len + input_lens[i]
+        gen_tokens = outputs[i][gen_start:]
+        response = tokenizer.decode(gen_tokens, skip_special_tokens=False)
+
+        if hasattr(tokenizer, "parse_response"):
+            parsed = tokenizer.parse_response(response)
+        else:
+            parsed = gen._parse_response_fallback(response)
+
+        text = parsed.get("content", "") if isinstance(parsed, dict) else str(parsed)
+        prompt = parse_single_prompt(text)
         expanded_prompts.append(prompt)
-        print(f"  Prompt {i} ({len(prompt.split())} words): {prompt[:100]}...")
+        print(f"  Prompt {i+1} ({len(prompt.split())} words, {len(gen_tokens)} tokens): {prompt[:100]}...")
 
     gen.system_prompt = orig_system_prompt
 
