@@ -50,7 +50,7 @@ Each scene must use a DIFFERENT visual approach:
 4. One outcome/result-focused scene showing the benefit
 5. One mood/atmosphere-driven composition
 
-Each scene description should be one sentence (15-30 words) that captures the setting, subject, mood, and camera angle.
+Each scene description should be one concise sentence (8-15 words) that captures the setting, subject, and mood.
 
 Output exactly 5 scene descriptions (no reasoning, no thinking):
 <Scene1>...</Scene1>
@@ -161,7 +161,11 @@ def generate_two_step(
         input_texts.append(gen.build_input_from_content(scene_content))
 
     # Tokenize with left-padding for batch generation
-    tokenizer = gen.processor
+    # Gemma4Processor wraps a tokenizer; use the inner tokenizer for batch text encoding
+    if hasattr(gen.processor, "tokenizer"):
+        tokenizer = gen.processor.tokenizer
+    else:
+        tokenizer = gen.processor
     orig_padding_side = getattr(tokenizer, "padding_side", "right")
     tokenizer.padding_side = "left"
     if tokenizer.pad_token_id is None:
@@ -198,8 +202,9 @@ def generate_two_step(
         gen_tokens = outputs[i][gen_start:]
         response = tokenizer.decode(gen_tokens, skip_special_tokens=False)
 
-        if hasattr(tokenizer, "parse_response"):
-            parsed = tokenizer.parse_response(response)
+        # parse_response lives on the processor, not the inner tokenizer
+        if hasattr(gen.processor, "parse_response"):
+            parsed = gen.processor.parse_response(response)
         else:
             parsed = gen._parse_response_fallback(response)
 
