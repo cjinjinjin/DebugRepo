@@ -284,13 +284,39 @@ def main():
     outputs = llm.generate(all_prompts, sampling_params)
     elapsed = time.time() - start_time
 
+    # Extract per-request latency metrics from vLLM outputs
+    all_latency_metrics = []
+    for output in outputs:
+        metrics = getattr(output, "metrics", None)
+        m = {}
+        if metrics:
+            # V1 engine: RequestStateStats has first_token_ts, last_token_ts, scheduled_ts
+            if hasattr(metrics, "first_token_ts") and hasattr(metrics, "last_token_ts"):
+                prefill = (metrics.first_token_ts - metrics.scheduled_ts) if metrics.scheduled_ts else None
+                decode = (metrics.last_token_ts - metrics.first_token_ts) if metrics.first_token_ts else None
+                ttft = getattr(metrics, "first_token_latency", None)
+                m = {"ttft": ttft, "prefill_s": prefill, "decode_s": decode}
+            # V0 engine: RequestMetrics has first_token_time, finished_time, arrival_time
+            elif hasattr(metrics, "first_token_time") and hasattr(metrics, "finished_time"):
+                arrival = getattr(metrics, "arrival_time", None)
+                first_tok = metrics.first_token_time
+                finished = metrics.finished_time
+                ttft = (first_tok - arrival) if (first_tok and arrival) else None
+                decode = (finished - first_tok) if (finished and first_tok) else None
+                m = {"ttft": ttft, "prefill_s": ttft, "decode_s": decode}
+        num_output_tokens = len(output.outputs[0].token_ids) if output.outputs else 0
+        m["output_tokens"] = num_output_tokens
+        if m.get("decode_s") and num_output_tokens > 1:
+            m["decode_tok_per_s"] = (num_output_tokens - 1) / m["decode_s"]
+        all_latency_metrics.append(m)
+
     # Group results by record
-    grouped = {}  # rec_idx -> list of (call_idx, raw_text)
-    for output, (rec_idx, call_idx) in zip(outputs, prompt_to_record):
+    grouped = {}  # rec_idx -> list of (call_idx, raw_text, latency_metrics)
+    for i, (output, (rec_idx, call_idx)) in enumerate(zip(outputs, prompt_to_record)):
         raw_text = output.outputs[0].text
         if rec_idx not in grouped:
             grouped[rec_idx] = []
-        grouped[rec_idx].append((call_idx, raw_text))
+        grouped[rec_idx].append((call_idx, raw_text, all_latency_metrics[i]))
 
     # Sort each group by call_idx
     for rec_idx in grouped:
@@ -315,7 +341,8 @@ def main():
         print(f"{'='*60}")
         print(f"[Sample {rec_idx+1}/{total}] id={record.get('id', '')}")
 
-        raw_texts = [text for _, text in grouped.get(rec_idx, [])]
+        raw_texts = [text for _, text, _ in grouped.get(rec_idx, [])]
+        per_sample_metrics = [m for _, _, m in grouped.get(rec_idx, [])]
         prompts = []
         for i, raw in enumerate(raw_texts):
             prompt = parse_single_prompt(raw)
@@ -343,6 +370,7 @@ def main():
             "raw_output": combined_raw,
             "individual_raw_outputs": raw_texts,
             "format_compliant": compliant,
+            "latency_metrics": per_sample_metrics,
         }
         out_f.write(json.dumps(result, ensure_ascii=False) + "\n")
         out_f.flush()
@@ -356,6 +384,43 @@ def main():
     print(f"Saved {total} results -> {args.output_file}")
     print(f"\nFormat compliance: {n_compliant}/{total} ({100*n_compliant/total:.1f}%)")
     print(f"All prompts parsed: {n_all_parsed}/{total} ({100*n_all_parsed/total:.1f}%)")
+
+    # Latency summary
+    ttfts = [m["ttft"] for m in all_latency_metrics if m.get("ttft") is not None]
+    prefills = [m["prefill_s"] for m in all_latency_metrics if m.get("prefill_s") is not None]
+    decodes = [m["decode_s"] for m in all_latency_metrics if m.get("decode_s") is not None]
+    out_toks = [m["output_tokens"] for m in all_latency_metrics if m.get("output_tokens")]
+    decode_speeds = [m["decode_tok_per_s"] for m in all_latency_metrics if m.get("decode_tok_per_s") is not None]
+
+    if ttfts or prefills or decodes:
+        print(f"\n{'='*60}")
+        print(f"Latency Summary ({len(all_latency_metrics)} requests)")
+        print(f"{'='*60}")
+
+        def _stats(vals, unit="s"):
+            if not vals:
+                return "N/A"
+            vals_sorted = sorted(vals)
+            n = len(vals_sorted)
+            avg = sum(vals_sorted) / n
+            med = vals_sorted[n // 2]
+            p95 = vals_sorted[int(n * 0.95)] if n >= 2 else vals_sorted[-1]
+            return f"avg={avg:.3f}{unit}  med={med:.3f}{unit}  p95={p95:.3f}{unit}  min={vals_sorted[0]:.3f}{unit}  max={vals_sorted[-1]:.3f}{unit}"
+
+        if ttfts:
+            print(f"TTFT (prefill):    {_stats(ttfts)}")
+        if prefills and prefills != ttfts:
+            print(f"Prefill time:      {_stats(prefills)}")
+        if decodes:
+            print(f"Decode time:       {_stats(decodes)}")
+        if out_toks:
+            avg_tok = sum(out_toks) / len(out_toks)
+            print(f"Output tokens:     avg={avg_tok:.0f}  total={sum(out_toks)}")
+        if decode_speeds:
+            print(f"Decode speed:      {_stats(decode_speeds, unit=' tok/s')}")
+    else:
+        print(f"\n(No per-request latency metrics available from this vLLM version)")
+
     print(f"{'='*60}")
 
 
