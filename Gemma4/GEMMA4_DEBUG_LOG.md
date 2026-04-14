@@ -1735,3 +1735,109 @@ python QwenFinetune/evaluate.py \
 4. **LP keyword coverage 0%**：evaluate.py 需要输出 JSONL 中包含 LP 字段才能计算，当前输出格式缺少此字段
 5. **推理速度极快**：vLLM offline 模式 190 条仅需 ~2 分钟，decode 吞吐 1,299 tok/s
 
+---
+
+## Two-Step vLLM 推理实验（2026-04-14）
+
+### 背景
+
+此前已有 HF Transformers 版本的 two-step 推理（`inference_gemma4_two_step.py`），分两步生成：
+1. Step 1：生成 5 个不同视角的场景概念（5-10 words 短语）
+2. Step 2：将每个场景扩展为 30-50 word 的详细 prompt
+
+该方案多样性较好（5 个 scene 强制不同视觉角度），但 Transformers 单卡逐条推理速度较慢（21.2s/sample）。
+本次实验将 two-step 方案迁移到 vLLM offline 模式，利用 continuous batching 大幅提升吞吐。
+
+### 脚本
+
+- `Gemma4/inference_gemma4_two_step_vllm.py`
+- 基于 `inference_gemma4_single_prompt_vllm.py`（vLLM 模式）和 `inference_gemma4_two_step.py`（two-step 逻辑）
+
+### 核心设计
+
+- **Step 1**：所有 N 条记录的 scene planning prompt 放入一次 `llm.generate()`
+  - `SamplingParams(max_tokens=120, stop=["</Scene5>"])`
+- **Step 2**：N×5 个 expansion prompt 放入一次 `llm.generate()`
+  - `SamplingParams(max_tokens=128, stop=["</Prompt>"])`
+- **TTFT 探测**：用 `max_tokens=1` 单独测量 prefill 延迟
+- 输出 JSONL 包含 `scenes`, `generated_prompts`, `raw_output`，兼容 evaluate.py
+
+### 运行命令
+
+```bash
+# 2 条测试
+python Gemma4/inference_gemma4_two_step_vllm.py \
+    --model_id /vc_data/.../gemma-4-26B-A4B-it \
+    --input_file QwenFinetune/data/dpo_combined_eval_cot.jsonl \
+    --num_samples 2 \
+    --temperature 1.0 \
+    --tensor_parallel_size 2 \
+    --output_file Gemma4/results/gemma4_two_step_vllm_test.jsonl
+
+# 全量 190 条
+python Gemma4/inference_gemma4_two_step_vllm.py \
+    --model_id /vc_data/.../gemma-4-26B-A4B-it \
+    --input_file QwenFinetune/data/dpo_combined_eval_cot.jsonl \
+    --temperature 1.0 \
+    --tensor_parallel_size 2 \
+    --output_file Gemma4/results/gemma4_two_step_vllm_full.jsonl
+```
+
+### 配置
+
+- 模型：gemma-4-26B-A4B-it BF16
+- 硬件：2×A100-SXM4-80GB（tensor_parallel_size=2）
+- 模式：No-CoT, no-think
+- 数据：`dpo_combined_eval_cot.jsonl`，190 条
+
+### 全量结果（190 条）
+
+| 指标 | 值 |
+|------|-----|
+| Records | 190 |
+| Full scenes (5/5) | 190/190 (100.0%) |
+| Format compliance | 190/190 (100.0%) |
+| All prompts parsed | 190/190 (100.0%) |
+| **TTFT (prefill)** | **0.052s/prompt** |
+| **Step 1 (scenes)** | **14.2s** (0.07s/sample) |
+| **Step 2 (expand)** | **54.6s** (0.06s/prompt) |
+| **Total inference** | **68.8s** (0.36s/sample) |
+| Step 1 input tokens | 284,756 |
+| Step 1 output tokens | 16,936 |
+| Step 2 input tokens | 1,382,955 |
+| Step 2 output tokens | 57,067 |
+| Total input tokens | 1,667,711 |
+| Total output tokens | 74,003 |
+| **Decode throughput** | **1,075 tok/s** |
+
+### 与 Transformers Two-Step 对比
+
+| 指标 | Transformers (1×A100) | vLLM (2×A100) | 提升 |
+|------|----------------------|---------------|------|
+| **每条记录耗时** | 21.2s | **0.36s** | **~59x** |
+| **190 条预计总耗时** | ~4028s (~67min) | **68.8s (~1.1min)** | **~59x** |
+| Decode throughput | 30.5 tok/s (Step2 batch=5) | **1,075 tok/s** | **~35x** |
+| Step 2 prefill | 1.45s | ~0.05s | **~29x** |
+| Format compliance | 100% (4条) | 100% (190条) | — |
+| GPU 资源 | 1×A100 | 2×A100 | 2x |
+
+### 与 Single-Prompt vLLM 对比
+
+| 指标 | Single-Prompt vLLM | Two-Step vLLM | 差异 |
+|------|---------------------|---------------|------|
+| **总耗时** | 122.7s | **68.8s** | **-44%** |
+| 每条记录 | 0.6s | 0.36s | -40% |
+| Format compliance | 100% | 100% | — |
+| Decode throughput | 1,299 tok/s | 1,075 tok/s | -17% |
+| 总输出 tokens | 159,474 | 74,003 | -54% |
+| TTFT | 0.405s/prompt | 0.052s/prompt | -87% |
+
+### 分析
+
+1. **vLLM continuous batching 带来 ~59x 加速**：Transformers 逐条推理 21.2s/sample → vLLM 批量 0.36s/sample
+2. **Two-Step 比 Single-Prompt 快 44%**：主要因为 prompt 长度目标 30-50 words（vs 80-150 words），总输出 token 减少 54%
+3. **throughput 略低**（1,075 vs 1,299 tok/s）：短输出序列 decode 效率稍差，但总时间显著缩短
+4. **TTFT 显著降低**（0.052s vs 0.405s）：Step 1 scene prompt 比 single-prompt 的 system prompt 更短
+5. **100% format compliance**：Scene 解析和 Prompt 扩展均正常，stop tokens 生效
+6. **多样性优势**：5 个 scene 强制不同视角（close-up / lifestyle / environmental / outcome / mood），天然保证多样性
+
