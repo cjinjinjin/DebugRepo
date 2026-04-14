@@ -1672,3 +1672,66 @@ python QwenFinetune/evaluate.py \
 3. **>= 3/5 Good 阈值**：Gemma4 87.9% vs GPT5 75.5%，说明 Gemma4 生成的 prompt 质量更稳定
 4. **Gemma4 Zero-shot 无需微调即超越 GPT5 baseline**，验证了 Gemma4 26B-A4B-it 在 image prompt generation 任务上的强大能力
 
+---
+
+## Single-Prompt vLLM 推理实验（2026-04-14）
+
+### 背景
+
+原有方案一次生成 5 个 prompt（`<Prompt1>`~`<Prompt5>`），在 temperature=1.2 时出现：
+- 主题偏离（后面的 prompt 与 LP 无关）
+- 标签错位（`<Prompt3>` 内容出现在 `<Prompt4>` 标签内）
+
+新方案：每次只生成 1 个 prompt，同一输入调用 5 次，再组合为 `<Prompt1>`~`<Prompt5>` 格式。
+
+### 方案对比
+
+| 维度 | 原方案（5-prompt） | 新方案（single-prompt x5） |
+|------|-------------------|--------------------------|
+| 每次输出 | 5 个 prompt | 1 个 prompt |
+| 多样性来源 | 模型自主变化 | temperature 采样 |
+| 标签错位风险 | 高（temperature↑） | 无 |
+| 推理后端 | HF Transformers | vLLM offline |
+
+### 实现要点
+
+1. **System Prompt 改为只生成 1 个 prompt**，输出 `<Prompt>...</Prompt>`
+2. **User Message 修复**：eval 数据中的 "Generate 5 image" 替换为 "Generate 1 image"，避免与 system prompt 冲突
+3. **vLLM 离线模式**：`LLM.generate()` 一次提交 N×K 个 prompt，利用 continuous batching + PagedAttention 实现真并行
+4. **Prefix caching**：同一输入的 5 个副本共享 KV cache，prefill 只算一次
+5. **TTFT 测量**：vLLM V1 离线模式 `metrics=None`，改用 `max_tokens=1` 探测 prefill latency
+
+### 全量评估结果（190 条，no-CoT，temperature=1.2，TP=2）
+
+**推理性能：**
+
+| 指标 | 值 |
+|------|-----|
+| Total samples | 190 |
+| Total requests | 950 (190 x 5) |
+| Total inference time | 122.7s (0.6s/sample) |
+| TTFT (prefill) | 0.059s/prompt |
+| Decode throughput | 1,299 tok/s |
+| Avg input tokens | 1,457 |
+| Avg output tokens | 168 |
+
+**质量评估（evaluate.py text-only）：**
+
+| 指标 | 值 |
+|------|-----|
+| All 5 tags present | 100.0% |
+| All 5 prompts unique | 100.0% |
+| Fully compliant | 98.9% |
+| Avg word count | 126.5 |
+| Quality hints | 4.2/5 |
+| Forbidden words | 4.0/5 |
+| LP keyword coverage | 0.0% |
+
+### 分析
+
+1. **格式合规 100%**：single-prompt 方案彻底消除了标签错位问题
+2. **多样性 100%**：5 次独立采样保证了多样性
+3. **Forbidden words 4.0/5 偏高**：几乎每个 prompt 都含违禁词，需后续优化 system prompt
+4. **LP keyword coverage 0%**：evaluate.py 需要输出 JSONL 中包含 LP 字段才能计算，当前输出格式缺少此字段
+5. **推理速度极快**：vLLM offline 模式 190 条仅需 ~2 分钟，decode 吞吐 1,299 tok/s
+
