@@ -1900,3 +1900,41 @@ python Gemma4/inference_gemma4_two_step_vllm.py \
 5. **1 条 scene 解析失败**（99.5% vs 100%）：单卡略有差异，可能是随机采样导致，非系统性问题
 6. **建议**：日常实验用单卡即可，大批量或低延迟要求时用双卡
 
+---
+
+## Two-Step vLLM 单卡全量评估（evaluate.py）
+
+**日期**：2026-04-13
+**评估文件**：`Gemma4/results/gemma4_two_step_vllm_1gpu_full.jsonl`（190 条）
+**评估脚本**：`QwenFinetune/evaluate.py`（text-only，无 LLM Judge）
+
+### 评估结果
+
+| 指标 | 值 | 判定 |
+|------|-----|------|
+| **All 5 tags present** | 99.5% | 合格 |
+| **All 5 prompts unique** | 99.5% | 合格 |
+| **Fully compliant** | 99.5% | 合格 |
+| **Prompts within 150 words** | 5.0/5 | 合格 |
+| **Avg word count** | 42.4 words | 合格（目标 30-50 words） |
+| **Quality hints** | 1.8/5 | 正常（zero-shot 无 quality hint 要求） |
+| **Forbidden words** | 0.1/5 | 合格（几乎无违规词） |
+| **CoT compliance** | 0% | 预期（zero-shot 不使用 CoT） |
+| **LP keyword coverage** | 0% | 已知限制（见下） |
+
+### 与 Single-Prompt vLLM 评估对比
+
+| 指标 | Two-Step | Single-Prompt | 说明 |
+|------|----------|---------------|------|
+| Format compliance | 99.5% | 100% | 均极高 |
+| Avg word count | **42.4** | 126.5 | Two-step 目标 30-50，single 目标 80-150 |
+| Forbidden words | **0.1/5** | 4.0/5 | Two-step 大幅改善 |
+| Quality hints | 1.8/5 | 4.2/5 | 短 prompt 自然包含更少修饰语 |
+
+### 分析
+
+1. **Forbidden words 大幅改善**：从 single-prompt 的 4.0/5 降至 0.1/5，two-step 的短 prompt（30-50 words）天然减少了违禁词出现概率
+2. **Word count 完美命中目标区间**：42.4 words 在 30-50 范围内，vs single-prompt 的 126.5 words（目标 80-150）
+3. **Word vs Token 区分**：42.4 是 word count，实际输出 ~60 tokens/prompt（1 word ≈ 1.4 tokens，包含 XML 标签和 subword tokenization 开销）
+4. **LP keyword coverage 0%**：evaluate.py 从输出 JSONL 的 `lp_fields` 字段提取关键词，但 two-step 输出中未包含该字段，非生成质量问题
+
