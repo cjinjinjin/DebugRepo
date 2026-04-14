@@ -2009,14 +2009,26 @@ python Gemma4/inference_gemma4_two_step_vllm.py \
 | Format compliance | 99.5% | 98.9% | 100% |
 | Forbidden words | — | 0.1/5 | — |
 | TTFT | 0.088s | 0.085s | 0.052s |
-| 显存占用 | ~52GB | **~13GB** | ~26GB/卡 |
+| 模型权重显存 | ~52GB | **~19GB** | ~26GB/卡 |
+| 推理时总显存 | ~75GB | **~75GB** | ~38GB/卡 |
+
+### 显存分析
+
+vLLM 默认 `gpu_memory_utilization=0.9`，会预分配 A100 80GB × 90% ≈ 72GB：
+- **加载时 ~19GB**：AWQ 4-bit 模型权重（26B × 4bit ≈ 13GB + 框架开销）
+- **推理时 ~75GB**：权重 + KV cache pool（vLLM 将剩余显存全部分配给 KV cache）
+- **BF16 推理时也是 ~75GB**：权重 ~52GB + KV cache ~23GB
+
+AWQ 的显存优势不是总占用更少，而是**模型权重更小 → KV cache pool 更大 → 能同时 batch 更多请求 → throughput 更高**（1,105 vs 869 tok/s）。
+
+如需在同一张卡上跑多副本，需降低 `--gpu_memory_utilization`（如 2 副本各用 0.45）。
 
 ### 分析
 
-1. **AWQ 4-bit 单卡比 BF16 单卡快 18%**（84.9s → 70.0s）：量化模型更小，显存带宽利用更充分
+1. **AWQ 4-bit 单卡比 BF16 单卡快 18%**（84.9s → 70.0s）：模型权重更小，更多显存留给 KV cache，batch 容量更大
 2. **throughput 超过 BF16 双卡**（1,105 vs 1,075 tok/s）：单卡 AWQ 的吞吐已与双卡 BF16 持平
-3. **显存节省 75%**（~13GB vs ~52GB）：同一张 A100 可运行 4-6 个 AWQ 副本
+3. **模型权重省 63%**（~19GB vs ~52GB）：但 vLLM 会将剩余显存分配给 KV cache，总显存占用相近
 4. **质量几乎无损**：format compliance 98.9%（vs BF16 99.5-100%）、forbidden words 0.1/5（与 BF16 two-step 相同）
 5. **GPTQ 不可用**：第三方 GPTQ 权重与 vLLM Gemma4 loader 不兼容，AWQ 是当前唯一可用的 4-bit 量化方案
-6. **推荐配置**：AWQ 4-bit + 单卡 A100 是性价比最优方案，速度与双卡 BF16 持平、显存仅需 1/4
+6. **推荐配置**：AWQ 4-bit + 单卡 A100 是最优方案，速度与双卡 BF16 持平，且有更大 KV cache 容量支持高并发
 
