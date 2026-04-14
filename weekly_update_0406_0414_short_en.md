@@ -15,23 +15,25 @@
 
 ---
 
-# Slide 2: Qwen3 Training Exploration (4/6 - 4/11) — Dead End
+# Slide 2: Qwen3 Training — All Stages (4/6 - 4/11) — Dead End
 
-## DPO: Likelihood Displacement
+## Format Compliance Across 4 Stages
 
-| Checkpoint | Fully Compliant |
-|------------|----------------|
-| SFT baseline | ~30% |
-| **DPO ckpt-1 (best)** | **47.9%** |
-| DPO ckpt-4 | 25.3% (below baseline) |
+| Stage | Fully Compliant | Avg Words | Core Issue |
+|-------|----------------|-----------|------------|
+| Zero-shot (base) | 14.8% | 10.2 | Think block repetition collapse |
+| SFT ckpt-50 | ~30% | — | Learned format but low quality |
+| **DPO ckpt-1 (best)** | **47.9%** | 68.2 | Likelihood displacement |
+| GRPO v1 ckpt-6 | 22.6% | 18.7 | Reward hacking (empty shells) |
+| GRPO v2 step-1 | — | 737 tok | Too slow (~6h/step) |
 
-- Only 1-step DPO helped; more steps → chosen prob drops → quality degrades
+## Key Findings Per Stage
 
-## GRPO: Reward Hacking → v2 Fix
-
-- v1: empty shell tags scored +1.45 → model learned 18.7-word shells
-- v2: empty shells score -0.40, step 1 min_length=737 tokens ✅
-- But ~6h/step, 34 steps ≈ 8 days
+- **Zero-shot**: Repetition loops in think blocks, only 39.8% samples had think block, format unusable
+- **SFT**: Suppressed repetition, taught output format, but compliance only ~30%
+- **DPO**: Only 1-step helped (47.9%); more steps → chosen prob drops → degrades to 25.3%
+- **GRPO v1**: Empty shell tags scored +1.45 → model learned 18.7-word shells (reward hacking)
+- **GRPO v2**: Fixed empty shells, but ~6h/step, 34 steps ≈ 8 days — impractical
 
 **Conclusion**: Qwen3 best = 47.9% compliance, far from production (>95%)
 

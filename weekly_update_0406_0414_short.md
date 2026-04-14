@@ -15,23 +15,25 @@
 
 ---
 
-# Slide 2: Qwen3 训练探索（4/6 - 4/11）— 碰壁
+# Slide 2: Qwen3 训练全阶段总结（4/6 - 4/11）— 碰壁
 
-## DPO：Likelihood Displacement
+## 四阶段 Format Compliance 对比
 
-| Checkpoint | Fully Compliant |
-|------------|----------------|
-| SFT baseline | ~30% |
-| **DPO ckpt-1（最佳）** | **47.9%** |
-| DPO ckpt-4 | 25.3%（低于 baseline）|
+| 阶段 | Fully Compliant | Avg Words | 核心问题 |
+|------|----------------|-----------|----------|
+| Zero-shot（base） | 14.8% | 10.2 | think block 重复坍缩，token 浪费 |
+| SFT ckpt-50 | ~30% | — | 学会格式但质量不足 |
+| **DPO ckpt-1（最佳）** | **47.9%** | 68.2 | Likelihood displacement |
+| GRPO v1 ckpt-6 | 22.6% | 18.7 | Reward hacking（空壳 tag）|
+| GRPO v2 step-1 | — | 737 tok | 训练太慢（~6h/step）|
 
-- 仅 1 步 DPO 有正向效果，步数增加 → chosen 概率被压低 → 退化
+## 各阶段关键发现
 
-## GRPO：Reward Hacking → v2 修复
-
-- v1：空壳 tag 得 +1.45 分 → 模型学会写 18.7 词空壳
-- v2：空壳 -0.40 分，step 1 min_length=737 tokens ✅
-- 但单步训练 ~6h，34 步需 ~8 天
+- **Zero-shot**：think block 中产生重复循环，仅 39.8% 样本有 think block，格式几乎不可用
+- **SFT**：抑制重复、教会输出格式，但 compliance 仅 ~30%
+- **DPO**：仅 1 步有效（47.9%），更多步数 → chosen 概率被压低 → 退化至 25.3%
+- **GRPO v1**：空壳 tag 得 +1.45 分 → 模型学会写 18.7 词空壳（reward hacking）
+- **GRPO v2**：修复空壳问题，但单步 ~6h，34 步需 ~8 天，不实际
 
 **结论**：Qwen3 最佳 47.9% compliance，距生产要求（>95%）差距大
 
