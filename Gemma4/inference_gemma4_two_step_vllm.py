@@ -194,6 +194,8 @@ def parse_args():
                     help="Number of GPUs for tensor parallelism")
     p.add_argument("--gpu_memory_utilization", type=float, default=0.9)
     p.add_argument("--max_model_len", type=int, default=8192)
+    p.add_argument("--dtype", type=str, default="auto",
+                    help="Model dtype (auto, half, bfloat16). Use 'half' for GPTQ models.")
     return p.parse_args()
 
 
@@ -215,6 +217,7 @@ def main():
         tensor_parallel_size=args.tensor_parallel_size,
         gpu_memory_utilization=args.gpu_memory_utilization,
         max_model_len=args.max_model_len,
+        dtype=args.dtype,
         trust_remote_code=True,
     )
 
