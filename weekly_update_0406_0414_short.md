@@ -57,10 +57,14 @@
 
 **Random 200 LPs, 3 judges/image, ~1000 images**
 
+**Image-level Good Rate（max-vote）：**
+
 | 指标 | Gemma4 | GPT5 | 差异 |
 |------|--------|------|------|
 | **Good Rate** | **75.4%** | 65.4% | **+10pp** |
 | Bad Rate | 17.3% | 28.1% | -10.8pp |
+
+**LP-level 累计分布：**
 
 | LP 级别阈值 | Gemma4 | GPT5 | 差异 |
 |-------------|--------|------|------|
@@ -71,11 +75,36 @@
 
 ---
 
-# Slide 5: 推理速度优化
+# Slide 5: Two-Step vs Single-Prompt 推理方案
+
+## 方案对比
+
+| 维度 | Single-Prompt | Two-Step |
+|------|--------------|---------|
+| 流程 | 一次生成 5 个 prompt | Step 1 规划 5 个场景 → Step 2 逐个扩展 |
+| Prompt 长度目标 | 80-150 words | 30-50 words |
+| 多样性来源 | temperature 采样 | 5 个场景强制不同视角 |
+| 标签错位风险 | 有（temperature↑ 时） | 无（逐个生成） |
+
+## vLLM 推理性能对比（190 条，2×A100）
+
+| 指标 | Single-Prompt | Two-Step | 差异 |
+|------|--------------|---------|------|
+| 总耗时 | 122.7s | **68.8s** | **-44%** |
+| 总输出 tokens | 159,474 | 74,003 | -54% |
+| Forbidden words | 4.0/5 | **0.1/5** | **大幅改善** |
+| Format compliance | 100% | 100% | — |
+
+**Two-Step 优势**：短 prompt 天然减少违禁词，场景规划保证多样性，总 token 减半 → 速度更快
+
+---
+
+# Slide 6: 推理速度优化
 
 | 方案 | 190 条总耗时 | 每条 | 加速比 |
 |------|-------------|------|--------|
 | Transformers 单卡 | ~67min | 52s | 1x |
+| vLLM Single-Prompt 双卡 | 122.7s | 0.6s | ~87x |
 | vLLM Two-Step 双卡 | 68.8s | 0.36s | **~144x** |
 | vLLM Two-Step 单卡 | 84.9s | 0.45s | ~116x |
 | **vLLM Two-Step AWQ 单卡** | **70.0s** | **0.37s** | **~140x** |
@@ -89,7 +118,7 @@
 
 ---
 
-# Slide 6: 结论与下一步
+# Slide 7: 结论与下一步
 
 ## 关键结论
 

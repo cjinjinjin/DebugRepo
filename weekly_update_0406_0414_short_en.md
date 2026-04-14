@@ -57,10 +57,14 @@
 
 **Random 200 LPs, 3 judges/image, ~1000 images**
 
+**Image-level Good Rate (max-vote):**
+
 | Metric | Gemma4 | GPT5 | Delta |
 |--------|--------|------|-------|
 | **Good Rate** | **75.4%** | 65.4% | **+10pp** |
 | Bad Rate | 17.3% | 28.1% | -10.8pp |
+
+**LP-level cumulative distribution:**
 
 | LP-level threshold | Gemma4 | GPT5 | Delta |
 |--------------------|--------|------|-------|
@@ -71,11 +75,36 @@
 
 ---
 
-# Slide 5: Inference Speed Optimization
+# Slide 5: Two-Step vs Single-Prompt Inference
+
+## Approach Comparison
+
+| Dimension | Single-Prompt | Two-Step |
+|-----------|--------------|---------|
+| Pipeline | Generate 5 prompts at once | Step 1: plan 5 scenes → Step 2: expand each |
+| Prompt length target | 80-150 words | 30-50 words |
+| Diversity source | Temperature sampling | 5 scenes with forced different angles |
+| Tag misalignment risk | Yes (at high temp) | None (generated individually) |
+
+## vLLM Inference Performance (190 samples, 2×A100)
+
+| Metric | Single-Prompt | Two-Step | Delta |
+|--------|--------------|---------|-------|
+| Total time | 122.7s | **68.8s** | **-44%** |
+| Total output tokens | 159,474 | 74,003 | -54% |
+| Forbidden words | 4.0/5 | **0.1/5** | **Major improvement** |
+| Format compliance | 100% | 100% | — |
+
+**Two-Step advantages**: Shorter prompts naturally reduce forbidden words, scene planning ensures diversity, 54% fewer tokens → faster inference
+
+---
+
+# Slide 6: Inference Speed Optimization
 
 | Config | 190 samples | Per sample | Speedup |
 |--------|-------------|------------|---------|
 | Transformers 1×A100 | ~67min | 52s | 1x |
+| vLLM Single-Prompt 2×A100 | 122.7s | 0.6s | ~87x |
 | vLLM Two-Step 2×A100 | 68.8s | 0.36s | **~144x** |
 | vLLM Two-Step 1×A100 | 84.9s | 0.45s | ~116x |
 | **vLLM Two-Step AWQ 1×A100** | **70.0s** | **0.37s** | **~140x** |
@@ -89,7 +118,7 @@
 
 ---
 
-# Slide 6: Conclusions & Next Steps
+# Slide 7: Conclusions & Next Steps
 
 ## Key Conclusions
 
