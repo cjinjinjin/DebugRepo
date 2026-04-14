@@ -1622,3 +1622,53 @@ python QwenFinetune/evaluate.py \
 3. **时间分布均衡**：Step 1 decode (44%) 和 Step 2 decode (48%) 各占一半，无明显瓶颈
 4. **总时间减半**：39.6s → 21.2s，接近单步生成速度（~19s），两步方案的额外开销可控
 
+---
+
+## UHRS Human Label 对比：Gemma4 Zero-shot vs GPT5（Random 200 LPs）
+
+**日期**：2026-04-13
+**数据来源**：
+- Gemma4: `Gemma4/data/UHRS_Task_lp_relevance_labeling_0410.tsv`（995 images × 3 judges）
+- GPT5: `QwenFinetune/RawData/UHRS_Task_lp_quality_labeling_0324_GPT5.tsv`（1000 images × 3 judges）
+
+**方法**：每张图由 3 位 UHRS judge 独立标注 Good/Fair/Bad，取 max-vote 作为最终标签。排除 Imageloadfail/N/A 后，Gemma4 有效 994 张，GPT5 有效 998 张。
+
+### Image Level Good Rate（max-vote）
+
+| 指标 | Gemma4 Zero-shot | GPT5 | 差异 |
+|------|-----------------|------|------|
+| **Total images** | 994 | 998 | — |
+| **Good** | 749 (75.4%) | 653 (65.4%) | **+10.0pp** |
+| **Fair** | 73 (7.3%) | 65 (6.5%) | +0.8pp |
+| **Bad** | 172 (17.3%) | 280 (28.1%) | -10.8pp |
+
+### LP Level N/5 Good Distribution
+
+| N/5 Good | Gemma4 (198 LPs) | GPT5 (200 LPs) |
+|----------|------------------|-----------------|
+| 0/5 | 2 (1.0%) | 1 (0.5%) |
+| 1/5 | 5 (2.5%) | 9 (4.5%) |
+| 2/5 | 17 (8.6%) | 39 (19.5%) |
+| 3/5 | 48 (24.2%) | 65 (32.5%) |
+| 4/5 | 69 (34.8%) | 59 (29.5%) |
+| 5/5 | 57 (28.8%) | 27 (13.5%) |
+
+> Gemma4 有 198 个 LP（LP_119 仅 2 张图，LP_95 仅 3 张图），GPT5 有 200 个完整 LP。
+
+### LP Level Cumulative（>= N/5 Good）
+
+| 阈值 | Gemma4 | GPT5 | 差异 |
+|------|--------|------|------|
+| >= 1/5 | 99.0% | 99.5% | -0.5pp |
+| >= 2/5 | 96.5% | 95.0% | +1.5pp |
+| >= 3/5 | 87.9% | 75.5% | **+12.4pp** |
+| >= 4/5 | 63.6% | 43.0% | **+20.6pp** |
+| >= 5/5 | 28.8% | 13.5% | **+15.3pp** |
+
+### 关键结论
+
+1. **Image Good Rate: Gemma4 75.4% vs GPT5 65.4%（+10pp）**，Bad Rate 从 28.1% 降至 17.3%
+2. **LP Level 质量分布明显右移**：Gemma4 在 4/5 和 5/5 Good 的 LP 占比（63.6%）远超 GPT5（43.0%）
+3. **>= 3/5 Good 阈值**：Gemma4 87.9% vs GPT5 75.5%，说明 Gemma4 生成的 prompt 质量更稳定
+4. **Gemma4 Zero-shot 无需微调即超越 GPT5 baseline**，验证了 Gemma4 26B-A4B-it 在 image prompt generation 任务上的强大能力
+
