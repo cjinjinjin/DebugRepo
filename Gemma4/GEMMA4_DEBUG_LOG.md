@@ -1938,3 +1938,85 @@ python Gemma4/inference_gemma4_two_step_vllm.py \
 3. **Word vs Token 区分**：42.4 是 word count，实际输出 ~60 tokens/prompt（1 word ≈ 1.4 tokens，包含 XML 标签和 subword tokenization 开销）
 4. **LP keyword coverage 0%**：evaluate.py 从输出 JSONL 的 `lp_fields` 字段提取关键词，但 two-step 输出中未包含该字段，非生成质量问题
 
+---
+
+## Two-Step vLLM AWQ 4-bit 量化推理实验（2026-04-14）
+
+### 背景
+
+测试 AWQ 4-bit 量化模型在 vLLM 下的 two-step 推理速度，对比 BF16 全精度模型。
+量化模型显存仅需 ~13GB（vs BF16 ~52GB），单卡 A100 可运行多个副本。
+
+GPTQ 4-bit 模型（`gemma-4-26B-A4B-it-GPTQ-Int4`）因权重格式与 vLLM Gemma4 loader 不兼容（`KeyError: 'layers.0.moe.experts.0.down_proj'`），无法加载。
+
+### 配置
+
+- 模型：`gemma-4-26B-A4B-it-AWQ-4bit`（cyankiwi/gemma-4-26B-A4B-it-AWQ-4bit）
+- 硬件：1×A100-SXM4-80GB
+- 精度：float16（GPTQ/AWQ 要求 fp16，不支持 bf16）
+- 模式：No-CoT, no-think
+- 数据：`dpo_combined_eval_cot.jsonl`，190 条
+
+### 运行命令
+
+```bash
+python Gemma4/inference_gemma4_two_step_vllm.py \
+    --model_id /vc_data/.../gemma-4-26B-A4B-it-AWQ-4bit \
+    --input_file QwenFinetune/data/dpo_combined_eval_cot.jsonl \
+    --temperature 1.0 \
+    --tensor_parallel_size 1 \
+    --dtype half \
+    --output_file Gemma4/results/gemma4_two_step_vllm_awq_full.jsonl
+```
+
+### 全量结果（190 条）
+
+| 指标 | 值 |
+|------|-----|
+| Records | 190 |
+| Full scenes (5/5) | 188/190 (98.9%) |
+| Format compliance | 188/190 (98.9%) |
+| All prompts parsed | 188/190 (98.9%) |
+| **TTFT (prefill)** | **0.085s/prompt** |
+| **Step 1 (scenes)** | **12.5s** (0.07s/sample) |
+| **Step 2 (expand)** | **57.5s** (0.06s/prompt) |
+| **Total inference** | **70.0s** (0.37s/sample) |
+| Total input tokens | 1,648,479 |
+| Total output tokens | 77,359 |
+| **Decode throughput** | **1,105.2 tok/s** |
+
+### 质量评估（evaluate.py）
+
+| 指标 | 值 |
+|------|-----|
+| All 5 tags present | 98.9% |
+| All 5 prompts unique | 98.9% |
+| Fully compliant | 98.9% |
+| Prompts within 150 words | 5.0/5 |
+| Avg word count | 40.6 words |
+| Quality hints | 1.7/5 |
+| Forbidden words | 0.1/5 |
+| CoT compliance | 0% (预期) |
+| LP keyword coverage | 0% (已知限制) |
+
+### 全配置对比
+
+| 指标 | BF16 1×A100 | AWQ 4-bit 1×A100 | BF16 2×A100 |
+|------|-------------|------------------|-------------|
+| **总耗时** | 84.9s | **70.0s** | 68.8s |
+| 每条记录 | 0.45s | **0.37s** | 0.36s |
+| Decode throughput | 869.5 tok/s | **1,105.2 tok/s** | 1,075 tok/s |
+| Format compliance | 99.5% | 98.9% | 100% |
+| Forbidden words | — | 0.1/5 | — |
+| TTFT | 0.088s | 0.085s | 0.052s |
+| 显存占用 | ~52GB | **~13GB** | ~26GB/卡 |
+
+### 分析
+
+1. **AWQ 4-bit 单卡比 BF16 单卡快 18%**（84.9s → 70.0s）：量化模型更小，显存带宽利用更充分
+2. **throughput 超过 BF16 双卡**（1,105 vs 1,075 tok/s）：单卡 AWQ 的吞吐已与双卡 BF16 持平
+3. **显存节省 75%**（~13GB vs ~52GB）：同一张 A100 可运行 4-6 个 AWQ 副本
+4. **质量几乎无损**：format compliance 98.9%（vs BF16 99.5-100%）、forbidden words 0.1/5（与 BF16 two-step 相同）
+5. **GPTQ 不可用**：第三方 GPTQ 权重与 vLLM Gemma4 loader 不兼容，AWQ 是当前唯一可用的 4-bit 量化方案
+6. **推荐配置**：AWQ 4-bit + 单卡 A100 是性价比最优方案，速度与双卡 BF16 持平、显存仅需 1/4
+
