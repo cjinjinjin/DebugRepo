@@ -91,3 +91,15 @@ python "${ROOT_DIR}/QwenFinetune/evaluate.py" \
 
 echo ""
 echo "[OK] Report saved to ${REPORT_FILE}"
+
+# ── Step 4: extract prompts for T2I ──────────────────────────────────────
+T2I_FILE="${VC_RESULTS}/gemma4_random200_two_step_vllm_t2i.txt"
+
+echo ""
+echo "[INFO] Extracting prompts for T2I ..."
+python "${SCRIPT_DIR}/extract_prompts_for_t2i.py" \
+    --infer_file "${OUTPUT_FILE}" \
+    --input_file "${INFER_INPUT}" \
+    --output_file "${T2I_FILE}"
+
+echo "[OK] T2I file saved to ${T2I_FILE}"
