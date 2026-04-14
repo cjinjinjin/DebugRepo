@@ -1841,3 +1841,62 @@ python Gemma4/inference_gemma4_two_step_vllm.py \
 5. **100% format compliance**：Scene 解析和 Prompt 扩展均正常，stop tokens 生效
 6. **多样性优势**：5 个 scene 强制不同视角（close-up / lifestyle / environmental / outcome / mood），天然保证多样性
 
+---
+
+## Two-Step vLLM 单卡 vs 双卡对比（2026-04-14）
+
+### 背景
+
+测试 Two-Step vLLM 在单卡 A100 上的表现，与双卡（tensor_parallel_size=2）对比，评估是否需要双卡。
+
+### 运行命令
+
+```bash
+# 单卡
+python Gemma4/inference_gemma4_two_step_vllm.py \
+    --model_id /vc_data/.../gemma-4-26B-A4B-it \
+    --input_file QwenFinetune/data/dpo_combined_eval_cot.jsonl \
+    --temperature 1.0 \
+    --tensor_parallel_size 1 \
+    --output_file Gemma4/results/gemma4_two_step_vllm_1gpu_full.jsonl
+```
+
+### 单卡全量结果（190 条）
+
+| 指标 | 值 |
+|------|-----|
+| Records | 190 |
+| Full scenes (5/5) | 189/190 (99.5%) |
+| Format compliance | 189/190 (99.5%) |
+| All prompts parsed | 189/190 (99.5%) |
+| **TTFT (prefill)** | **0.088s/prompt** |
+| **Step 1 (scenes)** | **15.8s** (0.08s/sample) |
+| **Step 2 (expand)** | **69.2s** (0.07s/prompt) |
+| **Total inference** | **84.9s** (0.45s/sample) |
+| Step 1 input tokens | 284,756 |
+| Step 1 output tokens | 16,974 |
+| Step 2 input tokens | 1,381,681 |
+| Step 2 output tokens | 56,865 |
+| Total output tokens | 73,839 |
+| **Decode throughput** | **869.5 tok/s** |
+
+### 单卡 vs 双卡 vs Transformers 全对比
+
+| 指标 | Transformers (1×A100) | vLLM (1×A100) | vLLM (2×A100) |
+|------|----------------------|---------------|---------------|
+| **总耗时** | ~4028s (~67min) | **84.9s (~1.4min)** | **68.8s (~1.1min)** |
+| **每条记录** | 21.2s | **0.45s** | **0.36s** |
+| Format compliance | 100% (4条) | 99.5% (190条) | 100% (190条) |
+| Decode throughput | 30.5 tok/s | **869.5 tok/s** | **1,075 tok/s** |
+| TTFT | 0.02s | 0.088s | 0.052s |
+| GPU 资源 | 1×A100 | 1×A100 | 2×A100 |
+
+### 分析
+
+1. **单卡完全可行**：26B BF16 (~52GB) 在 A100 80GB 上加载无问题，84.9s 跑完 190 条
+2. **双卡仅快 19%**（84.9s → 68.8s）：TP=2 的加速不显著，瓶颈在 decode 而非 prefill
+3. **单卡性价比更高**：省一张 A100，速度仅慢 16s（1.4min vs 1.1min）
+4. **单卡 throughput 仍达 869.5 tok/s**：相比 Transformers 的 30.5 tok/s 仍有 ~28x 加速
+5. **1 条 scene 解析失败**（99.5% vs 100%）：单卡略有差异，可能是随机采样导致，非系统性问题
+6. **建议**：日常实验用单卡即可，大批量或低延迟要求时用双卡
+
