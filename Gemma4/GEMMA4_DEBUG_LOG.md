@@ -2147,7 +2147,10 @@ preprocess(data) → oaas_wrapper.run(step1) → build_step2_prompts() → oaas_
 #### 前置条件
 - SSH 到 A6000 机器: `ssh jinjinchen@BR1T45-S1-17`
 - 确认 Docker + NVIDIA Container Toolkit 已安装: `docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi`
-- 模型权重已上传到 Gen1/Gen2 并下载到本地路径，例如 `/data/models/gemma4/`
+
+**A6000 机器路径:**
+- 模型权重: `/home/jinjinchen/data/gemma-4-26B-A4B-it-AWQ-4bit/`
+- 代码仓库: `/home/jinjinchen/ms-image-quality-filters-aether-module-main/`
 
 #### Step 1: 准备 Docker 镜像
 
@@ -2163,12 +2166,10 @@ SOURCE_BRANCH=main ./pipeline/build_vllm_image.sh
 #### Step 2: 启动容器内 HTTP 服务
 
 ```bash
-# 将 Gemma4Deploy 代码复制到 /Model 目录下
-# 模型权重挂载到 /Model/model/ 目录
 docker run -it --rm --gpus all \
   -p 8888:8888 \
-  -v /path/to/Gemma4Deploy:/Model \
-  -v /path/to/gemma4-weights:/Model/model \
+  -v /home/jinjinchen/ms-image-quality-filters-aether-module-main/Gemma4Deploy:/Model \
+  -v /home/jinjinchen/data/gemma-4-26B-A4B-it-AWQ-4bit:/Model/model \
   -e _ModelPath_=/dlis_model/run.sh \
   -e _ListeningPort_=8888 \
   -e EnableOaas=true \
@@ -2179,8 +2180,8 @@ docker run -it --rm --gpus all \
 ```
 
 **说明:**
-- `-v /path/to/Gemma4Deploy:/Model` — 挂载你的 `dlis_inter.py` 和 `model.py`
-- `-v /path/to/gemma4-weights:/Model/model` — 挂载 Gemma4 模型权重 (需包含 `config.json`, `tokenizer.json`, `*.safetensors` 等)
+- `-v .../Gemma4Deploy:/Model` — 挂载 `dlis_inter.py` 和 `model.py` 到容器 `/Model`
+- `-v .../gemma-4-26B-A4B-it-AWQ-4bit:/Model/model` — 挂载 AWQ 量化权重到容器 `/Model/model`
 - `_ListeningPort_=8888` — HTTP 服务端口
 - `EnableOaas=true` — 启用 OaaS vLLM 引擎
 
