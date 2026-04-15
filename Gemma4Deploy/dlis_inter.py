@@ -168,6 +168,9 @@ class PreAndPostProcessor:
         meta = metadata[0] if isinstance(metadata, list) else metadata
         user_message = meta.get('user_message', '')
 
+        # Strip thinking output before parsing
+        step1_text = self._strip_thinking(step1_text)
+
         # Append closing tag if stopped by stop string
         if not step1_text.rstrip().endswith("</Scene5>"):
             step1_text = step1_text + "</Scene5>"
@@ -273,8 +276,19 @@ class PreAndPostProcessor:
         return self._format_gemma_chat(messages)
 
     @staticmethod
+    def _strip_thinking(text: str) -> str:
+        """Remove Gemma4 thinking mode output before the actual content.
+        Handles both 'thought\\n...' prefix and '<think>...</think>' blocks."""
+        # Remove <think>...</think> blocks
+        text = re.sub(r"<think>[\s\S]*?</think>\s*", "", text)
+        # Remove bare 'thought\n' prefix (Gemma4 sometimes outputs this)
+        text = re.sub(r"^thought\s*\n", "", text)
+        return text
+
+    @staticmethod
     def _parse_scenes(text: str) -> List[str]:
         """Extract <Scene1>...<Scene5> from Step 1 output."""
+        text = PreAndPostProcessor._strip_thinking(text)
         scenes = []
         for i in range(1, 6):
             m = re.search(rf"<Scene{i}>(.*?)</Scene{i}>", text, re.DOTALL)
@@ -285,6 +299,7 @@ class PreAndPostProcessor:
     @staticmethod
     def _parse_single_prompt(text: str) -> str:
         """Extract <Prompt>...</Prompt> from Step 2 output."""
+        text = PreAndPostProcessor._strip_thinking(text)
         m = re.search(r"<Prompt>(.*?)</Prompt>", text, re.DOTALL)
         return m.group(1).strip() if m else text.strip()
 

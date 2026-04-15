@@ -200,6 +200,50 @@ def test_lp_truncation():
     print("\n  PASSED\n")
 
 
+def test_thinking_mode_output():
+    """测试 Gemma4 thinking 模式输出的处理"""
+    print("=" * 60)
+    print("测试 6: Thinking 模式输出过滤")
+    print("=" * 60)
+
+    processor = PreAndPostProcessor()
+
+    input_data = {"landing_page_content": "Test", "num_prompts": 5}
+    (_, metadata) = processor.preprocess(input_data)
+
+    # 模拟 Step 1 输出带 thinking 前缀
+    step1_with_thinking = (
+        "thought\n"
+        "<Scene1>Close-up of hiking boots on rocky trail</Scene1>\n"
+        "<Scene2>Woman smiling while adjusting backpack</Scene2>\n"
+        "<Scene3>Camping gear beside a forest stream</Scene3>\n"
+        "<Scene4>Hiker reaching peak with valley view</Scene4>\n"
+        "<Scene5>Golden hour light through pine canopy</Scene5>"
+    )
+
+    (step2_prompts, step2_meta) = processor.build_step2_prompts([step1_with_thinking], metadata)
+    assert len(step2_meta[0]["scenes"]) == 5, f"should parse 5 scenes, got {len(step2_meta[0]['scenes'])}"
+    print(f"  [OK] Step 1 thinking 前缀正确过滤, 解析出 {len(step2_meta[0]['scenes'])} 个 scenes")
+
+    # 模拟 Step 2 输出带 thinking 前缀
+    step2_with_thinking = [
+        "thought\n<Prompt>Good prompt one without thinking noise</Prompt>",
+        "<think>Let me think about this scene...</think>\n<Prompt>Good prompt two after think block</Prompt>",
+        "thought\n- analysis line 1\n- analysis line 2\n<Prompt>Good prompt three</Prompt>",
+        "<Prompt>Good prompt four no thinking</Prompt>",
+        "thought\n<Prompt>Good prompt five</Prompt>",
+    ]
+
+    result = processor.postprocess(step2_with_thinking, step2_meta)
+    assert result["Status"] == "Success"
+    for i, p in enumerate(result["generated_prompts"]):
+        assert "thought" not in p.lower(), f"Prompt {i+1} should not contain 'thought': {p[:50]}"
+        assert "<think>" not in p, f"Prompt {i+1} should not contain '<think>'"
+    print(f"  [OK] Step 2 thinking 内容正确过滤")
+    print(f"  [OK] 5 个 prompts 均不含 thinking 内容")
+    print("\n  PASSED\n")
+
+
 if __name__ == "__main__":
     print("\nGemma4 DLIS 本地验证\n")
 
@@ -208,6 +252,7 @@ if __name__ == "__main__":
     test_partial_step2()
     test_string_input()
     test_lp_truncation()
+    test_thinking_mode_output()
 
     print("=" * 60)
     print("全部测试通过!")
