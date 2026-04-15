@@ -63,10 +63,21 @@ def extract_raw_output(record: dict) -> tuple[str, list[str], dict]:
     """
     Normalise a record to (raw_output, generated_prompts, lp_fields).
 
-    Supports two formats:
+    Supports three formats:
       - inference.py output: keys "raw_output", "generated_prompts", "lp_fields"
       - swift infer output:  keys "response" (and optionally "messages" for lp_fields)
+      - benchmark_speed.py output: key "output_text" (raw model output)
     """
+    # benchmark_speed.py format: output_text contains raw model output
+    if "output_text" in record and "raw_output" not in record and "response" not in record:
+        raw = record["output_text"]
+        prompts = []
+        for i in range(1, 6):
+            m = re.search(rf"<Prompt{i}>(.*?)</Prompt{i}>", raw, re.DOTALL)
+            if m:
+                prompts.append(m.group(1).strip())
+        return raw, prompts, {}
+
     if "raw_output" in record:
         raw = record.get("raw_output", "")
         prompts = record.get("generated_prompts", [])
@@ -159,10 +170,12 @@ def check_cot_compliance(raw_output: str) -> dict:
 
 
 def check_format_compliance(raw_output: str) -> dict:
-    """Check that the model output contains all 5 <PromptN>...</PromptN> tags."""
+    """Check that the model output contains all 5 <PromptN>...</PromptN> tags,
+    each within 150 words, and all 5 prompts are distinct."""
     results = {}
     all_present = True
     word_counts = []
+    prompt_texts = []
 
     for i in range(1, 6):
         pattern = rf"<Prompt{i}>(.*?)</Prompt{i}>"
@@ -171,13 +184,20 @@ def check_format_compliance(raw_output: str) -> dict:
             content = match.group(1).strip()
             wc = len(content.split())
             word_counts.append(wc)
+            prompt_texts.append(content.lower())
             results[f"prompt_{i}"] = {"present": True, "word_count": wc, "within_150": wc <= 150}
         else:
             results[f"prompt_{i}"] = {"present": False, "word_count": 0, "within_150": False}
             all_present = False
 
+    # Check for duplicate prompts (exact match after lowercasing)
+    unique_prompts = set(prompt_texts)
+    all_unique = len(unique_prompts) == len(prompt_texts) and len(prompt_texts) == 5
+
     return {
         "all_tags_present": all_present,
+        "all_unique": all_unique,
+        "all_compliant": all_present and all_unique and all(wc <= 150 for wc in word_counts),
         "prompts_within_150_words": sum(1 for wc in word_counts if wc <= 150),
         "avg_word_count": sum(word_counts) / len(word_counts) if word_counts else 0,
         "detail": results,
@@ -535,6 +555,8 @@ def evaluate_file(
         "total_samples": n,
         "format": {
             "all_5_tags_present_rate": sum(f["all_tags_present"] for f in format_scores) / n,
+            "all_unique_rate": sum(f["all_unique"] for f in format_scores) / n,
+            "fully_compliant_rate": sum(f["all_compliant"] for f in format_scores) / n,
             "avg_prompts_within_150_words": sum(f["prompts_within_150_words"] for f in format_scores) / n,
             "avg_word_count": sum(f["avg_word_count"] for f in format_scores) / n,
         },
@@ -585,6 +607,8 @@ def print_report(report: dict) -> None:
     print("\n[Format Compliance]")
     fmt = report["format"]
     print(f"  All 5 tags present:        {fmt['all_5_tags_present_rate']:.1%}")
+    print(f"  All 5 prompts unique:      {fmt['all_unique_rate']:.1%}")
+    print(f"  Fully compliant:           {fmt['fully_compliant_rate']:.1%}")
     print(f"  Prompts within 150 words:  {fmt['avg_prompts_within_150_words']:.1f} / 5")
     print(f"  Avg word count per prompt: {fmt['avg_word_count']:.1f}")
 

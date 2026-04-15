@@ -11,11 +11,12 @@
 # If no checkpoint_dir is given, ADAPTER_PATH below is used (best checkpoint from training log).
 
 MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-30B-A3B"
-# NOTE: training log shows best_model_checkpoint = checkpoint-5, use that by default
-ADAPTER_PATH="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_dpo_lora_cot_refine/v3-20260320-155846/checkpoint-50}"
+# NOTE: training log shows best_model_checkpoint = checkpoint-10 (v11, 1-epoch run)
+ADAPTER_PATH="${1:-/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_dpo_lora_cot_refine/v11-20260405-094235/checkpoint-10}"
 MERGED_MODEL_PATH="${ADAPTER_PATH}/merged_model"
-DATA_DIR="./data"
-EVAL_DATA="${DATA_DIR}/dpo_refine_eval_cot.jsonl"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DATA_DIR="${SCRIPT_DIR}/data"
+EVAL_DATA="${DATA_DIR}/dpo_combined_eval_cot.jsonl"
 RESULTS_DIR="${ADAPTER_PATH}/eval_results"
 RESULT_FILE="${RESULTS_DIR}/eval_swift_output.jsonl"
 REPORT_FILE="${RESULTS_DIR}/eval_report.json"
@@ -36,7 +37,8 @@ if [ -d "${MERGED_MODEL_PATH}" ]; then
     echo "[INFO] Merged model already exists at ${MERGED_MODEL_PATH}, skipping merge."
 else
     echo "[INFO] Merging DPO LoRA adapter into base model ..."
-    /home/aiscuser/.conda/envs/vllm_infer/bin/python3.10 -m swift.cli.export \
+    # Use swift_train env for merge (vllm_infer has autoawq/transformers conflict)
+    /home/aiscuser/.conda/envs/swift_train/bin/python3.10 -m swift.cli.export \
         --model        "${MODEL_PATH}" \
         --adapters     "${ADAPTER_PATH}" \
         --merge_lora   true \
@@ -55,6 +57,7 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
     --model                        "${MERGED_MODEL_PATH}" \
     --val_dataset                  "${EVAL_DATA}" \
     --max_length                   8192 \
+    --max_new_tokens               4096 \
     --infer_backend                vllm \
     --max_batch_size               32 \
     --vllm_tensor_parallel_size    8 \

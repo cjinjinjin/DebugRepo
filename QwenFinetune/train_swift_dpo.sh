@@ -2,7 +2,8 @@
 
 SFT_ADAPTER="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot_8192_v2/v0-20260319-083851/checkpoint-50"
 MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-30B-A3B"
-DATA_DIR="./data"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DATA_DIR="${SCRIPT_DIR}/data"
 OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_dpo_lora_cot_refine"
 
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
@@ -16,12 +17,12 @@ swift rlhf \
     --rlhf_type     dpo \
     --model         ${MODEL_PATH} \
     --adapters      ${SFT_ADAPTER} \
-    --dataset       ${DATA_DIR}/dpo_refine_train_cot.jsonl \
-    --val_dataset   ${DATA_DIR}/dpo_refine_eval_cot.jsonl \
-    --train_type    lora \
+    --dataset       ${DATA_DIR}/dpo_combined_train_cot.jsonl \
+    --val_dataset   ${DATA_DIR}/dpo_combined_eval_cot.jsonl \
+    --tuner_type    lora \
     --lora_rank     64 \
     --lora_alpha    128 \
-    --num_train_epochs            50 \
+    --num_train_epochs            1 \
     --per_device_train_batch_size 1 \
     --gradient_accumulation_steps 8 \
     --learning_rate               5e-5 \
@@ -32,7 +33,7 @@ swift rlhf \
     --bf16                        true \
     --gradient_checkpointing      true \
     --deepspeed                   ./ds_zero3.json \
-    --save_steps                  5 \
+    --save_steps                  1 \
     --eval_steps                  5 \
-    --logging_steps               5 \
+    --logging_steps               1 \
     --beta                        0.1

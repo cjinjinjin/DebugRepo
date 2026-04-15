@@ -1,0 +1,18 @@
+{
+  "total_pairs": 1880,
+  "train": 1698,
+  "eval": 182,
+  "skipped_incomplete": 0,
+  "reward_violations": 619,
+  "corruption_type_dist": {
+    "bloated_think": 195,
+    "copy_paste_prompts": 226,
+    "drop_all_prompts": 224,
+    "drop_one_prompt": 185,
+    "drop_two_prompts": 216,
+    "high_repetition": 213,
+    "no_think": 214,
+    "overly_long_prompt": 213,
+    "unclosed_think": 194
+  }
+}

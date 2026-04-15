@@ -78,9 +78,9 @@ LOGGING_STEPS="${LOGGING_STEPS:-5}"
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0,1,2,3,4,5,6,7}"
 export NPROC_PER_NODE="${NPROC_PER_NODE:-8}"
-export NCCL_TIMEOUT="${NCCL_TIMEOUT:-7200}"
 export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
-export TORCH_NCCL_BLOCKING_WAIT="${TORCH_NCCL_BLOCKING_WAIT:-1}"
+# PyTorch NCCL watchdog timeout — generation on 30B MoE can take 10+ min per rank
+export TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC="${TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC:-7200}"
 export TORCH_NCCL_ASYNC_ERROR_HANDLING="${TORCH_NCCL_ASYNC_ERROR_HANDLING:-1}"
 
 echo "GRPO_PRESET=${GRPO_PRESET}"
@@ -114,8 +114,13 @@ cmd=(
     --top_k 50
     --temperature 0.7
     --reward_funcs format_quality
-    --external_plugins "${REWARD_PLUGIN}"
+    --external_plugins "${REWARD_PLUGIN}" "${SCRIPT_DIR}/patch_colocate_rollout.py" ${EXTRA_PLUGINS:-}
+    --ddp_timeout 7200
 )
+
+if [[ -n "${EXTRA_CALLBACKS:-}" ]]; then
+    cmd+=(--callbacks ${EXTRA_CALLBACKS})
+fi
 
 if [[ -n "${DEEPSPEED_CONFIG}" ]]; then
     cmd+=(--deepspeed "${DEEPSPEED_CONFIG}")
@@ -157,7 +162,17 @@ if [[ "${USE_VLLM}" == "true" ]]; then
         if [[ -n "${VLLM_SERVER_PORT:-}" ]]; then
             cmd+=(--vllm_server_port "${VLLM_SERVER_PORT}")
         fi
+        if [[ -n "${VLLM_SERVER_TIMEOUT:-}" ]]; then
+            cmd+=(--vllm_server_timeout "${VLLM_SERVER_TIMEOUT}")
+        fi
     fi
+else
+    cmd+=(--use_vllm false)
+    # Purge ALL vllm env vars so the vllm library does not self-initialize
+    echo "[debug] Purging VLLM_* env vars (use_vllm=false) ..."
+    while IFS='=' read -r key _; do
+        [[ "${key}" == VLLM_* ]] && unset "${key}"
+    done < <(env)
 fi
 
 # ---------------------------------------------------------------------------
@@ -203,5 +218,9 @@ try:
 except Exception as e:
     print(f"[preflight] skipped: {e}", file=sys.stderr)
 PYEOF
+
+echo "[debug] Full swift command:"
+echo "${cmd[@]}"
+echo "[debug] VLLM env vars: VLLM_MODE=${VLLM_MODE:-<unset>} VLLM_SERVER_HOST=${VLLM_SERVER_HOST:-<unset>} VLLM_SERVER_PORT=${VLLM_SERVER_PORT:-<unset>} VLLM_SERVER_BASE_URL=${VLLM_SERVER_BASE_URL:-<unset>}"
 
 "${cmd[@]}"

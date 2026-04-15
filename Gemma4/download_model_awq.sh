@@ -1,0 +1,69 @@
+#!/bin/bash
+# Download AWQ 4-bit quantized Gemma 4 26B-A4B-it
+# Source: https://huggingface.co/cyankiwi/gemma-4-26B-A4B-it-AWQ-4bit
+#
+# Usage:
+#   bash Gemma4/download_model_awq.sh
+#   HF_TOKEN=hf_xxx bash Gemma4/download_model_awq.sh
+set -euo pipefail
+
+REPO_ID="cyankiwi/gemma-4-26B-A4B-it-AWQ-4bit"
+MODEL_NAME="gemma-4-26B-A4B-it-AWQ-4bit"
+LOCAL_DIR="./${MODEL_NAME}"
+CKPT_ROOT="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT"
+TARGET_DIR="${CKPT_ROOT}/${MODEL_NAME}"
+
+# Check HF token
+if [ -z "${HF_TOKEN:-}" ]; then
+    echo "[ERROR] HF_TOKEN not set. Gemma 4 is a gated model."
+    echo "  export HF_TOKEN=hf_xxx"
+    echo "  bash Gemma4/download_model_awq.sh"
+    exit 1
+fi
+
+echo "============================================"
+echo "Download Gemma 4 26B-A4B-it AWQ 4-bit"
+echo "============================================"
+echo "Repo:       ${REPO_ID}"
+echo "Local dir:  ${LOCAL_DIR}"
+echo "Target dir: ${TARGET_DIR}"
+echo ""
+
+# Step 1: Download using Python snapshot_download (more stable than CLI)
+echo "[Step 1] Downloading from HuggingFace ..."
+python -c "
+from huggingface_hub import snapshot_download
+snapshot_download(
+    repo_id='${REPO_ID}',
+    repo_type='model',
+    local_dir='${LOCAL_DIR}',
+    local_dir_use_symlinks=False,
+    token='${HF_TOKEN}',
+)
+print('Done!')
+"
+
+echo "[OK] Downloaded to ${LOCAL_DIR}"
+
+# Step 2: Move to shared storage
+if [ ! -d "${CKPT_ROOT}" ]; then
+    echo "[WARN] ${CKPT_ROOT} not found. Keeping files in ${LOCAL_DIR}"
+    echo "Done! Model path: ${LOCAL_DIR}"
+    exit 0
+fi
+
+if [ -d "${TARGET_DIR}" ]; then
+    echo "[WARN] ${TARGET_DIR} already exists. Skipping move."
+    echo "       Delete it first if you want to re-download."
+else
+    echo "[Step 2] Copying to ${TARGET_DIR} ..."
+    cp -r "${LOCAL_DIR}" "${TARGET_DIR}"
+    echo "[OK] Copied to ${TARGET_DIR}"
+    echo "[INFO] You can remove the local copy: rm -rf ${LOCAL_DIR}"
+fi
+
+echo ""
+echo "============================================"
+echo "Done! Model path for inference:"
+echo "  ${TARGET_DIR}"
+echo "============================================"

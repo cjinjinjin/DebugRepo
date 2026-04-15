@@ -1,7 +1,8 @@
 #!/bin/bash
 
 MODEL_PATH="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/pretrained_models/Qwen3-30B-A3B"
-DATA_DIR="./data"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DATA_DIR="${SCRIPT_DIR}/data"
 OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT/qwen3_sft_lora_cot_8192_v2"
 
 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
@@ -15,7 +16,7 @@ swift sft \
     --model        ${MODEL_PATH} \
     --dataset      ${DATA_DIR}/sft_train_cot.jsonl \
     --val_dataset  ${DATA_DIR}/sft_eval_cot.jsonl \
-    --train_type   lora \
+    --tuner_type   lora \
     --lora_rank    64 \
     --lora_alpha   128 \
     --num_train_epochs            10 \

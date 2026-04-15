@@ -3,7 +3,7 @@
 #
 # Creates two envs:
 #   vllm_infer  — for batch inference  (torch 2.5.1 + vllm 0.8.5 + ms-swift)
-#   swift_train — for LoRA fine-tuning (torch 2.6.0 + deepspeed + ms-swift)
+#   swift_train — for GRPO/LoRA training (torch 2.10.0+cu126 + vllm 0.19.0 + deepspeed + ms-swift)
 #
 # Usage:
 #   bash setup_envs.sh              # setup both envs
@@ -66,6 +66,9 @@ setup_vllm_infer() {
     echo "[INFO] Installing vLLM 0.8.5 (pinned after ms-swift to avoid override) ..."
     ${PIP} install "vllm==0.8.5"
 
+    echo "[INFO] Installing outlines for constrained decoding ..."
+    ${PIP} install outlines
+
     echo "[INFO] Verifying ..."
     ${CONDA_ENVS_ROOT}/${ENV}/bin/python3.10 -c \
         "import torch, vllm, swift; print('torch:', torch.__version__, '| vllm:', vllm.__version__, '| swift:', swift.__version__)"
@@ -76,34 +79,44 @@ setup_vllm_infer() {
 setup_swift_train() {
     local ENV="swift_train"
     local PIP; PIP=$(pip_for "${ENV}")
+    local PYTHON="${CONDA_ENVS_ROOT}/${ENV}/bin/python3.10"
 
     echo ""
     echo "============================================"
     echo "Setting up: ${ENV}"
-    echo "  torch 2.6.0 (cu124) | deepspeed | ms-swift 4.0.1 | vllm (latest)"
+    echo "  torch 2.10.0 (cu126) | vllm 0.19.0 | deepspeed | ms-swift 4.1.0.dev0 (GitHub) | trl 0.28.0"
     echo "============================================"
 
     conda create -y -n "${ENV}" python=3.10
 
-    echo "[INFO] Installing PyTorch 2.6.0 (cu124) ..."
-    ${PIP} install torch==2.6.0 torchvision torchaudio \
-        --index-url https://download.pytorch.org/whl/cu124
+    echo "[INFO] Installing PyTorch 2.10.0 (cu126, compatible with CUDA driver 12080) ..."
+    ${PIP} install torch==2.10.0 torchvision torchaudio \
+        --index-url https://download.pytorch.org/whl/cu126
 
-    echo "[INFO] Installing ms-swift 4.0.1 ..."
-    ${PIP} install ms-swift==4.0.1
+    echo "[INFO] Installing ms-swift 4.1.0.dev0 from GitHub main ..."
+    ${PIP} install "git+https://github.com/modelscope/ms-swift.git"
 
     echo "[INFO] Installing DeepSpeed ..."
     ${PIP} install deepspeed
 
-    echo "[INFO] Pinning transformers ..."
-    ${PIP} install "transformers>=4.47,<5.0"
+    # Pin AFTER ms-swift to ensure consistent versions.
+    echo "[INFO] Pinning transformers + trl ..."
+    ${PIP} install "transformers==4.57.6" "trl==0.28.0"
 
-    echo "[INFO] Installing vLLM (latest) for GRPO colocate mode ..."
-    ${PIP} install vllm
+    # vllm 0.19.0: first release with the complete FusedMoE._load_w2 fix
+    # for Qwen3-30B-A3B TP>1 narrow() crash (PR #37010, merged Mar 31 2026).
+    # NOTE: v0.8.5 and v0.10.2 both crash; v0.15.1-v0.18.1 have only a
+    # partial ndim>0 guard (PR #33173) that does NOT fix dim-size-1 scales.
+    # trl 0.28.0 caps vllm<0.13.0 — install vllm LAST to override.
+    echo "[INFO] Installing vLLM 0.19.0 (Qwen3MoE FusedMoE._load_w2 TP fix) ..."
+    ${PIP} install "vllm==0.19.0"
+
+    echo "[INFO] Installing bitsandbytes for QLoRA ..."
+    ${PIP} install bitsandbytes
 
     echo "[INFO] Verifying ..."
-    ${CONDA_ENVS_ROOT}/${ENV}/bin/python3.10 -c \
-        "import torch, swift, deepspeed, vllm; print('torch:', torch.__version__, '| swift:', swift.__version__, '| deepspeed:', deepspeed.__version__, '| vllm:', vllm.__version__)"
+    ${PYTHON} -c \
+        "import torch, swift, deepspeed, trl, vllm; print('torch:', torch.__version__, '| swift:', swift.__version__, '| deepspeed:', deepspeed.__version__, '| trl:', trl.__version__, '| vllm:', vllm.__version__)"
 
     echo "[OK] ${ENV} ready."
 }

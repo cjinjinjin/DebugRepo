@@ -5,7 +5,7 @@ fi
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EXPERIMENT_NAME="grpo_stable_zero2_qlora_len4096_comp1024_gen2"
+EXPERIMENT_NAME="grpo_stable_zero2_qlora_len2048_comp512_gen2"
 export SFT_ADAPTER=""
 
 export GRPO_PRESET="stable_grpo_zero2_qlora"
@@ -15,8 +15,8 @@ export OUTPUT_DIR="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Te
 export DEEPSPEED_CONFIG="${SCRIPT_DIR}/ds_zero2.json"
 export REWARD_PLUGIN="${SCRIPT_DIR}/reward_grpo.py"
 
-export MAX_LENGTH="4096"
-export MAX_COMPLETION_LENGTH="1024"
+export MAX_LENGTH="2048"
+export MAX_COMPLETION_LENGTH="512"
 export NUM_GENERATIONS="2"
 export PER_DEVICE_TRAIN_BATCH_SIZE="1"
 export GRADIENT_ACCUMULATION_STEPS="8"
@@ -27,8 +27,15 @@ export LOGGING_STEPS="5"
 export LORA_RANK="64"
 export LORA_ALPHA="128"
 
+export USE_VLLM="false"
 export CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
 export NPROC_PER_NODE="8"
+
+# Ensure no stale vllm env vars leak into swift's arg parser
+unset VLLM_MODE
+unset VLLM_SERVER_HOST
+unset VLLM_SERVER_PORT
+unset VLLM_SERVER_BASE_URL
 
 echo "EXPERIMENT_NAME=${EXPERIMENT_NAME}"
 echo "OUTPUT_DIR=${OUTPUT_DIR}"
