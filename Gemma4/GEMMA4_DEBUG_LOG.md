@@ -2032,3 +2032,94 @@ AWQ 的显存优势不是总占用更少，而是**模型权重更小 → KV cac
 5. **GPTQ 不可用**：第三方 GPTQ 权重与 vLLM Gemma4 loader 不兼容，AWQ 是当前唯一可用的 4-bit 量化方案
 6. **推荐配置**：AWQ 4-bit + 单卡 A100 是最优方案，速度与双卡 BF16 持平，且有更大 KV cache 容量支持高并发
 
+---
+
+## DLIS 线上部署（2026-04-15）
+
+### 目标
+
+将 Gemma4 T2I Prompt Generation 模型部署到 DLIS 线上服务，使用 OaaS LLM Template。
+
+### 参考
+
+- 线上已有模型 `ImgLPRelevance6`（Qwen3-VL，多模态图文输入，Image-LP Relevance 分类任务）
+- 部署流程文档：DLIS Model Deployment Guide Using OaaS Template（ChangXu）
+- OaaS LLM Template 源码：`OaaS_LLMTemplate/`
+
+### 关键差异分析：ImgLPRelevance6 vs Gemma4
+
+| 维度 | ImgLPRelevance6 (Qwen3-VL) | Gemma4 T2I Prompt Gen |
+|------|---------------------------|----------------------|
+| 模型类型 | 多模态（图+文） | 纯文本 |
+| 输入 | 图片 + Landing Page 内容 | Landing Page 内容 + URL |
+| 输出 | Good/Fair/Bad 分类 + Score | 5 个 image generation prompts |
+| 依赖 | `qwen_vl_utils`, `PIL` | 无额外依赖 |
+| 推理方式 | 单步（每张图一次推理） | **两步**（先生成 scenes，再展开为 prompts） |
+
+### Two-Step 推理在 DLIS 框架中的实现
+
+#### 问题
+
+DLIS OaaS 框架的标准流程是 `preprocess → vLLM推理 → postprocess` 单轮调用。但 Gemma4 的 two-step 推理（`inference_gemma4_two_step_vllm.py`）需要两轮 vLLM 调用：
+1. Step 1: 生成 5 个 diverse scene concepts（短语）
+2. Step 2: 将每个 scene 展开为完整 image prompt（batch 5 个推理）
+
+#### 方案评估
+
+| 方案 | Latency | 可实现性 | 说明 |
+|------|---------|----------|------|
+| 合并为一步（单 prompt） | 最低 | 高 | 一个 system prompt 让模型在 `<think>` 中先规划 scenes 再展开 |
+| 客户端两次调用 | 高（2x round-trip） | 中 | 需要调用方配合改逻辑 |
+| **修改 model.py 支持两轮推理** | **中** | **高** | 在 model.py 中增加一轮 `oaas_wrapper.run()` 调用 |
+
+#### 最终方案：修改 model.py + dlis_inter.py 实现真正 two-step
+
+通过分析 OaaS Template 源码（`OaaS_LLMTemplate/dlis_model/model/model.py`），发现：
+- `PreAndPostProcessor()` 初始化时不传参（processor=None）
+- `oaas_wrapper.run(prompts)` 接受 prompt list，内部调用 vLLM engine batch 推理
+- 可以在 `Eval()` 中调用两次 `oaas_wrapper.run()`
+
+#### 实现的文件
+
+**`Gemma4Deploy/dlis_inter.py`** — 三个接口：
+
+```
+preprocess(data)
+  → 输入：原始请求 JSON（landing_page_content, url）
+  → 输出：Step1 prompt（生成 5 个 scene concepts）+ metadata
+
+build_step2_prompts(step1_output, metadata)
+  → 输入：Step1 生成的 scenes 文本
+  → 输出：5 个 Step2 prompts（逐个展开 scene）+ 更新后的 metadata
+
+postprocess(step2_outputs, metadata)
+  → 输入：5 个 Step2 生成文本
+  → 输出：最终结构化结果（generated_prompts, scenes, format_compliant, Status）
+```
+
+**`Gemma4Deploy/model.py`** — 修改版 OaaS model.py：
+
+```python
+# Eval() 流程
+preprocess(data) → oaas_wrapper.run(step1) → build_step2_prompts() → oaas_wrapper.run(step2) → postprocess()
+```
+
+`EvalBatch()` 同样支持 batch：所有请求的 Step1 一起 batch，所有 Step2 一起 batch，最大化 vLLM throughput。
+
+**`Gemma4Deploy/Modelfile`** — Gemma chat template 配置。
+
+#### System Prompts
+
+直接复用 `inference_gemma4_two_step_vllm.py` 的原始 system prompts：
+- Step 1（`SYSTEM_PROMPT_STEP1`）：5 种不同视角的 scene concepts（close-up / lifestyle / environmental / outcome / mood）
+- Step 2（`SYSTEM_PROMPT_STEP2`）：将 scene 展开为 30-50 words 的 detailed prompt
+
+### 下一步
+
+- [ ] 上传模型权重和配置文件到 Gen1
+- [ ] Gen1 → Gen2 数据迁移
+- [ ] Docker 镜像构建（如需自定义 template）
+- [ ] 本地 Docker 测试
+- [ ] 创建 Polaris Job
+- [ ] 构建 DLIS Service
+
