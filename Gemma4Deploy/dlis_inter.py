@@ -160,11 +160,10 @@ class PreAndPostProcessor:
             - step2_prompts: list of prompt dicts (one per scene, typically 5)
             - step2_metadata: updated metadata with scenes info
         """
-        # Handle both single string and list inputs
-        if isinstance(step1_output, list):
-            step1_text = step1_output[0] if step1_output else ""
-        else:
-            step1_text = step1_output
+        # Handle nested list from vLLM runner: [[text], [text], ...]
+        step1_text = step1_output
+        while isinstance(step1_text, list):
+            step1_text = step1_text[0] if step1_text else ""
 
         meta = metadata[0] if isinstance(metadata, list) else metadata
         user_message = meta.get('user_message', '')
@@ -218,9 +217,16 @@ class PreAndPostProcessor:
         step1_raw = meta.get('step1_raw', '')
         num_prompts = meta.get('num_prompts', 5)
 
-        # Ensure step2_outputs is a list
+        # Ensure step2_outputs is a flat list of strings
+        # vLLM runner returns [[text], [text], ...], flatten to [text, text, ...]
         if isinstance(step2_outputs, str):
             step2_outputs = [step2_outputs]
+        flat_outputs = []
+        for item in step2_outputs:
+            while isinstance(item, list):
+                item = item[0] if item else ""
+            flat_outputs.append(item)
+        step2_outputs = flat_outputs
 
         # Parse each Step 2 output
         prompts = []
