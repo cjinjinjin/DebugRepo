@@ -1,0 +1,415 @@
+import json
+import re
+import os
+import base64
+from io import BytesIO
+from typing import Any, Dict, List, Optional
+from qwen_vl_utils import process_vision_info
+from PIL import Image
+
+"""
+request format: form-data format
+{
+  "images": [
+    { "id": "img_001" },
+    { "id": "img_002" },
+    { "id": "img_003" }
+  ],
+  "landing_page_content": "Welcome to our outdoor adventure store. We offer hiking gear, camping equipment, and travel accessories for your next adventure.",
+  "thresholds": [0.85, 0.60]
+}
+
+Content-Disposition: form-data; name="image_img_001"; filename="image_img_001"
+Content-Type: application/octet-stream
+
+<binary data>
+"""
+"""
+response format:
+{
+    "Images":[{"Id":string, "Label":string}],
+    "Status":string
+}
+"""
+
+print(os.listdir("/Model"))
+
+class PreAndPostProcessor:
+    def __init__(self, processor=None):
+        """初始化预处理器
+
+        Args:
+            processor: 用于多模态处理的处理器，如果为None将跳过多模态处理
+        """
+        self.processor = processor
+
+    def preprocess(self, input_data):
+        '''
+        Input requirement: FinalUrl, ImgUrl, doc, optional Rid
+        '''
+        # 检查输入类型，如果是字符串则解析为dict
+        if isinstance(input_data, str):
+            input_data = json.loads(input_data)
+        elif not isinstance(input_data, dict):
+            raise ValueError("Input must be string or dict")
+
+        assert 'landing_page_content' in input_data, "Input data must contain landing_page_content"
+        assert 'images' in input_data and len(input_data['images']) > 0, "Input data must contain images, and at least one image."
+        assert 'images_bytes' in input_data, "Input data must contain images_bytes."
+        assert 'thresholds' in input_data and len(input_data['thresholds']) > 0, "Input data must contain at least one threshold value in 'thresholds'."
+
+        lp_content = input_data['landing_page_content']
+        images = input_data['images']
+        images_bytes = input_data['images_bytes']  # 可选：图片二进制数据，key为图片id，value为bytes
+        thresholds = input_data.get('thresholds', [])  # 可选：阈值列表
+        threshold = thresholds[0] 
+        #for imgs that send through request.body image_bytes is None
+        if len(images_bytes) == 0:
+            #get img content from images
+            for img in images:
+                img_id = img['id']
+                img_bytes = img.get('content', None)  # 从 images 中获取图片内容
+                if img_bytes is not None:
+                    if img_bytes.startswith("http"):
+                        images_bytes[img_id] = img_bytes
+                    else:
+                        images_bytes[img_id] = f"data:image/png;base64,{img_bytes}"
+                else:
+                    print(f"Warning: No image bytes found for {img_id} in images or images_bytes")
+
+        #reformat: split images into multiple entries if there are multiple images, each with the same landing_page_content
+        vllm_inputs = []
+        metas = []
+        max_image_size = int(os.getenv('MAX_IMAGE_SIZE', '640'))  # 所有图片统一限制
+        try:
+            rid = 0
+            for img in images:
+                img_id = img['id']
+                assert img_id in images_bytes, f"Image bytes for {img_id} not found in images_bytes"
+                img_bytes = images_bytes[img_id]
+                img_bytes = self.resize_image_if_needed(img_bytes, max_image_size)  # 对每张图限制 size
+                messages = self.create_messages_from_data({
+                    'landing_page_content': lp_content,
+                    'image': img_bytes,
+                })
+                vllm_input = self.prepare_multimodal_inputs(messages)
+                if vllm_input is None:
+                    print(f"Warning: Skipping image {img_id} due to failed multimodal input preparation")
+                    continue
+                vllm_inputs.append(vllm_input)
+                metas.append({'id': img_id, 'threshold': threshold})
+                rid += 1
+        except Exception as e:
+            print(f"Error in preprocessing: {str(e)}")
+
+        return (vllm_inputs, metas)
+ 
+    def postprocess(self, gen_text, meta, output=None):
+        # 兼容 meta 是 dict 或 str 两种格式
+        if isinstance(meta, dict):
+            img_id = meta['id']
+            threshold = meta.get('threshold')  # assert 保证一定存在
+        else:
+            img_id = meta
+            threshold = None  # 没有 threshold 信息时不计算 NewLabel
+        result = self.parse_result(gen_text)
+        result.update({'Id': img_id})  # 用 img_id 而不是 meta dict
+        # Extract logprobs and calculate score if output is available
+        if output is not None:
+            logprobs_data = self.extract_logprobs_from_output(output)
+            score = self.calculate_score_from_first_token(logprobs_data)
+            result['Score'] = score  # None if not available, serializable by json.dumps
+            # 根据 score 与 threshold 比较，输出 NewLabel
+            if score is not None and threshold is not None:
+                result['NewLabel'] = 'Good' if score > threshold else 'Bad'
+            else:
+                result['NewLabel'] = None
+            #return json.dumps(result, ensure_ascii=False)
+        return result
+    
+    def extract_logprobs_from_output(self, output, top_k: int = 5) -> Dict[str, Any]:
+        """
+        Extract logprobs information from vLLM output.
+
+        Args:
+            output: vLLM RequestOutput object
+            top_k: Number of top logprobs to extract per token
+
+        Returns:
+            Dictionary with logprobs information
+        """
+        logprobs_data = {
+            'tokens': [],
+            'token_logprobs': [],
+            'top_logprobs': []
+        }
+
+        if not hasattr(output, 'outputs') or len(output.outputs) == 0:
+            return logprobs_data
+
+        completion_output = output.outputs[0]
+
+        # Check if logprobs are available
+        if not hasattr(completion_output, 'logprobs') or completion_output.logprobs is None:
+            return logprobs_data
+
+        # Extract logprobs for each token
+        for token_logprobs_dict in completion_output.logprobs:
+            if token_logprobs_dict is None:
+                continue
+
+            # Get the most likely token and its logprob
+            if len(token_logprobs_dict) > 0:
+                # token_logprobs_dict is a dict: {token_id: Logprob object}
+                # Sort by logprob (descending)
+                sorted_tokens = sorted(
+                    token_logprobs_dict.items(),
+                    key=lambda x: x[1].logprob if hasattr(x[1], 'logprob') else x[1],
+                    reverse=True
+                )[:top_k]
+
+                # Most likely token (first in sorted list)
+                if sorted_tokens:
+                    top_token_id, top_logprob_obj = sorted_tokens[0]
+
+                    # Extract token string
+                    if hasattr(top_logprob_obj, 'decoded_token'):
+                        token_str = top_logprob_obj.decoded_token
+                    else:
+                        token_str = str(top_token_id)
+
+                    # Extract logprob value
+                    if hasattr(top_logprob_obj, 'logprob'):
+                        token_logprob = top_logprob_obj.logprob
+                    else:
+                        token_logprob = float(top_logprob_obj)
+
+                    logprobs_data['tokens'].append(token_str)
+                    logprobs_data['token_logprobs'].append(token_logprob)
+
+                    # Extract top-k alternatives
+                    top_k_dict = {}
+                    for token_id, logprob_obj in sorted_tokens:
+                        if hasattr(logprob_obj, 'decoded_token'):
+                            alt_token = logprob_obj.decoded_token
+                        else:
+                            alt_token = str(token_id)
+
+                        if hasattr(logprob_obj, 'logprob'):
+                            alt_logprob = logprob_obj.logprob
+                        else:
+                            alt_logprob = float(logprob_obj)
+
+                        top_k_dict[alt_token] = alt_logprob
+
+                    logprobs_data['top_logprobs'].append(top_k_dict)
+
+        return logprobs_data
+
+
+    def calculate_score_from_first_token(self, logprobs_data: Dict[str, Any]) -> Optional[float]:
+        """
+        Calculate Good vs Bad score from the first token's logprobs.
+        Score = P(Good) - P(Bad)
+
+        Args:
+            logprobs_data: Extracted logprobs data
+
+        Returns:
+            Score (Good - Bad), or None if not available
+        """
+        if not logprobs_data['top_logprobs'] or len(logprobs_data['top_logprobs']) == 0:
+            return None
+
+        first_token_logprobs = logprobs_data['top_logprobs'][0]
+
+        # Get logprobs for 'Good' and 'Bad' (case-insensitive)
+        good_logprob = None
+        fair_logprob = None
+        bad_logprob = None
+
+        for token, logprob in first_token_logprobs.items():
+            token_lower = token.strip().lower()
+            if token_lower == 'good':
+                good_logprob = logprob
+            elif token_lower == 'fair':
+                fair_logprob = logprob
+            elif token_lower == 'bad':
+                bad_logprob = logprob
+
+        #If both 'Good' and 'Fair' found, use the higher of the two as the "good" logprob
+        if good_logprob is not None and fair_logprob is not None:
+            good_logprob = max(good_logprob, fair_logprob)
+        if good_logprob is None and fair_logprob is not None:
+            good_logprob = fair_logprob
+
+        # If both found, calculate score
+        if good_logprob is not None and bad_logprob is not None:
+            return good_logprob - bad_logprob
+
+        # If only one found, use -100 as the default for the missing one
+        if good_logprob is not None:
+            return good_logprob - (-100.0)
+        if bad_logprob is not None:
+            return (-100.0) - bad_logprob
+
+        return None    
+    def parse_result(self, output_text: str) -> Dict[str, str]:
+        """
+        Parse the model output to extract Think and Result tags.
+        If no tags are found, treat the entire output as the result (for finetuned models).
+        
+        Args:
+            output_text: Raw output from the model
+            
+        Returns:
+            Dictionary with 'think' and 'result' keys
+        """
+        result = {
+            'Label': ''
+        }
+    
+        # Extract content within <Think> tags
+        think_match = re.search(r'<Think>(.*?)</Think>', output_text, re.DOTALL | re.IGNORECASE)
+        #if think_match:
+        #    result['think'] = think_match.group(1).strip()
+        
+        # Extract content within <Result> tags
+        result_match = re.search(r'<Result>(.*?)</Result>', output_text, re.DOTALL | re.IGNORECASE)
+        if result_match:
+            result['Label'] = result_match.group(1).strip()
+        else:
+            # If no Result tag found, check if there are no tags at all
+            # In that case, treat the entire output as the result (for finetuned models)
+            if not think_match:
+                result['Label'] = output_text.strip()
+        return result
+    
+    def resize_image_if_needed(self, image_input, max_image_size: int = 640):
+        """
+        如果图片尺寸超过 max_image_size，则按比例缩放。
+        支持 URL(http)、base64 data URI、bytes 三种格式。
+        返回原始格式或 base64 data URI 字符串。
+        """
+        try:
+            if isinstance(image_input, str) and image_input.startswith("http"):
+                # URL 格式不做 resize，直接返回
+                return image_input
+            elif isinstance(image_input, str) and image_input.startswith("data:image"):
+                # base64 data URI
+                header, b64data = image_input.split(",", 1)
+                img_bytes_raw = base64.b64decode(b64data)
+                img = Image.open(BytesIO(img_bytes_raw))
+            elif isinstance(image_input, bytes):
+                img = Image.open(BytesIO(image_input))
+            else:
+                return image_input
+
+            width, height = img.size
+            if width <= max_image_size and height <= max_image_size:
+                return image_input  # 不需要 resize
+
+            scale = max_image_size / max(width, height)
+            new_width = int(width * scale)
+            new_height = int(height * scale)
+            img_format = img.format if img.format else "PNG"
+            img = img.resize((new_width, new_height), Image.LANCZOS)
+            
+
+            buffer = BytesIO()
+            img.save(buffer, format=img_format)
+            b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+            return f"data:image/{img_format.lower()};base64,{b64}"
+
+        except Exception as e:
+            print(f"Warning: Failed to resize image - {str(e)}")
+            return image_input  # 失败时返回原始
+
+    def create_messages_from_data(self, data: Dict) -> List[Dict]:
+        """
+        Args:
+            data: 包含 prompt 和 multi_modal_data 的字典，支持两种格式:
+                 1. 通用格式: {"prompt": "text", "multi_modal_data": {"images": [...]}}
+                 2. TSV格式: {"prompt_template": "template", "FinalUrl": "url", "ImgUrl": "img", "doc": "text"}
+
+        Returns:
+            vLLM 格式的消息列表
+        """
+        prompt_template = """
+            Please evaluate the relevance between an image and a URL landing page (LP). Answer with only Good, Fair, or Bad.
+            LP: {doc}
+            Output:
+        """ 
+        max_doc_length = int(os.getenv('MAX_DOC_LENGTH', '5000'))
+        doc = data['landing_page_content']
+        if len(doc) > max_doc_length:
+            doc = doc[:max_doc_length] + '... [truncated]'
+        text_prompt = prompt_template.format(
+                doc=doc
+            )
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "image": data['image'],
+                    },
+                    {
+                        "type": "text",
+                        "text": text_prompt
+                    },
+                ],
+            }
+        ]
+        return messages
+    
+    def prepare_multimodal_inputs(self, messages: List[Dict]) -> Optional[Dict[str, Any]]:
+        """
+        准备多模态输入 (基于参考文件的 prepare_inputs_for_vllm)
+
+        Args:
+            messages: 消息列表，包含文本和图像内容
+
+        Returns:
+            包含 prompt 和 multi_modal_data 的字典
+        """
+        try:
+            # 如果没有processor，返回简单的prompt
+            if self.processor is None:
+                print("Warning: No processor available, returning simple prompt")
+                return {
+                    'prompt': str(messages),
+                    'multi_modal_data': {}
+                }
+
+            # 应用聊天模板
+            text = self.processor.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True
+            )
+
+            # 处理视觉信息 (需要 qwen_vl_utils 0.0.14+)
+            image_inputs, video_inputs, video_kwargs = process_vision_info(
+                messages,
+                image_patch_size=self.processor.image_processor.patch_size,
+                return_video_kwargs=True,
+                return_video_metadata=True
+            )
+
+            # 构建多模态数据
+            mm_data = {}
+            if image_inputs is not None:
+                mm_data['image'] = image_inputs
+            if video_inputs is not None:
+                mm_data['video'] = video_inputs
+
+            return {
+                'prompt': text,
+                'multi_modal_data': mm_data,
+                'mm_processor_kwargs': video_kwargs
+            }
+        except Exception as e:
+            print(f"Warning: Failed to prepare multimodal inputs - {str(e)}")
+            return None
