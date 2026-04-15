@@ -81,7 +81,8 @@ FORMAT_REGEX = re.compile(
     r"<Prompt5>[\s\S]+?</Prompt5>"
 )
 
-print(os.listdir("/Model"))
+if os.path.exists("/Model"):
+    print(os.listdir("/Model"))
 
 
 class PreAndPostProcessor:

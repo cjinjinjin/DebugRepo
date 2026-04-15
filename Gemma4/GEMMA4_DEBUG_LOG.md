@@ -2119,7 +2119,105 @@ preprocess(data) → oaas_wrapper.run(step1) → build_step2_prompts() → oaas_
 - [ ] 上传模型权重和配置文件到 Gen1
 - [ ] Gen1 → Gen2 数据迁移
 - [ ] Docker 镜像构建（如需自定义 template）
-- [ ] 本地 Docker 测试
+- [x] 本地 Mock 测试 (test_local.py) — 通过
+- [ ] 本地 Docker 测试 (A6000)
 - [ ] 创建 Polaris Job
 - [ ] 构建 DLIS Service
+
+---
+
+## 本地验证（2026-04-15）
+
+### Mock 测试结果
+
+`Gemma4Deploy/test_local.py` — 不依赖 GPU/vLLM，mock 引擎输出验证逻辑：
+
+| 测试 | 内容 | 结果 |
+|------|------|------|
+| 1 | 完整流程 preprocess → build_step2 → postprocess | PASS |
+| 2 | Step 1 输出截断恢复 (缺少 `</Scene5>` 闭合) | PASS |
+| 3 | Step 2 部分输出无 `<Prompt>` 标签 fallback | PASS |
+| 4 | preprocess 接受 JSON string 输入 | PASS |
+| 5 | LP content 超长截断 | PASS |
+
+修复: `dlis_inter.py` 第 84 行 `print(os.listdir("/Model"))` 加 `os.path.exists` 保护，避免非容器环境崩溃。
+
+### A6000 Docker 端到端验证步骤
+
+#### 前置条件
+- SSH 到 A6000 机器: `ssh jinjinchen@BR1T45-S1-17`
+- 确认 Docker + NVIDIA Container Toolkit 已安装: `docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi`
+- 模型权重已上传到 Gen1/Gen2 并下载到本地路径，例如 `/data/models/gemma4/`
+
+#### Step 1: 准备 Docker 镜像
+
+```bash
+# 方案 A: 使用已有 OaaS vLLM 镜像 (推荐)
+docker pull dlisproddockerrepo.azurecr.io/dlis/llm_framework_vllm:latest
+
+# 方案 B: 如需本地构建
+cd /path/to/OaaS_LLMTemplate
+SOURCE_BRANCH=main ./pipeline/build_vllm_image.sh
+```
+
+#### Step 2: 启动容器内 HTTP 服务
+
+```bash
+# 将 Gemma4Deploy 代码复制到 /Model 目录下
+# 模型权重挂载到 /Model/model/ 目录
+docker run -it --rm --gpus all \
+  -p 8888:8888 \
+  -v /path/to/Gemma4Deploy:/Model \
+  -v /path/to/gemma4-weights:/Model/model \
+  -e _ModelPath_=/dlis_model/run.sh \
+  -e _ListeningPort_=8888 \
+  -e EnableOaas=true \
+  -e AB_MAX_SEQ_LEN=16 \
+  -e AB_INSTANCE_GROUP_COUNT=1 \
+  dlisproddockerrepo.azurecr.io/dlis/llm_framework_vllm:latest \
+  /bin/bash -c "cd /dlis_model && ./run.sh http"
+```
+
+**说明:**
+- `-v /path/to/Gemma4Deploy:/Model` — 挂载你的 `dlis_inter.py` 和 `model.py`
+- `-v /path/to/gemma4-weights:/Model/model` — 挂载 Gemma4 模型权重 (需包含 `config.json`, `tokenizer.json`, `*.safetensors` 等)
+- `_ListeningPort_=8888` — HTTP 服务端口
+- `EnableOaas=true` — 启用 OaaS vLLM 引擎
+
+#### Step 3: 发送测试请求
+
+```bash
+# 在另一个终端
+curl -X POST http://localhost:8888/ \
+  -H "Content-Type: text/plain" \
+  -d '{
+    "landing_page_content": "Welcome to TrailMaster Outdoor Gear. Premium hiking boots, ultralight backpacks, and camping essentials for your next adventure. Free shipping on orders over $100.",
+    "url": "https://trailmaster.example.com",
+    "num_prompts": 5,
+    "max_lp_chars": 5000
+  }'
+```
+
+#### Step 4: 验证返回结果
+
+期望返回 JSON:
+```json
+{
+  "generated_prompts": ["prompt1", "prompt2", "prompt3", "prompt4", "prompt5"],
+  "scenes": ["scene1", "scene2", "scene3", "scene4", "scene5"],
+  "raw_output": "<Prompt1>...</Prompt1>\n\n<Prompt2>...</Prompt2>...",
+  "step1_raw": "<Scene1>...</Scene1>...<Scene5>...</Scene5>",
+  "format_compliant": true,
+  "Status": "Success"
+}
+```
+
+**检查清单:**
+- [ ] `Status` = `"Success"`
+- [ ] `generated_prompts` 包含 5 个非空 prompt
+- [ ] `scenes` 包含 5 个 scene concept
+- [ ] `format_compliant` = `true`
+- [ ] 每个 prompt 30-50 words
+- [ ] Latency 检查: 响应头 `UnderlyingModelLatencyInUs` 值合理 (两次 vLLM 调用)
+- [ ] 无 CUDA 错误或异常日志
 
