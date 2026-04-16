@@ -2785,3 +2785,59 @@ docker commit gemma4-dlis gemma4-dlis:v1
 - [ ] 在 A6000 上用本地构建的镜像启动服务验证
 - [ ] 验证通过后 push 分支、提交 PR
 - [ ] PR 触发 pipeline 自动构建并上传镜像到 ACR
+
+---
+
+## UHRS 人工标注对比：Gemma4 Two-Step vs One-Step（Random 200 LPs）
+
+**日期**: 2026-04-13  
+**数据来源**:
+- Two-Step: `gemma4_random200_two_step_vllm_t2i_UHRS_Task_lp_relevance_labeling_0415.tsv`
+- One-Step: `Gemma4_1Step_UHRS_Task_lp_relevance_labeling_0410.tsv`
+
+**标注规则**: 每张图 3 个 UHRS judge，取 max-vote 作为最终标签（Good/Fair/Bad）
+
+### 1. Image Level Good Rate
+
+| | Two-Step | One-Step | Diff |
+|---|---|---|---|
+| Good | 755 (76.0%) | 749 (75.3%) | +0.7pp |
+| Fair | 94 (9.5%) | 73 (7.3%) | +2.1pp |
+| Bad | 145 (14.6%) | 173 (17.4%) | -2.8pp |
+| Total | 994 | 995 | — |
+
+### 2. LP Level N/5 Good Distribution
+
+| N/5 | Two-Step (200 LPs) | One-Step (200 LPs) |
+|---|---|---|
+| 0/5 | 1 (0.5%) | 2 (1.0%) |
+| 1/5 | 4 (2.0%) | 5 (2.5%) |
+| 2/5 | 21 (10.5%) | 18 (9.0%) |
+| 3/5 | 46 (23.0%) | 49 (24.5%) |
+| 4/5 | 69 (34.5%) | 69 (34.5%) |
+| 5/5 | 59 (29.5%) | 57 (28.5%) |
+
+### 3. LP Level Cumulative Good Rate
+
+| Threshold | Two-Step | One-Step | Diff |
+|---|---|---|---|
+| >= 3/5 | 87.0% | 87.5% | -0.5pp |
+| >= 4/5 | 64.0% | 63.0% | +1.0pp |
+| >= 5/5 | 29.5% | 28.5% | +1.0pp |
+
+### 4. 不完整 LP（图片数 < 5）
+
+- **Two-Step**: LP 165, 166, 195（各 3 张图）
+- **One-Step**: LP 119（2 张图）, LP 95（3 张图）
+
+### 5. 结论
+
+Two-Step 与 One-Step 在 UHRS 人工标注质量上几乎一致：
+- Image Level Good Rate: 76.0% vs 75.3%（+0.7pp）
+- LP Level ≥4/5 Good: 64.0% vs 63.0%（+1.0pp）
+- Two-Step Bad Rate 更低: 14.6% vs 17.4%（-2.8pp）
+
+Two-Step 的优势主要体现在**推理速度**和**prompt 长度控制**：
+- 速度: 84.9s vs 122.7s（-30.8%）
+- Prompt 长度: 42 words vs 127 words（-67%）
+- 质量持平的前提下，Two-Step 是更优方案
