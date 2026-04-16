@@ -5,6 +5,7 @@ Adds a second vLLM engine call between preprocess and postprocess.
 """
 import json
 import os
+import time
 import utils
 from llm_opt.oaas_wrapper_v2 import OaasWrapper
 
@@ -41,20 +42,27 @@ class ModelImp:
     def Eval(self, data):
         data = json.loads(data)
 
+        t0 = time.time()
         # Step 1: generate scene concepts
         (step1_prompts, metadata) = self.pre_and_post_processor.preprocess(data)
         step1_prompts = [step1_prompts] if isinstance(step1_prompts, str) else step1_prompts
+        t1 = time.time()
         step1_outputs = self.oaas_wrapper.run(step1_prompts)
+        t2 = time.time()
 
         # Step 2: expand each scene into a full prompt (batch of 5)
         (step2_prompts, metadata) = self.pre_and_post_processor.build_step2_prompts(
             step1_outputs, metadata
         )
         step2_prompts = [step2_prompts] if isinstance(step2_prompts, str) else step2_prompts
+        t3 = time.time()
         step2_outputs = self.oaas_wrapper.run(step2_prompts)
+        t4 = time.time()
 
         # Final: parse and structure results
         res = self.pre_and_post_processor.postprocess(step2_outputs, metadata)
+        t5 = time.time()
+        print(f"[TIMING] preprocess={t1-t0:.3f}s  step1_infer={t2-t1:.3f}s  build_step2={t3-t2:.3f}s  step2_infer={t4-t3:.3f}s  postprocess={t5-t4:.3f}s  total={t5-t0:.3f}s")
         return res
 
     def EvalBatch(self, data_list):

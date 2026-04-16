@@ -319,5 +319,5 @@ class PreAndPostProcessor:
                     parts.append(f"<start_of_turn>user\n{content}<end_of_turn>")
             elif role == 'assistant':
                 parts.append(f"<start_of_turn>model\n{content}<end_of_turn>")
-        parts.append("<start_of_turn>model\n")
+        parts.append("<start_of_turn>model\n<|channel>thought\n<channel|>")
         return "\n".join(parts)
