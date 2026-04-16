@@ -2714,3 +2714,74 @@ cd /dlis_model && ./run.sh http
 ```bash
 docker commit gemma4-dlis gemma4-dlis:v1
 ```
+
+### DLIS 部署方案迁移：OaaS_LLMTemplate 分支方式（2026-04-16）
+
+#### 背景
+
+之前手动在容器内 patch 的方式非常脆弱：
+- 容器重启就丢失所有修改
+- `latest` 镜像版本不可控（被别人更新后 vLLM 版本变了）
+- 手动 patch 步骤多，难以复现
+
+#### 新方案
+
+基于 `OaaS_LLMTemplate` 仓库（`C:\Users\jinjinchen\OneDrive - Microsoft\OaaS_LLMTemplate`）创建分支 `jinjinchen/Gemma4-v1`，将所有自定义修改写入代码，利用仓库自带的 CI/CD pipeline 自动构建 Docker 镜像并上传。
+
+**优势**：
+- 代码变更可追踪（git 管理）
+- PR 或 merge 自动触发 `pipeline/build_vllm_image.sh` 构建镜像
+- 非 main 分支镜像 tag 格式：`YYYYMMDD-HHMM-jinjinchen-Gemma4-v1`
+- 镜像推送到 `dlisproddockerrepo.azurecr.io/dlis/llm_framework_vllm:<tag>`
+- 本地可先手动 `docker build` 测试
+
+#### 修改清单（7 个文件）
+
+| # | 文件 | 修改内容 |
+|---|------|----------|
+| 1 | `pipeline/Dockerfile_vllm_0.10.0` | `vllm==0.10.0` → `vllm==0.19.0`，添加 `transformers>=5.5.0` |
+| 2 | `llm_opt/vllm/vllm_runner.py` | (a) 删除 `num_scheduler_steps` 引擎参数 (b) `_create_sampling_params` 添加 stop tokens 支持 (c) `engine.generate()` 改为关键字参数 `sampling_params=` |
+| 3 | `llm_opt/vllm/vllm_util.py` | `VLLMConfig` dataclass 添加 `stop: list[str] \| None = None` 字段 |
+| 4 | `dlis_model/model/model.py` | 替换为 two-step 版本：`preprocess → run(step1) → build_step2 → run(step2) → postprocess` |
+| 5 | `dlis_model/model/dlis_inter.py` | **新增** — Gemma4 `PreAndPostProcessor`（系统 prompt、场景解析、thinking 关闭、嵌套 list 展开） |
+| 6 | `dlis_model/run.sh` | 注释 `unset CUDA_VISIBLE_DEVICES` → `#unset CUDA_VISIBLE_DEVICES` |
+| 7 | `requirements-vllm.txt` | 添加 `transformers>=5.5.0`、`huggingface_hub>=0.20.0` |
+
+#### 各修改对应的原始 patch 来源
+
+| 修改 | 对应的容器内 patch |
+|------|-------------------|
+| Dockerfile vLLM 0.19.0 | `docker exec gemma4-dlis pip3 install vllm==0.19.0` |
+| Dockerfile transformers | `docker exec gemma4-dlis pip3 install "transformers>=5.5.0"` |
+| 删 num_scheduler_steps | `sed -i '/num_scheduler_steps/d' /llm_opt/vllm/vllm_runner.py` |
+| 添加 stop tokens | patch `_create_sampling_params` 加 `"stop": ["</Prompt>", "</Scene5>", "<end_of_turn>"]` |
+| engine.generate 参数 | `sed -i 's/...prompt_ids)/...sampling_params=self.sampling_params)/'` |
+| 注释 unset CUDA | `sed -i 's/^unset CUDA_VISIBLE_DEVICES/#unset CUDA_VISIBLE_DEVICES/' /dlis_model/run.sh` |
+| model.py two-step | 来自 `Gemma4Deploy/model.py` |
+| dlis_inter.py | 来自 `Gemma4Deploy/dlis_inter.py`（含 thinking 关闭 + 嵌套 list 修复） |
+
+#### best_setting.json 配置（需在模型部署时放入 `<model_dir>/<model_name>_opt/` 目录）
+
+```json
+{
+    "llm_type": "vllm",
+    "model": "gemma-4-26B-A4B-it-AWQ-4bit",
+    "quantization": "awq",
+    "max_output_len": 256,
+    "temperature": 0.8,
+    "top_p": 0.95,
+    "tensor_parallel_size": 1,
+    "gpu_memory_utilization": 0.9,
+    "trust_remote_code": true,
+    "dtype": "auto",
+    "max_model_len": 8192,
+    "stop": ["</Prompt>", "</Scene5>", "<end_of_turn>"]
+}
+```
+
+#### 下一步
+
+- [ ] 本地 `docker build` 测试镜像是否能正常构建
+- [ ] 在 A6000 上用本地构建的镜像启动服务验证
+- [ ] 验证通过后 push 分支、提交 PR
+- [ ] PR 触发 pipeline 自动构建并上传镜像到 ACR
