@@ -2483,3 +2483,234 @@ export AB_ENTRYPOINT=/v2/models/gemma4/versions/1/infer
 # 9. 启动服务
 cd /dlis_model && ./run.sh http
 ```
+
+### DLIS 容器重建 Debug 记录（2026-04-15 晚）
+
+#### 背景
+
+A6000 机器 (BR1T45-S1-17) 重启后，昨天的容器（`--rm` 参数）被清除。
+重新用 `latest` 镜像启动后发现 vLLM 版本变为 0.10.0（昨天是 0.19.0），`latest` tag 可能被别人更新。
+
+#### 环境对比
+
+| 组件 | 昨天的 `latest` 容器 | 今天的 `latest` 容器 | A100 conda 环境 (gemma4-vllm) |
+|------|---------------------|---------------------|-------------------------------|
+| vLLM | 0.19.0 | 0.10.0 | 0.19.0 |
+| transformers | 5.5.x (升级后) | 5.3.0 (默认) | 5.5.3 |
+| torch | ? (cu130?) | 2.7.1+cu126 | 2.10.0+cu128 |
+| Python | 3.12 | 3.12 | 3.10 |
+
+#### A100 上的安装流程（已验证可用）
+
+```bash
+conda create -n gemma4-vllm python=3.10 -y
+conda init bash && exec bash
+conda activate gemma4-vllm
+pip install vllm                    # 自动装 torch + vllm 0.19.0
+pip install "transformers>=5.5.0"   # 升级到 5.5.3
+```
+
+最终版本：torch 2.10.0+cu128, vllm 0.19.0, transformers 5.5.3
+
+#### 尝试过的修复方案
+
+| # | 方案 | 结果 |
+|---|------|------|
+| 1 | `latest` 容器 + `pip3 install "transformers>=5.5.0"` | `rope_scaling should have a 'rope_type' key` — vLLM 0.10.0 不支持 gemma4 |
+| 2 | `latest` 容器 + `pip3 install "vllm==0.19.0" --no-deps` | `undefined symbol: _ZN3c104cuda29c10_cuda_check_implementation` — vLLM 0.19.0 (cu130) 与容器 PyTorch 2.7.1+cu126 不兼容 |
+| 3 | `20260228-0834-merge` 镜像 (vLLM 0.13.0) | 别人的容器，非 jinjinchen 创建 |
+
+#### 根本原因
+
+- vLLM PyPI wheel 是 cu130 编译的，与容器内 PyTorch cu126 的 CUDA symbols 不兼容
+- vLLM 0.10.0 太旧，不认识 gemma4 的 rope_scaling 配置
+- 需要升级 PyTorch 到 cu128/cu130 以匹配 vLLM 0.19.0，或在容器内重建完整环境
+
+#### 解决方案
+
+基于 `latest` 镜像创建持久化容器 `gemma4-dlis`（不带 `--rm`），升级核心包复现 A100 环境：
+
+```bash
+# 创建持久化容器
+docker run -d --name gemma4-dlis --runtime nvidia --gpus all \
+  -p 8886:8886 \
+  -v /home/jinjinchen/models/gemma-4-26B-A4B-it-AWQ-4bit:/Model/model \
+  dlisproddockerrepo.azurecr.io/dlis/llm_framework_vllm:latest \
+  sleep infinity
+
+# 升级核心包
+docker exec gemma4-dlis pip3 install torch==2.10.0 --index-url https://download.pytorch.org/whl/cu128
+docker exec gemma4-dlis pip3 install vllm==0.19.0 --no-deps
+docker exec gemma4-dlis pip3 install "transformers>=5.5.0"
+docker exec gemma4-dlis pip3 install -U huggingface_hub
+```
+
+最终版本：torch 2.10.0+cu128, vllm 0.19.0, transformers 5.5.3
+
+#### DLIS 代码修复（容器内 patch）
+
+**问题 1: vLLM runner 返回嵌套 list**
+
+`oaas_wrapper.run()` 返回 `[[text]]`，`dlis_inter.py` 的旧版代码只做了 `step1_output[0]`（取到的还是 list）。
+
+修复：`build_step2_prompts` 和 `postprocess` 都改为 `while isinstance(x, list)` 递归展开。
+
+**问题 2: Gemma4 thinking 模式导致输出退化**
+
+`_format_gemma_chat` fallback 模板没有关闭 thinking 模式，模型先输出大段推理分析再生成结构化内容，导致：
+- Step 1: thinking 内容里出现 `</Scene5>` 误触发 stop token
+- Step 2: 部分 prompt 出现数字/文字重复退化
+
+修复：在 `_format_gemma_chat` 末尾加上 `<|channel>thought\n<channel|>` 跳过 thinking：
+
+```python
+parts.append("<start_of_turn>model\n<|channel>thought\n<channel|>")
+```
+
+**问题 3: 缺少 stop tokens**
+
+vllm_runner 的 `SamplingParams` 没有 stop 参数，模型生成 `</Prompt>` 后继续输出直到 max_tokens，导致重复退化。
+
+修复：patch `/llm_opt/vllm/vllm_runner.py`，在 `_create_sampling_params` 中加入：
+```python
+"stop": ["</Prompt>", "</Scene5>", "<end_of_turn>"],
+```
+
+#### A6000 DLIS 性能测试结果
+
+**配置**：
+- 模型：gemma-4-26B-A4B-it-AWQ-4bit (AWQ 4-bit)
+- GPU：NVIDIA RTX A6000 (48GB)
+- best_setting.json：max_output_len=256, temperature=0.8, top_p=0.95
+- stop tokens：`</Prompt>`, `</Scene5>`, `<end_of_turn>`
+- thinking 模式：已关闭（`<|channel>thought\n<channel|>`）
+
+**单请求耗时**：
+
+| 阶段 | 耗时 |
+|------|------|
+| preprocess | 0.000s |
+| Step 1 推理 | 0.896s |
+| build_step2 | 0.001s |
+| Step 2 推理 (batch=5) | 0.818s |
+| postprocess | 0.000s |
+| **总计** | **1.715s** |
+
+**与 A100 对比**：
+
+| 指标 | A100 (80GB) | A6000 (48GB) | 倍率 |
+|------|-------------|--------------|------|
+| 单请求总耗时 | ~0.35s (warmup 后) | ~1.72s | ~5x |
+| 显存带宽 | ~2 TB/s | ~768 GB/s | 2.6x |
+
+A6000 慢于 A100 主要因为显存带宽差距（LLM decode 是 memory-bandwidth bound）。
+
+**输出质量**：5/5 prompt 格式正确，内容多样，无退化，`format_compliant=true`。
+
+#### 完整容器内启动流程（A6000 更新版）
+
+```bash
+# === 在容器内依次执行 ===
+
+# 1. 复制自定义代码
+cp /Model/model.py /dlis_model/model/model.py
+cp /Model/dlis_inter.py /dlis_model/model/dlis_inter.py
+
+# 2. 创建模型目录 symlink
+ln -s /Model/model /dlis_model/Model
+
+# 3. 创建 DLIS 验证标记
+touch /dlis_model/Model/dlis_integration_validated
+
+# 4. 创建优化目录
+mkdir -p /dlis_model/Model/gemma4_opt
+printf "llm" > /dlis_model/Model/gemma4_opt/opt_type.txt
+cat > /dlis_model/Model/gemma4_opt/best_setting.json << 'EOF'
+{
+    "llm_type": "vllm",
+    "model": "gemma-4-26B-A4B-it-AWQ-4bit",
+    "quantization": "awq",
+    "max_output_len": 256,
+    "temperature": 0.8,
+    "top_p": 0.95,
+    "tensor_parallel_size": 1,
+    "gpu_memory_utilization": 0.9,
+    "trust_remote_code": true,
+    "dtype": "auto",
+    "max_model_len": 8192
+}
+EOF
+
+# 5. Patch vllm_runner.py
+sed -i '/num_scheduler_steps/d' /llm_opt/vllm/vllm_runner.py
+python3 -c "
+with open('/llm_opt/vllm/vllm_runner.py', 'r') as f:
+    lines = f.readlines()
+new_lines = []
+for i, line in enumerate(lines):
+    if line.strip() == '),' and new_lines and new_lines[-1].strip() == '),':
+        continue
+    new_lines.append(line)
+with open('/llm_opt/vllm/vllm_runner.py', 'w') as f:
+    f.writelines(new_lines)
+"
+sed -i 's/outputs = self.engine.generate(prompts, self.sampling_params, prompt_ids)/outputs = self.engine.generate(prompts, sampling_params=self.sampling_params)/' /llm_opt/vllm/vllm_runner.py
+
+# 5b. Patch vllm_runner.py: 添加 stop tokens
+python3 -c "
+p = '/llm_opt/vllm/vllm_runner.py'
+t = open(p).read()
+old = '\"max_tokens\": self.config.max_output_len,\n        }\n\n        self.sampling_params = SamplingParams(**params)'
+new = '\"max_tokens\": self.config.max_output_len,\n            \"stop\": [\"</Prompt>\", \"</Scene5>\", \"<end_of_turn>\"],\n        }\n\n        self.sampling_params = SamplingParams(**params)'
+open(p,'w').write(t.replace(old, new))
+print('OK')
+"
+
+# 5c. Patch dlis_inter.py: 递归展开嵌套 list + 关闭 thinking
+python3 -c "
+p = '/dlis_model/model/dlis_inter.py'
+t = open(p).read()
+# 递归展开 step1_output
+old = '''        # Handle both single string and list inputs
+        if isinstance(step1_output, list):
+            step1_text = step1_output[0] if step1_output else \"\"
+        else:
+            step1_text = step1_output'''
+new = '''        # Handle nested list from vLLM runner: [[text], [text], ...]
+        step1_text = step1_output
+        while isinstance(step1_text, list):
+            step1_text = step1_text[0] if step1_text else \"\"'''
+t = t.replace(old, new)
+# 关闭 thinking 模式
+t = t.replace(
+    '<start_of_turn>model\\\n\")',
+    '<start_of_turn>model\\\n<|channel>thought\\\n<channel|>\")'
+)
+open(p,'w').write(t)
+print('OK')
+"
+
+# 6. Patch run.sh
+sed -i 's/^unset CUDA_VISIBLE_DEVICES/#unset CUDA_VISIBLE_DEVICES/' /dlis_model/run.sh
+
+# 7. 升级 transformers (容器内已通过 pip3 升级，此步可跳过)
+# python3 -m pip install "transformers>=5.5.0"
+
+# 8. 设置环境变量
+export PYTHONPATH=/:$PYTHONPATH
+export CUDA_VISIBLE_DEVICES=0
+export _ListeningPort_=8886
+export AB_MAX_SEQ_LEN=16
+export AB_INSTANCE_GROUP_COUNT=1
+export AB_ENTRYPOINT=/v2/models/gemma4/versions/1/infer
+
+# 9. 启动服务
+cd /dlis_model && ./run.sh http
+```
+
+#### 容器持久化
+
+为防止容器丢失，建议 commit 为自定义镜像：
+```bash
+docker commit gemma4-dlis gemma4-dlis:v1
+```
