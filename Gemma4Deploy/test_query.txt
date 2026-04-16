@@ -1,0 +1,1 @@
+{"landing_page_content": "Welcome to TrailMaster Outdoor Gear. Premium hiking boots, ultralight backpacks, and camping essentials for your next adventure. Free shipping on orders over $99.", "url": "https://trailmaster.example.com", "num_prompts": 5}
