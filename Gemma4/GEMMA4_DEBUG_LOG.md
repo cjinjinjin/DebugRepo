@@ -3315,5 +3315,40 @@ Fast-build 分支（`jinjinchen/Gemma4-v1-fast-build`）使用 `vllm/vllm-openai
 
 **待办**：
 - 将手动修复（symlink、config.py 注解）固化到 Dockerfile 和代码中（已提交 `bc9abfc`）
-- 触发 CI 重新构建镜像，验证完整自动化流程
+- ~~触发 CI 重新构建镜像，验证完整自动化流程~~ ✅ 已完成
 - 部署到 DLIS 进行线上验证
+
+---
+
+## 2026-04-17 Docker 镜像构建优化总结
+
+### 背景
+
+DLIS 部署 Gemma4 模型需要构建包含 vLLM 推理框架的 Docker 镜像。原方案基于 `nvidia/cuda:12.8.1-devel-ubuntu22.04` 基础镜像，从源码编译 FlashInfer AOT 内核和 DeepGEMM，构建过程极其缓慢。
+
+### 优化方案
+
+| | 旧方案 | 新方案 |
+|---|---|---|
+| **基础镜像** | `nvidia/cuda:12.8.1-devel-ubuntu22.04` | `vllm/vllm-openai:latest` |
+| **Dockerfile** | `Dockerfile_vllm_0.10.0` | `Dockerfile_vllm_fast` |
+| **构建内容** | 从源码编译 torch、vllm、FlashInfer AOT、DeepGEMM | 仅安装 `transformers==5.5.3`，创建 python symlink |
+| **构建时间** | ~2 小时 | ~8 分钟 |
+| **分支** | `jinjinchen/Gemma4-v1` | `jinjinchen/Gemma4-v1-fast-build` |
+
+### 关键改动
+
+1. **新建 `pipeline/Dockerfile_vllm_fast`**：基于 `vllm/vllm-openai:latest`，跳过所有源码编译，只做最小必要配置
+2. **修改 `pipeline/build_vllm_image.sh`**：BLOCK 2 切换到 `Dockerfile_vllm_fast`
+3. **`ENTRYPOINT []` 重置**（commit `b838ca2`）：`vllm/vllm-openai:latest` 自带 ENTRYPOINT 会拦截 DLIS 的 CMD，必须显式重置
+4. **安全修复**（commit `0145bca`）：对 CSV 日志中的用户可控 tracking 字段添加清洗，防止日志注入
+
+### 踩坑记录
+
+- **ENTRYPOINT 覆盖问题**：`vllm/vllm-openai:latest` 的 ENTRYPOINT 会将 DLIS 传入的 CMD（`./dlis_model/run.sh http`）作为 vllm CLI 参数执行，导致容器启动后跑的是 vllm serve 而非 Tornado 服务器。`docker commit` 会保留基础镜像的 ENTRYPOINT，所以必须在 Dockerfile 中显式设置 `ENTRYPOINT []`
+- **transformers 版本不兼容**：`vllm/vllm-openai:latest` 自带的 transformers 版本不识别 gemma4 架构，需要升级到 `transformers==5.5.3`
+- **python symlink 缺失**：基础镜像只有 `python3`，DLIS 框架调用 `python`，需要创建 symlink
+
+### 结论
+
+通过切换到预构建的 `vllm/vllm-openai:latest` 基础镜像，**CI 构建时间从 2 小时降低到 8 分钟**，提升约 15 倍。推理功能经本地容器验证无损。
