@@ -2990,3 +2990,67 @@ cd /dlis_model && ./run.sh offline /tmp/input.json /tmp/output.json'
 6. **CI pipeline 的 apt-get / PyPI 超时是网络问题**：重跑即可
 - Prompt 长度: 42 words vs 127 words（-67%）
 - 质量持平的前提下，Two-Step 是更优方案
+
+---
+
+## 改动记录：CI 清华源 + Kusto 日志 + 快速构建分支（2026-04-16）
+
+### 改动一：CI Pipeline 网络超时修复 + num_scheduler_steps 恢复
+
+**问题**：CI pipeline 构建镜像时频繁遇到 PyPI / apt-get 超时（SGLang、vLLM、TensorRT-LLM job 均受影响），导致构建失败。
+
+**方案**：参考同事 siwenzhu 的 PR，在 CI 中加入清华 pip 镜像源。
+
+**改动**：
+| 文件 | 修改内容 |
+|------|---------|
+| `pipeline/azure-pipelines-unified.yml` | vLLM job 添加 `PIP_INDEX_URL` 和 `UV_INDEX_URL` 环境变量，指向 `https://pypi.tuna.tsinghua.edu.cn/simple` |
+| `pipeline/build_vllm_image.sh` | `docker build` 添加 `--build-arg PIP_INDEX_URL/UV_INDEX_URL/PIP_EXTRA_INDEX_URL/UV_EXTRA_INDEX_URL` 等参数传入 Dockerfile；新增 `PIP_ARGS` 变量用于 `docker exec pip install` 命令 |
+| `pipeline/Dockerfile_vllm_0.10.0` | 添加 `ARG PIP_INDEX_URL UV_INDEX_URL` 和 `ARG PIP_EXTRA_INDEX_URL UV_EXTRA_INDEX_URL` 接收构建参数 |
+| `llm_opt/vllm/vllm_runner.py` | 恢复之前误删的 `num_scheduler_steps` 配置解析和 engine kwargs 传入（两处） |
+
+**关键教训**：
+- 清华源参数要通过 `--build-arg` 传入 Dockerfile、通过 `PIP_ARGS` 变量传给 `docker exec pip install`，不能用 `docker exec -e` 环境变量方式
+- `num_scheduler_steps` 被意外删除会影响 vLLM 调度性能，修改时要注意不要误删配置项
+
+### 改动二：Kusto 日志集成
+
+**目的**：给 Gemma4 DLIS 部署添加 Kusto 日志功能，实现生产环境请求监控。参考同事 siwenzhu 在 `users/siwenzhu/VLLM_MML_localbuild_pypi_kustoc_certificate` 分支的实现。
+
+**方案**：保持 OaasWrapper 两步推理流程不变，只加日志基础设施。
+
+**新建文件**：
+| 文件 | 说明 |
+|------|------|
+| `dlis_model/model/config.py` | Kusto 日志配置，`application_name='Gemma4PromptGen'`，EventHub namespace、证书路径等 |
+| `dlis_model/model/eventhub_sink.py` | EventHub 消息发送，使用 `CertificateCredential` 认证 |
+| `dlis_model/model/kusto_log.py` | `KustoLogHandler`：info/warn/err/perf 四个 sink，deque 缓冲 + 定时批量上传 |
+
+**修改文件**：
+| 文件 | 修改内容 |
+|------|---------|
+| `dlis_model/model/utils.py` | 添加 `get_tracking_data()` 函数，生成请求追踪字段（requestid、trackingid 等） |
+| `dlis_model/model/model.py` | 添加 `KustoLogHandler` + `BackgroundScheduler` 初始化；`Eval()` / `EvalBatch()` 中添加 tracking_data 解析和 timing 日志；`print()` → `logger.info()` |
+| `requirements-vllm.txt` | 添加 `APScheduler`、`pydantic-settings`、`azure-eventhub`、`azure-identity` |
+
+**日志架构**：
+- `BackgroundScheduler` 每 0.5s 触发 `KustoLogHandler.send()`，从 deque 批量取消息发送到 EventHub
+- 四个 EventHub topic：`appsvc_info`、`appsvc_warn`、`appsvc_err`、`appsvc_perf`
+- 每条日志携带 requestid/trackingid/sessionid/customerid + duration 等字段
+
+### 改动三：快速构建分支 `jinjinchen/Gemma4-v1-fast-build`
+
+**问题**：当前 `Dockerfile_vllm_0.10.0` 从 `nvidia/cuda:12.8.1-devel-ubuntu22.04` 开始构建，编译 FlashInfer AOT 内核和 DeepGEMM 源码，整个 CI 构建非常慢。
+
+**方案**：新建分支，使用 `vllm/vllm-openai:latest` 作为基础镜像，跳过所有编译步骤。
+
+**改动**：
+| 文件 | 修改内容 |
+|------|---------|
+| `pipeline/Dockerfile_vllm_fast`（新建） | `FROM vllm/vllm-openai:latest`，只安装 `huggingface_hub==1.6.0` |
+| `pipeline/build_vllm_image.sh` | BLOCK 2 改用 `Dockerfile_vllm_fast` 替代 `Dockerfile_vllm_0.10.0` |
+
+**注意事项**：
+- `vllm/vllm-openai:latest` 自带 vllm/torch/transformers，版本可能与之前 pin 的不同，需 CI 验证兼容性
+- FlashInfer AOT 和 DeepGEMM 被跳过，可能影响推理性能但功能可用
+- 如版本不匹配可改为 `vllm/vllm-openai:v0.19.0` 等具体 tag
