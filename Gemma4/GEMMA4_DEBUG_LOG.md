@@ -2839,5 +2839,154 @@ Two-Step 与 One-Step 在 UHRS 人工标注质量上几乎一致：
 
 Two-Step 的优势主要体现在**推理速度**和**prompt 长度控制**：
 - 速度: 84.9s vs 122.7s（-30.8%）
+
+---
+
+## 2026-04-16 Dockerfile 全量 Build 调试记录
+
+### 目标
+
+从手动 patch 容器迁移到 Dockerfile 全量 build，使 CI/CD pipeline 能自动构建可用的 DLIS 镜像。
+
+分支：`jinjinchen/Gemma4-v1`（OaaS_LLMTemplate repo）
+
+### 遇到的问题及解决方式
+
+#### 问题 1：torch ABI 不匹配 — `vllm/_C.abi3.so: undefined symbol`
+
+**现象**：容器里 `torch==2.7.0+cu126`，但 `vllm==0.19.0` 编译时用的是 `torch==2.10.0+cu128`，ABI 不兼容。
+
+**根因**：`requirements-vllm.txt` 里的 `torchvision==0.22.0` 在 `pip install -r` 时把 torch 从 2.10.0 降级到了 2.7.0（torchvision 0.22.0 依赖 torch==2.7.0）。
+
+**解决**：
+- Dockerfile 里在装 vllm 之前，先用 `--index-url cu128` 显式装 `torch==2.10.0 torchvision==0.25.0`
+- `requirements-vllm.txt` 里移除 torch、torchvision、transformers（全由 Dockerfile 处理）
+
+#### 问题 2：`torchvision::nms operator does not exist`
+
+**现象**：旧的 `torchvision==0.22.0` 残留在容器里，和新的 `torch==2.10.0` 不兼容。
+
+**解决**：卸载旧 torchvision，装 `torchvision==0.25.0 --index-url cu128`。
+
+#### 问题 3：`Gemma4VideoProcessor requires the Torchvision library`
+
+**现象**：卸载 torchvision 后 vllm 的 Gemma4 多模态处理器找不到 torchvision。
+
+**解决**：装回 `torchvision==0.25.0`（匹配 torch 2.10.0）。
+
+#### 问题 4：`DLIS integration not validated`
+
+**现象**：`RuntimeError: ⚠️ DLIS integration not validated`
+
+**根因**：`dlis_integration_validated` 文件路径错误。代码在 `oaas_wrapper_v2.py` 里检查 `os.path.join(model_folder, "dlis_integration_validated")`，实际路径应该是 `/dlis_model/Model/dlis_integration_validated`。
+
+**解决**：`touch /dlis_model/Model/dlis_integration_validated`
+
+#### 问题 5：`Unknown opt type vllm` / `Unknown opt type llm\n`
+
+**现象**：`opt_type.txt` 内容不对或有换行符。
+
+**解决**：用 `printf "llm"` 而非 `echo "llm"` 写入（避免末尾换行符）。
+
+#### 问题 6：`best_setting.json` 缺少必要字段
+
+**现象**：`Failed to create runner: 'llm_type'`
+
+**根因**：`best_setting.json` 只写了 `tensor_parallel_size` 和 `gpu_memory_utilization`，缺少 `llm_type`、`model` 等必填字段。
+
+**解决**：使用完整的 `best_setting.json`（见下方配置）。
+
+#### 问题 7：`Invalid repository ID or local directory specified: 'Model'`
+
+**现象**：不管 `best_setting.json` 里 model 字段怎么改，vllm 始终收到 `model='Model'`。
+
+**根因**：`QUANTIZATION_MAP`（`vllm_util.py`）里没有 `"awq"` 这个 key（只有 `"int4_awq"`），导致 `best_setting.json` 里的 `"quantization": "awq"` 被映射为 `None`。此时代码走 `else` 分支：`model_path = self.root_model_path = "Model"`，而 `Model/` 目录下没有 `config.json`（挂载路径不对）。
+
+**解决**：
+- 不在 `best_setting.json` 里设 `quantization` 字段（vllm 会从模型的 `config.json` 自动检测 AWQ）
+- 或者保持原有 `QUANTIZATION_MAP` 不变，让 quantization 为 None 走 else 分支
+- 关键是**模型挂载路径必须正确**：挂载到 `/Model/model`，然后软链接 `ln -s /Model/model /dlis_model/Model`，使 `/dlis_model/Model/` 直接包含 `config.json` 等模型文件
+
+#### 问题 8：模型挂载路径错误
+
+**现象**：`/dlis_model/Model/config.json` 不存在。
+
+**根因**：docker run 时挂载到了 `/dlis_model/Model/model`（多了一层），或挂载到 `/dlis_model/Model`（被 Dockerfile 里已有目录覆盖）。宿主机路径也写错了（`/home/jinjinchen/models/` → 实际在 `/home/jinjinchen/data/`）。
+
+**解决**：
+- 宿主机路径：`/home/jinjinchen/data/gemma-4-26B-A4B-it-AWQ-4bit`
+- 挂载到：`/Model/model`
+- 容器内：`ln -s /Model/model /dlis_model/Model`
+
+### 最终成功的完整测试流程
+
+```bash
+# 1. Build 镜像（A6000 上）
+cd /path/to/OaaS_LLMTemplate && git pull
+export SOURCE_BRANCH="test"
+sudo bash pipeline/build_vllm_image.sh
+
+# 2. 创建测试容器
+IMAGE_TAG="20260416-1226-test"  # 替换为实际 tag
+sudo docker run -d --name gemma4-test-v3 --runtime nvidia --gpus all \
+  -v /home/jinjinchen/data/gemma-4-26B-A4B-it-AWQ-4bit:/Model/model \
+  my-vllm-final:$IMAGE_TAG sleep infinity
+
+# 3. 配置并测试
+sudo docker exec gemma4-test-v3 bash -c '
+rm -rf /dlis_model/Model
+ln -s /Model/model /dlis_model/Model
+touch /dlis_model/Model/dlis_integration_validated
+mkdir -p /dlis_model/Model/gemma4_opt
+printf "llm" > /dlis_model/Model/gemma4_opt/opt_type.txt
+cat > /dlis_model/Model/gemma4_opt/best_setting.json << EOF
+{
+    "llm_type": "vllm",
+    "model": "gemma-4-26B-A4B-it-AWQ-4bit",
+    "max_output_len": 256,
+    "temperature": 0.8,
+    "top_p": 0.95,
+    "tensor_parallel_size": 1,
+    "gpu_memory_utilization": 0.9,
+    "trust_remote_code": true,
+    "dtype": "auto",
+    "max_model_len": 8192,
+    "stop": ["</Prompt>", "</Scene5>", "<end_of_turn>"]
+}
+EOF
+echo "{\"landing_page_content\": \"Welcome to TrailMaster.\", \"url\": \"https://example.com\", \"num_prompts\": 3, \"max_lp_chars\": 5000}" > /tmp/input.json
+cd /dlis_model && ./run.sh offline /tmp/input.json /tmp/output.json'
+```
+
+### 测试结果
+
+```
+[TIMING] preprocess=0.000s  step1_infer=2.476s  build_step2=0.001s  step2_infer=0.614s  postprocess=0.000s  total=3.091s
+```
+
+两步推理成功，性能正常。
+
+### 对 OaaS_LLMTemplate repo 的修改总结（分支 `jinjinchen/Gemma4-v1`）
+
+| 文件 | 修改内容 | 原因 |
+|------|---------|------|
+| `pipeline/Dockerfile_vllm_0.10.0` | 在 `pip install vllm==0.19.0` 之前添加 `pip install torch==2.10.0 torchvision==0.25.0 --index-url https://download.pytorch.org/whl/cu128` | 防止 vllm 从 PyPI 拉默认 torch（可能不带 CUDA 或版本不对） |
+| `requirements-vllm.txt` | 只保留 `huggingface_hub==1.6.0`，移除 `torchvision==0.22.0` 和 `transformers==5.5.3` | torchvision 0.22.0 会降级 torch；transformers 已由 Dockerfile 处理 |
+| `llm_opt/vllm/vllm_runner.py` | 添加 stop tokens 支持、移除 `num_scheduler_steps` | Gemma4 两步推理需要 stop tokens 控制生成 |
+| `llm_opt/vllm/vllm_util.py` | `VLLMConfig` 添加 `stop` 字段 | 配合 vllm_runner.py 的 stop tokens 支持 |
+| `llm_opt/__init__.py` | 创建空文件 | 修复 `ModuleNotFoundError: No module named 'llm_opt'` |
+| `llm_opt/base/__init__.py` | 创建空文件 | 修复 `No module named 'llm_opt.base'` |
+| `llm_opt/trtllm/__init__.py` | 创建空文件 | 修复模块导入错误 |
+| `dlis_model/model/model.py` | Two-step inference ModelImp | Gemma4 两步推理流程 |
+| `dlis_model/model/dlis_inter.py` | Two-step PreAndPostProcessor | 场景生成 → prompt 扩展 |
+
+### 关键注意事项
+
+1. **模型挂载路径**：必须挂载到 `/Model/model`，然后 `ln -s /Model/model /dlis_model/Model`。不要直接挂载到 `/dlis_model/Model`（会被 Dockerfile 已有目录覆盖）
+2. **best_setting.json 不要设 quantization**：`QUANTIZATION_MAP` 没有 `"awq"` 映射，设了会导致模型路径拼接错误。vllm 会从 `config.json` 自动检测 AWQ
+3. **opt_type.txt 用 `printf` 不要用 `echo`**：避免末尾换行符导致类型识别失败
+4. **torch/torchvision 版本必须从 cu128 源安装**：PyPI 默认源可能给 CPU 版本
+5. **`requirements-vllm.txt` 不要加 torch/torchvision/transformers**：这些包需要特殊的安装源或顺序，由 Dockerfile 统一管理
+6. **CI pipeline 的 apt-get / PyPI 超时是网络问题**：重跑即可
 - Prompt 长度: 42 words vs 127 words（-67%）
 - 质量持平的前提下，Two-Step 是更优方案
