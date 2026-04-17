@@ -3054,3 +3054,127 @@ cd /dlis_model && ./run.sh offline /tmp/input.json /tmp/output.json'
 - `vllm/vllm-openai:latest` 自带 vllm/torch/transformers，版本可能与之前 pin 的不同，需 CI 验证兼容性
 - FlashInfer AOT 和 DeepGEMM 被跳过，可能影响推理性能但功能可用
 - 如版本不匹配可改为 `vllm/vllm-openai:v0.19.0` 等具体 tag
+
+---
+
+## 本地测试记录：fast-build 分支验证（2026-04-17）
+
+### 测试环境
+- 机器：`BR1T45-S1-17`
+- 模型：`~/data/gemma-4-26B-A4B-it-AWQ-4bit/`
+- 分支：`jinjinchen/Gemma4-v1-fast-build`
+
+### 测试流程与命令
+
+#### Step 1: 构建基础镜像
+
+```bash
+cd ~/0417_test/OaaS_LLMTemplate
+git checkout jinjinchen/Gemma4-v1-fast-build
+IMAGE_TAG="fast-build-test"
+
+sudo docker build \
+    -t my-vllm-base:$IMAGE_TAG \
+    --file pipeline/Dockerfile_vllm_fast \
+    pipeline/
+```
+
+**结果**：构建仅耗时 **0.8 秒**（对比原 Dockerfile_vllm_0.10.0 需要几十分钟），因为基础镜像 `vllm/vllm-openai:latest` 已包含所有编译好的包。
+
+#### Step 2: 创建最终镜像（模拟 CI BLOCK 3 流程）
+
+```bash
+sudo docker rm -f temp-oaas-container 2>/dev/null || true
+sudo docker run -d --name temp-oaas-container my-vllm-base:$IMAGE_TAG sleep infinity
+sudo docker cp . temp-oaas-container:/
+sudo docker exec temp-oaas-container chmod +x /dlis_model/run.sh
+sudo docker exec temp-oaas-container chmod +x /dlis_model/async_run.sh
+sudo docker exec temp-oaas-container chmod +x /LLMModelOptimization.sh
+sudo docker exec temp-oaas-container python3 -m pip install -r /requirements-common.txt
+sudo docker exec temp-oaas-container python3 -m pip install -r /requirements-vllm.txt
+sudo docker exec temp-oaas-container python3 -m pip install -e /
+sudo docker commit temp-oaas-container gemma4-fast:$IMAGE_TAG
+sudo docker rm -f temp-oaas-container
+```
+
+#### Step 3: 验证包版本
+
+```bash
+sudo docker run --rm --entrypoint python3 gemma4-fast:$IMAGE_TAG -c "
+import vllm; print(f'vllm: {vllm.__version__}')
+import torch; print(f'torch: {torch.__version__}')
+import transformers; print(f'transformers: {transformers.__version__}')
+import huggingface_hub; print(f'huggingface_hub: {huggingface_hub.__version__}')
+print(f'CUDA available: {torch.cuda.is_available()}')
+"
+```
+
+**输出**：
+```
+vllm: 0.19.0
+torch: 2.10.0+cu129
+transformers: 4.57.6
+huggingface_hub: 0.36.2
+CUDA available: False  # 因为验证命令未挂载 GPU
+```
+
+#### Step 4: 挂载模型测试推理
+
+```bash
+sudo docker run --rm -it --runtime nvidia --gpus all \
+    --entrypoint bash \
+    -v ~/data/gemma-4-26B-A4B-it-AWQ-4bit:/vllm-workspace/Model \
+    gemma4-fast:$IMAGE_TAG \
+    -c "
+        printf 'vllm' > /dlis_model/opt_type.txt
+        python3 -c \"
+import sys; sys.path.insert(0, '/dlis_model/model')
+from llm_opt.oaas_wrapper_v2 import OaasWrapper
+w = OaasWrapper('Model', is_llm_model=True)
+out = w.run(['Hello, who are you?'])
+print('Output:', out)
+\"
+    "
+```
+
+**注意**：`vllm/vllm-openai` 镜像的默认 entrypoint 是 `vllm serve`，必须用 `--entrypoint bash` 覆盖，否则 bash 命令会被当作 vllm 参数解析报错。
+
+### 遇到的问题与修复
+
+#### 问题 1: `huggingface_hub==1.6.0` 版本冲突
+
+**报错**：
+```
+ImportError: huggingface-hub>=0.34.0,<1.0 is required for a normal functioning
+of this module, but found huggingface-hub==1.6.0.
+```
+
+**原因**：`Dockerfile_vllm_fast` 和 `requirements-vllm.txt` 中 pin 了 `huggingface_hub==1.6.0`（版本 >= 1.0），但基础镜像自带的 `transformers` 要求 `<1.0`。
+
+**修复**：移除 `huggingface_hub==1.6.0` 的 pin，使用基础镜像自带的 0.36.2 版本。
+
+#### 问题 2: `num_scheduler_steps` 不再被 EngineArgs 接受
+
+**报错**：
+```
+Failed to load sync VLLM engine: EngineArgs.__init__() got an unexpected
+keyword argument 'num_scheduler_steps'
+```
+
+**原因**：`vllm/vllm-openai:latest` 的 vllm 0.19.0 将 `num_scheduler_steps` 从 `EngineArgs` 中移除（改为其他配置方式）。
+
+**修复**：在 fast-build 分支上从 `vllm_runner.py`（配置解析 + engine kwargs）和 `vllm_util.py`（VLLMConfig + DefaultSettings）中移除 `num_scheduler_steps` 相关代码。
+
+**注意**：此修改仅在 `jinjinchen/Gemma4-v1-fast-build` 分支，`jinjinchen/Gemma4-v1` 分支（使用 Dockerfile_vllm_0.10.0 自行安装 vllm）仍保留 `num_scheduler_steps`。
+
+#### 问题 3: Docker 权限和 Entrypoint
+
+- 所有 `docker` 命令需要加 `sudo`
+- `vllm/vllm-openai` 的 entrypoint 是 `vllm serve`，运行 bash 命令必须 `--entrypoint bash`
+- 模型需要挂载到 `/vllm-workspace/Model`（OaasWrapper 使用相对路径 `"Model"`，而镜像工作目录是 `/vllm-workspace`）
+
+### 当前状态
+
+- 基础镜像构建：✅ 通过（0.8s）
+- 包版本兼容性：✅ vllm 0.19.0 + torch 2.10.0+cu129 + transformers 4.57.6
+- 推理测试：⏳ 待 GPU 环境验证
