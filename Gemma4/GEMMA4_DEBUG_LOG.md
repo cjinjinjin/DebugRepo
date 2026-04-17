@@ -3178,3 +3178,69 @@ keyword argument 'num_scheduler_steps'
 - 基础镜像构建：✅ 通过（0.8s）
 - 包版本兼容性：✅ vllm 0.19.0 + torch 2.10.0+cu129 + transformers 4.57.6
 - 推理测试：⏳ 待 GPU 环境验证
+
+---
+
+## PR CI 构建验证 + 本地测试修复总结（2026-04-17）
+
+### PR CI 构建结果
+
+提交 `bc9abfc`（`jinjinchen/Gemma4-v1-fast-build` 分支）触发 CI 自动构建 vLLM 镜像，使用 `Dockerfile_vllm_fast`。
+
+**构建日志关键信息**：
+- 基础镜像：`vllm/vllm-openai:latest@sha256:d9a5c1c1614c...`
+- `Dockerfile_vllm_fast` 加载正常（592B）
+- 构建速度极快（跳过了 FlashInfer AOT 和 DeepGEMM 源码编译）
+
+**结论**：CI pipeline 使用 `Dockerfile_vllm_fast` 构建成功 ✅
+
+### 本地测试遇到的额外问题与修复
+
+#### 问题 4: `transformers 4.57.6` 不识别 Gemma4 架构
+
+**报错**：模型加载时无法识别 `gemma4` 架构类型。
+
+**原因**：`vllm/vllm-openai:latest` 基础镜像自带 `transformers==4.57.6`，该版本尚未支持 Gemma4。
+
+**修复**：在 `Dockerfile_vllm_fast` 中添加 `RUN python3 -m pip install transformers==5.5.3`（本地测试验证 5.5.3 可用）。
+
+#### 问题 5: Pydantic v2 要求 BaseSettings 字段必须有类型注解
+
+**报错**：
+```
+PydanticUserError: A non-annotated attribute was detected: `eventhub_namespace = '...'`.
+All model fields require a type annotation.
+```
+
+**原因**：基础镜像的 pydantic v2 严格要求所有 `BaseSettings` 字段必须有类型注解，而 `config.py` 中 4 个字段缺少 `str` 注解。
+
+**修复**：为 `eventhub_namespace`、`client_id`、`tenant_id`、`corp_tenant_id` 添加 `: str` 类型注解。
+
+#### 问题 6: 模型路径需要双重 symlink
+
+**现象**：`OaasWrapper("Model")` 查找模型时，路径解析为 `{cwd}/Model`。
+
+**修复**：
+- 模型挂载到 `/vllm-workspace/Model`（容器工作目录）
+- `ln -s /vllm-workspace/Model /Model`（供 config.py 证书路径使用）
+- `ln -s /vllm-workspace/Model /dlis_model/Model`（供 http_server.py 从 `/dlis_model` 目录启动时使用）
+
+#### 问题 7: GPU OOM
+
+**现象**：GPU 0 显存不足。
+
+**修复**：改用 GPU 1 启动：`--gpus '"device=1"'`
+
+### 提交记录
+
+| 提交 | 仓库 | 内容 |
+|------|------|------|
+| `bc9abfc` | OaaS_LLMTemplate | config.py 类型注解 + Dockerfile transformers==5.5.3 |
+| `59152de` | ms-image-quality-filters | debug log 本地测试记录 |
+
+### 当前状态
+
+- CI 构建：✅ 通过
+- 本地镜像构建：✅ 通过（0.8s）
+- 包兼容性修复：✅ transformers==5.5.3, pydantic 类型注解
+- http_server.py 启动：⏳ 已解决所有前置问题，待完成端到端推理验证
