@@ -3243,4 +3243,77 @@ All model fields require a type annotation.
 - CI 构建：✅ 通过
 - 本地镜像构建：✅ 通过（0.8s）
 - 包兼容性修复：✅ transformers==5.5.3, pydantic 类型注解
-- http_server.py 启动：⏳ 已解决所有前置问题，待完成端到端推理验证
+- http_server.py 启动：✅ 成功
+- 端到端推理：✅ 通过
+
+---
+
+## 端到端推理验证结果（2026-04-17）
+
+### 测试环境
+
+- **机器**：BR1T45-S1-17，GPU 1
+- **镜像**：`gemma4-fast:fast-build-test`（基于 `vllm/vllm-openai:latest`）
+- **模型**：`gemma-4-26B-A4B-it-AWQ-4bit`，挂载到 `/vllm-workspace/Model`
+- **关键版本**：vllm 0.19.0 / torch 2.10.0+cu129 / transformers 5.5.3
+- **容器启动手动修复**：symlink（`/Model`, `/dlis_model/Model`）、sed 修复 config.py 类型注解
+
+### 启动命令
+
+```bash
+sudo docker run -it --gpus '"device=1"' \
+  -v /home/jinjinchen/data/gemma-4-26B-A4B-it-AWQ-4bit:/vllm-workspace/Model \
+  -p 8889:8888 --entrypoint bash --name gemma4-fast-test \
+  gemma4-fast:fast-build-test
+```
+
+容器内修复：
+```bash
+ln -s /vllm-workspace/Model /Model
+ln -s /vllm-workspace/Model /dlis_model/Model
+pip install transformers==5.5.3
+sed -i 's/eventhub_namespace="/eventhub_namespace: str = "/' /dlis_model/model/config.py
+sed -i 's/client_id="/client_id: str = "/' /dlis_model/model/config.py
+sed -i 's/tenant_id="/tenant_id: str = "/' /dlis_model/model/config.py
+sed -i 's/corp_tenant_id="/corp_tenant_id: str = "/' /dlis_model/model/config.py
+cd /dlis_model && python3 model/http_server.py
+```
+
+### 测试请求
+
+```bash
+curl -X POST http://localhost:8889/ \
+  -H "Content-Type: application/json" \
+  -d '{"landing_page_content": "Welcome to TrailMaster Outdoor Gear. Premium hiking boots, ultralight backpacks, and camping essentials for your next adventure. Free shipping on orders over $99.", "url": "https://trailmaster.example.com", "num_prompts": 5}'
+```
+
+**注意**：路由是根路径 `/`，不是 `/score`（tornado 注册的是 `r"/"`）。
+
+### 测试结果
+
+- **Status**: Success，`format_compliant: true`
+- **两步推理正常**：scene generation → prompt expansion
+- **生成 5 个 prompt**，内容质量合理（hiking boots、backpack、camping gear 相关场景）
+
+### 性能数据
+
+| 阶段 | 耗时 |
+|------|------|
+| preprocess | 0.000s |
+| step1_infer（scene generation，1 条） | 2.705s |
+| build_step2 | 0.001s |
+| step2_infer（prompt expansion，5 条） | 0.765s |
+| postprocess | 0.000s |
+| **总计** | **3.471s** |
+
+- Step 1 吞吐：input 109.02 toks/s，output 32.11 toks/s
+- Step 2 吞吐：input 1636.76 toks/s，output 293.87 toks/s（5 条并行，batch 效率高）
+
+### 结论
+
+Fast-build 分支（`jinjinchen/Gemma4-v1-fast-build`）使用 `vllm/vllm-openai:latest` 基础镜像，端到端推理功能完全正常。相比原 `Dockerfile_vllm_0.10.0` 构建时间从数十分钟降至秒级，推理功能无损。
+
+**待办**：
+- 将手动修复（symlink、config.py 注解）固化到 Dockerfile 和代码中（已提交 `bc9abfc`）
+- 触发 CI 重新构建镜像，验证完整自动化流程
+- 部署到 DLIS 进行线上验证
