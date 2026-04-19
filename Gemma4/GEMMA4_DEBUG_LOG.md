@@ -3755,3 +3755,176 @@ opt_dir = os.path.join(model_folder, f"{model_dir_name}_opt")
 - Branch: `jinjinchen/Gemma4-v1-fast-build`
 - Repo: `OaaS_LLMTemplate`
 - Message: `fix: create _opt directory programmatically to force vLLM engine path`
+
+---
+
+## 第四次部署失败：Read-only filesystem + Unable to find exposed port 8888
+
+### 日期：2026-04-19
+
+### 错误现象
+
+部署后容器日志出现两个错误：
+
+**错误 1：Read-only file system（Errno 30）**
+```
+OSError: [Errno 30] Read-only file system: '/Model/gemma-4-26B-A4B-it-AWQ-4bit/gemma-4-26B-A4B-it-AWQ-4bit_opt'
+```
+DLIS 容器将 `/Model` 目录以只读方式挂载（从 Cosmos 数据源），因此 `os.makedirs()` 在 `/Model` 下创建 `_opt` 子目录直接失败。
+
+**错误 2：Unable to find exposed port 8888**
+```
+Unable to find exposed port 8888 for container bb039b6a952e...
+```
+DLIS Common Log 显示容器状态为 `running`，但持续（每 3 秒）报 "Unable to find exposed port 8888"，尝试不同宿主端口（55561-55589）映射均失败，持续约 30 分钟。
+
+### 根因分析：两个错误是同一条因果链
+
+```
+/Model 只读 → _opt 创建失败 (Errno 30)
+  → OaasWrapper 找不到 _opt 目录
+  → fallback 到 BaseLLM（transformers CPU 加载 26B 模型）
+  → CPU 内存爆炸 → OOM Kill（进程被杀）
+  → HTTP server (Tornado on port 8888) 从未启动
+  → DLIS 探测不到 port 8888 → "Unable to find exposed port 8888"
+```
+
+Port 8888 的配置本身没有问题：
+- `Dockerfile_vllm_fast` 已有 `EXPOSE 8888`
+- `http_server.py` 监听 `utils.get_listening_port(8888)`
+
+问题在于模型加载阶段就 OOM 被杀了，HTTP server 的代码根本没有执行到。
+
+### 为什么 /Model 必须是只读的（为什么需要 writable mirror 方案）
+
+DLIS（Deep Learning Inference Service）的容器架构设计中，`/Model` 目录是从 Cosmos 存储以**只读方式挂载**的，这是有意为之的设计：
+
+1. **数据完整性保证**：模型权重文件（26B 参数的 AWQ 量化模型，约 14GB）从 Cosmos 下载后以只读挂载，确保推理过程中不会意外修改模型文件，保证每次推理使用的权重完全一致。
+
+2. **多实例共享**：同一个 Cosmos 路径可以被多个容器实例共享挂载。只读挂载避免了多实例间的写冲突。
+
+3. **安全隔离**：只读挂载是容器安全最佳实践，防止容器内恶意或错误代码篡改模型数据。
+
+4. **存储层限制**：Cosmos 作为分布式存储系统，其 FUSE 挂载驱动本身可能不支持写操作，即使容器尝试写入也会被底层拒绝。
+
+### 修复方案：Writable Mirror
+
+既然无法写入 `/Model`，在 `/tmp`（容器可写的临时目录）下创建一个"镜像目录"：
+
+```python
+# 在 /tmp 下创建可写的镜像目录
+writable_model = os.path.join("/tmp", model_dir_name)
+os.makedirs(writable_model, exist_ok=True)
+
+# 用 symlink 指向原始只读模型文件（不复制，零额外存储开销）
+for item in os.listdir(src_model):
+    os.symlink(os.path.join(os.path.realpath(src_model), item),
+               os.path.join(writable_model, item))
+
+# 在可写镜像中创建 _opt 目录 + vLLM 配置
+opt_dir = os.path.join(writable_model, f"{model_dir_name}_opt")
+os.makedirs(opt_dir, exist_ok=True)
+# 写入 opt_type.txt 和 best_setting.json ...
+
+# 传可写路径给 OaasWrapper
+self.oaas_wrapper = OaasWrapper(writable_model, is_llm_model=True)
+```
+
+优点：
+- 模型权重文件通过 symlink 引用，**零额外磁盘占用**
+- `_opt` 配置文件总共只有几百字节
+- OaasWrapper 正常检测到 `_opt` → 走 vLLM 引擎路径 → GPU 加载 → 不 OOM
+- HTTP server 正常启动 → port 8888 可用 → DLIS 健康检查通过
+
+### 修复状态
+
+model.py 已修改（writable mirror 方案），commit `06f39f1` 并 push 到 `jinjinchen/Gemma4-v1-fast-build` 分支。
+
+---
+
+## DLIS 部署 #5：Runner 创建静默失败（2026-04-19）
+
+### 进展
+
+Writable mirror 方案生效，容器启动阶段有显著进展：
+- ✅ HTTP server 成功启动（port 8888 正常工作）
+- ✅ DLIS 健康检查通过
+- ✅ Eval 请求能到达 model.py（日志显示 `Eval request received`）
+- ❌ 每个 Eval 请求立即失败，响应时间 ~0.6ms
+
+### 错误
+
+```
+RuntimeError: Could not get any available runner
+  at oaas_wrapper_v2.py:122
+```
+
+每 2 秒重复一次（14:38 - 14:50 UTC），所有请求返回 500。
+
+### 根因分析
+
+`oaas_wrapper_v2.py` 的 `_create_runner()` 方法（第 87-103 行）有一个 try/except 捕获所有异常：
+
+```python
+def _create_runner(self, model_folder):
+    try:
+        if not is_test_original_model() and self.model_is_optimized():
+            return self._create_optimized_runner()
+        if not self.async_mode and self.is_llm_model:
+            return create_pytorch_runner_for_LLM(model_folder)
+        return None
+    except Exception as e:
+        print(f"Failed to create runner: {e}")  # 只输出到 stdout，不进 DLIS 日志
+        return None
+```
+
+问题链路：
+1. `__init__` 阶段调用 `_create_runner()` → 检测到 `_opt` 目录 → 走 `create_runner()` 路径
+2. `create_runner()` → `LLMRunner.load_core()` → 尝试初始化 vLLM 引擎
+3. vLLM 引擎初始化失败（**实际错误被 catch 吞掉**，只 print 到 stdout）
+4. `_create_runner()` 返回 `None` → `self.used_runner = None`
+5. 之后每个 `run()` 调用都直接触发 `RuntimeError("Could not get any available runner")`
+
+### 可能的 vLLM 初始化失败原因
+
+1. **GPU 不可见 / CUDA 未就绪**：容器启动时 GPU 驱动可能未就绪
+2. **max_model_len 超出 GPU 显存**：best_setting.json 设置 `max_model_len: 8192` 可能需要更多显存
+3. **模型路径解析问题**：symlink 路径传给 vLLM 后，vLLM 内部 `from_pretrained` 可能无法正确解析
+4. **AWQ 量化支持**：vLLM 版本可能不支持 Gemma4 的 AWQ 量化格式
+5. **依赖缺失**：容器镜像中缺少 vLLM 需要的某些依赖包
+
+### 关键问题
+
+实际的 vLLM 错误被 `_create_runner()` 的 `except Exception as e` 吞掉，只 `print()` 到 stdout。DLIS 容器日志默认可能不捕获 stdout，导致真正的错误信息丢失。
+
+### 下一步
+
+1. **方案 A**：在 `model.py` 中 wrap `OaasWrapper()` 调用，捕获并 `logger.error()` 记录初始化失败详情
+2. **方案 B**：在 `_create_runner()` 中将 `print` 改为 `logger.error`（需要修改 oaas_wrapper_v2.py）
+3. **方案 C**：在 `model.py` 的 `__init__` 中加入 `assert self.oaas_wrapper.used_runner is not None` 并打印详细错误
+4. **方案 D**：直接绕过 OaasWrapper，参考 siwenzhu 分支用 `vllm.LLM` 直接加载（最激进但最可控）
+
+### 根因确认
+
+经过代码追踪，找到了确切的 bug：
+
+**`best_setting.json` 缺少 `"quantization": "int4_awq"` 字段。**
+
+`vllm_runner.py:62-66` 中，模型路径选择逻辑依赖 `quantization` 字段：
+
+```python
+self.root_model_path = os.path.dirname(optimized_model_folder)  # = /tmp
+if self.config.quantization:  # None → False
+    model_path = os.path.join(self.root_model_path, model_name)  # 正确：/tmp/gemma-4-26B-A4B-it-AWQ-4bit
+else:
+    model_path = self.root_model_path  # 错误：/tmp
+```
+
+没有 `quantization` 字段 → `model_path = /tmp` → vLLM 在 `/tmp` 找不到模型文件 → 初始化失败 → 被 `_create_runner()` 的 catch-all 吞掉。
+
+同时，`QUANTIZATION_MAP` 中 `"int4_awq"` 映射到 vLLM 的 `"AWQ"` 量化格式，AWQ 4-bit 模型必须指定此参数。
+
+### 修复
+
+1. 在 `model.py` 的 `best_setting` dict 中添加 `"quantization": "int4_awq"`
+2. 在 `OaasWrapper()` 初始化后添加 runner None 检查，fail fast 并写入 logger（而非被 `_create_runner` 静默吞掉）
