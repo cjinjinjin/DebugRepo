@@ -4001,3 +4001,131 @@ if cuda_env and not cuda_env.replace(",", "").isdigit():
 
 - KustoLogHandler 在此部署中仍然无法工作（EventHub 初始化失败），所有诊断依赖 DLIS portal 容器日志
 - 证书文件 `AggSvcAuthCert-si.pfx` 存在于 Cosmos 模型目录中，EventHub 失败原因待查
+
+---
+
+## 架构重构：去掉 OaasWrapper，直接用 vLLM（2026-04-20）
+
+### 动机
+
+前 7 次部署中，大部分问题出在 OaasWrapper 中间层：
+- `_opt` 目录在 DLIS 只读挂载 `/Model` 下不可见 → 需要 writable mirror + symlink 绕过
+- OaasWrapper 找不到 `_opt` 时 fallback 到 BaseLLM（transformers CPU 加载）→ OOM
+- 异常被 `_create_runner()` 静默吞掉，难以诊断
+- 调用链过长：`OaasWrapper → runner_factory → LLMRunner → VLLM → vllm.LLM`
+
+参考同事 siwenzhu 的分支 `users/siwenzhu/VLLM_MML_localbuild_pypi_kusto`，他直接用 `vllm.LLM` 初始化，不用 `_opt` 目录和 OaasWrapper。
+
+### 改动
+
+新建分支 `jinjinchen/Gemma4-v2-direct-vllm`，修改 `model.py`：
+
+1. **去掉 OaasWrapper**：不再 `from llm_opt.oaas_wrapper_v2 import OaasWrapper`
+2. **去掉 writable mirror**：不再创建 `/tmp` symlink 目录和 `_opt` 子目录
+3. **直接用 vLLM**：`from vllm import LLM, SamplingParams`，直接初始化引擎
+4. **保留 CUDA_VISIBLE_DEVICES UUID 修复**
+5. **`_run_vllm()` 封装**：返回 `[[text], ...]` 格式，兼容 `dlis_inter.py` 的 postprocess
+
+```python
+# 初始化
+self.llm = LLM(
+    model="/Model/gemma-4-26B-A4B-it-AWQ-4bit",
+    tensor_parallel_size=1,
+    gpu_memory_utilization=0.9,
+    trust_remote_code=True,
+    dtype="auto",
+    max_model_len=8192,
+)
+
+# 推理
+def _run_vllm(self, prompt_dicts):
+    prompts = [d['prompt'] if isinstance(d, dict) else d for d in prompt_dicts]
+    outputs = self.llm.generate(prompts, self.sampling_params)
+    return [[o.outputs[0].text] for o in outputs]
+```
+
+### 优点
+
+- 去掉整个中间层（OaasWrapper / runner_factory / `_opt` 目录 / writable mirror）
+- 初始化失败直接报错，不会 fallback 到 CPU 加载
+- 配置参数直接写在代码里，透明可控
+- 推理速度不受影响（OaasWrapper 底层也是调 `vllm.LLM.generate()`）
+
+### 离线测试
+
+添加 `test_local.py` 用于 A6000 本地测试，不依赖 DLIS 框架（`utils`、`kusto_log`、`config`）。
+
+```bash
+# 构建 Docker 镜像
+cd ~/0420_test/OaaS_LLMTemplate
+docker build -f pipeline/Dockerfile_vllm_fast -t gemma4-test .
+
+# 运行测试
+docker run --gpus all --rm -it \
+  -v /home/jinjinchen/models/gemma-4-26B-A4B-it-AWQ-4bit:/Model/gemma-4-26B-A4B-it-AWQ-4bit \
+  -v /home/jinjinchen/0420_test/OaaS_LLMTemplate:/workspace \
+  gemma4-test \
+  python3 /workspace/test_local.py --model_path /Model/gemma-4-26B-A4B-it-AWQ-4bit
+```
+
+### 分支信息
+
+- 分支：`jinjinchen/Gemma4-v2-direct-vllm`
+- commits：`b252dd1`（model.py 重构）、`2bd1423`（test_local.py）
+- 旧分支 `jinjinchen/Gemma4-v1-fast-build` 保留 OaasWrapper 方案 + CUDA fix 作为备选
+
+### 本地 A6000 Docker 测试（2026-04-20）
+
+**测试环境**：`BR1T45-S1-17`，GPU: A6000 (48GB)，模型: `~/data/gemma-4-26B-A4B-it-AWQ-4bit/`
+
+#### 测试过程
+
+```bash
+cd ~/0420_test
+git clone <repo> -b jinjinchen/Gemma4-v2-direct-vllm
+cd OaaS_LLMTemplate
+
+# 构建镜像
+sudo docker build -f pipeline/Dockerfile_vllm_fast -t gemma4-test .
+```
+
+**踩坑 1**：`~/models/gemma-4-26B-A4B-it-AWQ-4bit/` 里只有 `dlis_integration_validated` 和 `gemma4_opt`，没有模型文件。实际模型在 `~/data/gemma-4-26B-A4B-it-AWQ-4bit/`。
+
+**踩坑 2**：GPU 0 显存被其他进程占用（只剩 2.39/47.43 GiB），vLLM 报 `ValueError: Free memory on device cuda:0 ... is less than desired GPU memory utilization`。切换到 GPU 1 解决。
+
+#### 最终成功命令
+
+```bash
+sudo docker run --gpus '"device=1"' --rm -it \
+  -v /home/jinjinchen/data/gemma-4-26B-A4B-it-AWQ-4bit:/Model/gemma-4-26B-A4B-it-AWQ-4bit \
+  -v /home/jinjinchen/0420_test/OaaS_LLMTemplate:/workspace \
+  gemma4-test \
+  python3 /workspace/test_local.py --model_path /Model/gemma-4-26B-A4B-it-AWQ-4bit
+```
+
+#### 测试结果：通过 ✅
+
+```
+Model loaded in 101.0s
+
+[Step 1] Scene generation (2.66s):  5 scenes generated
+[Step 2] Prompt expansion (0.77s, 5 scenes):  5 prompts generated
+Total: 3.43s
+
+Status: Success
+Format compliant: True
+Scenes: 5
+```
+
+**性能数据**：
+- 模型加载：101s
+- Step 1（生成 5 个 scene concept）：2.66s，input 127 toks/s，output 33 toks/s
+- Step 2（5 个 scene 并行展开为 prompt）：0.77s，input 1909 toks/s，output 305 toks/s
+- 总推理时间：3.43s/request
+
+**结论**：直接用 `vllm.LLM` 的方案在本地验证通过，两步推理流程正常，输出质量符合预期。
+
+### 待验证
+
+1. ~~A6000 本地 Docker 测试通过~~ ✅
+2. DLIS deployment #8 使用新分支部署
