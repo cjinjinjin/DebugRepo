@@ -3908,23 +3908,46 @@ def _create_runner(self, model_folder):
 
 经过代码追踪，找到了确切的 bug：
 
-**`best_setting.json` 缺少 `"quantization": "int4_awq"` 字段。**
+~~**`best_setting.json` 缺少 `"quantization": "int4_awq"` 字段。**~~ ← 此分析有误，见下方纠正。
 
-`vllm_runner.py:62-66` 中，模型路径选择逻辑依赖 `quantization` 字段：
+> **纠正（2026-04-19）**：本地测试时 quantization 用的是 `"awq"`，但 debug log 第 2986 行明确记录"best_setting.json 不要设 quantization"——vLLM 会从模型的 `config.json` 自动检测 AWQ 量化。因此 quantization 不是根因。
 
-```python
-self.root_model_path = os.path.dirname(optimized_model_folder)  # = /tmp
-if self.config.quantization:  # None → False
-    model_path = os.path.join(self.root_model_path, model_name)  # 正确：/tmp/gemma-4-26B-A4B-it-AWQ-4bit
-else:
-    model_path = self.root_model_path  # 错误：/tmp
-```
+### 实际修复（deployment #5 → #6）
 
-没有 `quantization` 字段 → `model_path = /tmp` → vLLM 在 `/tmp` 找不到模型文件 → 初始化失败 → 被 `_create_runner()` 的 catch-all 吞掉。
+1. 在 `oaas_wrapper_v2.py` 的 `_create_runner()` 中把静默吞异常改为 `logger.error(exc_info=True)` + `raise`
+2. 在 `model.py` 的 `OaasWrapper()` 初始化后添加 runner None 检查 + `raise RuntimeError`
 
-同时，`QUANTIZATION_MAP` 中 `"int4_awq"` 映射到 vLLM 的 `"AWQ"` 量化格式，AWQ 4-bit 模型必须指定此参数。
+---
 
-### 修复
+## 部署 #6：crash loop（2026-04-19）
 
-1. 在 `model.py` 的 `best_setting` dict 中添加 `"quantization": "int4_awq"`
-2. 在 `OaasWrapper()` 初始化后添加 runner None 检查，fail fast 并写入 logger（而非被 `_create_runner` 静默吞掉）
+### 改动
+- `oaas_wrapper_v2.py`：`_create_runner()` 异常时从 `return None` 改为 `raise`
+- `model.py`：runner 为 None 时 `raise RuntimeError`
+- commit: `c223413`
+
+### 现象
+- 容器 30 分钟内重启 77 次（crash loop，约 23 秒/次）
+- 内存峰值仅 ~1.04GB（模型从未加载）
+- GPU 显存仅 4MB（vLLM 从未初始化）
+- 状态始终 "Starting"，从未进入 "Ready"
+- **Kusto 无日志**：`No log file found within given time range`
+- Polaris 超时：`Model failed to initialize in time given by WaitingModelReadyInMin`
+
+### 根因
+
+vLLM 引擎初始化失败（具体错误仍未知）→ `_create_runner()` 抛异常 → `OaasWrapper.__init__()` 崩溃 → `ModelImp.__init__()` 崩溃 → 进程立即退出 → DLIS 重启 → 再次崩溃 → crash loop。
+
+进程启动后几秒就死了，KustoLogHandler 的 0.5s 定时器来不及把日志刷到 EventHub，所以 Kusto 里什么都看不到。
+
+### 修复（deployment #7 准备）
+
+- `oaas_wrapper_v2.py`：异常时 `logger.error(exc_info=True)` + **`return None`**（不抛异常）
+- `model.py`：runner 为 None 时只 `logger.error`，**不 raise**，容器继续运行
+- commit: `eedecf7`
+
+目的：让容器存活 → KustoLogHandler 有时间刷日志到 EventHub → Kusto 中能看到 vLLM 初始化的真正错误。
+
+### 待确认
+
+vLLM 引擎初始化到底为什么失败？等 deployment #7 的 Kusto 日志。
