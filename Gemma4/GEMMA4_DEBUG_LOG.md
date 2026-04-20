@@ -4129,3 +4129,58 @@ Scenes: 5
 
 1. ~~A6000 本地 Docker 测试通过~~ ✅
 2. DLIS deployment #8 使用新分支部署
+
+### Deployment #8 部署要点
+
+**与上一版本 (`Gemma4-v1-fast-build`) 的区别：**
+
+| 项目 | v1-fast-build | v2-direct-vllm |
+|------|--------------|----------------|
+| vLLM 初始化 | OaasWrapper + `/tmp` writable mirror + `_opt` 目录 | 直接 `vllm.LLM()` |
+| 依赖 | `llm_opt.oaas_wrapper_v2` | `from vllm import LLM, SamplingParams` |
+| `_opt` 目录 | 需要创建 mirror + symlink + `_opt` + `best_setting.json` | 不需要 |
+| CUDA UUID 修复 | ✅ 有 | ✅ 有（保留） |
+
+**Polaris job config 改动：**
+- **ModelPath（镜像 tag）**：更新为新分支 `jinjinchen/Gemma4-v2-direct-vllm` CI 构建的镜像
+- **其他配置不变**：ModelDataPath、GPU/内存配置、WaitingModelReadyInMin 等保持原样
+
+**镜像构建**：
+- CI pipeline 使用分支 `jinjinchen/Gemma4-v2-direct-vllm`
+- Dockerfile: `pipeline/Dockerfile_vllm_fast`（基础镜像 `vllm/vllm-openai:latest` 已包含 vllm）
+- 新 `model.py` 顶层 `from vllm import LLM, SamplingParams`，不再依赖 OaasWrapper
+
+---
+
+## Deployment #6 运行日志分析（2025-04-19 ~ 04-20）
+
+**分支**：`Gemma4-v1-fast-build`（OaasWrapper 方案）
+
+### 观察到的三个容器实例
+
+#### 实例 1：`b09f29f2`（Apr 19）
+- **问题**：没有 `_opt` 目录 → OaasWrapper fallback 到 BaseLLM（transformers CPU 加载）→ OOM Killed
+- **重启次数**：3 次
+- **结论**：与 Deployment #3-#5 相同的 OOM 问题
+
+#### 实例 2：`265ad1b4`（Apr 20 ~00:06）
+- **进展**：writable mirror + `_opt` 目录创建成功，OaasWrapper 检测到优化模型
+- **崩溃原因**：`CUDA_VISIBLE_DEVICES` 设置为 GPU UUID 格式（`GPU-405664ab-...`），vLLM 调用 `int("GPU-405664ab-...")` → `ValueError`
+- **关键日志**：`ValueError: invalid literal for int() with base 10: 'GPU-405664ab-...'`
+- **重启次数**：多次，每次 ~15s 后崩溃
+
+#### 实例 3：`0dd03c02`（Apr 20 ~01:50）
+- **问题**：同样的 CUDA UUID 崩溃
+- **重启循环**：持续 20+ 分钟，容器始终无法完成模型加载
+
+### 根因总结
+
+1. **CUDA_VISIBLE_DEVICES UUID 格式**：DLIS 容器将 `CUDA_VISIBLE_DEVICES` 设为 GPU UUID（如 `GPU-405664ab-...`），而非整数索引。vLLM 内部对此值调用 `int()` 导致 ValueError。这是 v1 分支未预见到的 DLIS 环境差异。
+
+2. **Architecture inspection subprocess 传播**：vLLM 的模型注册检查在子进程中运行，CUDA UUID 环境变量被继承到子进程，导致 `Gemma4ForConditionalGeneration` 架构检测也失败。
+
+### 决策
+
+此日志进一步验证了切换到 `v2-direct-vllm` 分支的正确性：
+- v2 分支包含 CUDA UUID → 整数索引的修复代码
+- v2 分支绕过 OaasWrapper，直接用 `vllm.LLM()` 初始化，避免了框架层的额外复杂度
