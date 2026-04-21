@@ -4487,5 +4487,80 @@ sudo docker run --gpus all -it --rm \
 
 - ✅ Prefix caching 启用
 - ✅ SamplingParams 与批量脚本对齐
-- ⏳ 待本地 A6000 验证修复后的输出质量
+- ✅ 本地 A6000 真实数据验证通过（见下方）
+
+---
+
+## DLIS 本地 A6000 真实数据验证（2026-04-21）
+
+### 问题回顾
+
+前几轮修复后，使用 placeholder 内容（"Welcome to our outdoor adventure store!"）测试时，Step 2 输出仍然异常——生成多个 Scene Concepts 而非单条 30-50 词 prompt。怀疑是内容太少导致模型缺乏上下文。
+
+### Tokenizer Thinking Prefix 问题
+
+**根因**: AWQ 量化模型的 tokenizer chat_template 内置了 `<|channel>thought\n<channel|>` 前缀，导致模型进入 thinking mode，输出格式异常。
+
+**修复尝试 1** — `dlis_inter.py._apply_chat_template` 中 strip thinking prefix：
+```python
+text = text.replace("<|channel>thought\n<channel|>", "")
+```
+结果：**未生效**。容器内 Python 从 `__pycache__` 加载了旧版 `dlis_inter.py`，volume mount 的新文件被忽略。
+
+**修复尝试 2（最终方案）** — `model.py` 中直接 patch tokenizer 的 `chat_template` 属性：
+```python
+tokenizer = self.llm.get_tokenizer()
+if hasattr(tokenizer, 'chat_template') and tokenizer.chat_template and '<|channel>thought' in tokenizer.chat_template:
+    tokenizer.chat_template = tokenizer.chat_template.replace(
+        "<|channel>thought\n<channel|>", ""
+    )
+```
+结果：**生效**。`model.py` 在 `__init__` 时加载，不受 `__pycache__` 影响。输出中不再出现 `thought\n` 前缀。
+
+### 真实数据测试
+
+使用 `UHRS2K_SD_Random200_0324_GPT5.tsv` 中的真实 landing page 数据进行测试，共 4 个 case：
+
+| # | Case | URL | Step1 | Step2 | Total |
+|---|------|-----|-------|-------|-------|
+| 1 | Ford F-150 Lightning 经销商 | ford.com | 2.721s (冷启动) | 1.891s | 4.670s |
+| 2 | HSN 女装 | hsn.com | 0.951s | 0.871s | 1.823s |
+| 3 | OpenRent 房产出租 | openrent.co.uk | 0.911s | 0.925s | 1.837s |
+| 4 | Instant Gaming 游戏平台 | instant-gaming.com | 0.866s | 1.531s | 2.398s |
+
+**关键发现**：
+- Prefix caching 生效：Step1 从首次 2.7s 降到后续 ~0.9s
+- Step2 批量 5 个 prompt 并行推理，大部分 < 1s
+- 稳态总延迟 1.8-2.4s
+
+### 输出质量验证（Ford Case 示例）
+
+**Step 1 输出**（5 个场景概念）：
+```
+<Scene1>Extreme close-up of the electric F-150 Lightning headlight</Scene1>
+<Scene2>Smiling driver charging truck at a modern home</Scene2>
+<Scene3>F-150 Lightning parked at a rugged outdoor campsite</Scene3>
+<Scene4>Driver effortlessly hauling heavy gear with electric power</Scene4>
+<Scene5>Sleek truck silhouette against a dramatic sunrise horizon</Scene5>
+```
+
+**Step 2 输出**（每个 scene 扩展为 30-50 词 prompt）：
+- Prompt1: "Extreme close-up of a modern electric truck headlight, intricate LED crystalline textures reflecting a soft sunrise..."
+- Prompt2: "A relaxed homeowner in casual weekend attire stands in a sunlit driveway, smiling while plugging a sleek charging cable..."
+- Prompt3: "A sleek F-150 Lightning parked at a scenic, misty mountain campsite during golden hour..."
+- Prompt4: "A rugged adventurer standing by an open tailgate of a modern electric pickup..."
+- Prompt5: "Cinematic side profile of a modern electric pickup truck parked on a rugged mountain ridge..."
+
+**format_compliant**: `true`，**Status**: `Success`
+
+### 结论
+
+- placeholder 内容过于简短导致模型输出异常，真实 landing page 数据下模型表现完全正常
+- tokenizer thinking prefix 必须在 `model.py` 中 patch（`dlis_inter.py` 的修复因 `__pycache__` 无法生效）
+- 两个文件都已更新并保持一致（双保险）
+
+### 待办
+
+- ✅ 更新 cosmos 上的 `model.py` 和 `dlis_inter.py`
+- ⏳ 提交 DLIS 部署验证
 
