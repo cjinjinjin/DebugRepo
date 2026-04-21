@@ -4184,3 +4184,308 @@ Scenes: 5
 此日志进一步验证了切换到 `v2-direct-vllm` 分支的正确性：
 - v2 分支包含 CUDA UUID → 整数索引的修复代码
 - v2 分支绕过 OaasWrapper，直接用 `vllm.LLM()` 初始化，避免了框架层的额外复杂度
+
+---
+
+## DLIS 部署调试（Apr 20）— 同事分支对比 & 修复提交
+
+### 同事成功分支对比
+
+对比了两个已跑通的分支：
+- `user/hanbangliang/img-outpainting-v1`（Flux2KleinPipeline，非 LLM）
+- `users/siwenzhu/VLLM_MML_merge_v2`（直接 vLLM）
+
+#### 关键差异发现
+
+| 对比项 | 我的 v2 分支 | hanbangliang | siwenzhu |
+|--------|-------------|--------------|----------|
+| `run.sh` CUDA_VISIBLE_DEVICES | `#unset`（注释掉了） | `unset` ✅ | `unset` ✅ |
+| `config.py` print(os.listdir) | 有 ❌ | 无 ✅ | 无 config.py ✅ |
+| 推理引擎 | `vllm.LLM()` 直接调用 | `Flux2KleinPipeline` | `vllm.LLM()` 直接调用 |
+| KustoLogHandler | 有 | 有 | 无 |
+| GPU_MEMORY_UTILIZATION | 0.7（环境变量） | 无 | 0.9（环境变量） |
+
+#### 环境变量配置对比
+
+```
+我的：    DLIS_MODEL_DATA_TARGET_PATH=/Model;GPU_MEMORY_UTILIZATION=0.7
+hanbang：DLIS_MODEL_DATA_TARGET_PATH=/Model;FLUX_MODEL_PATH=...;FLUX_LORA_PATH=...
+siwen：  DLIS_MODEL_DATA_TARGET_PATH=/Model;DEBUG_PAYLOAD=false;MAX_MODEL_LEN=20000;MAX_TOKENS=32;GPU_MEMORY_UTILIZATION=0.9
+```
+
+### 提交的修复（commit c146cf2）
+
+1. **`run.sh`**：`#unset CUDA_VISIBLE_DEVICES` → `unset CUDA_VISIBLE_DEVICES`
+2. **`config.py`**：删除 `print(os.listdir("/Model"))`
+
+### OaaS_LLMTemplate 框架架构理解
+
+**框架的价值不在 OaasWrapper，而在于 DLIS 适配层：**
+
+- **DLIS 容器接口**：`run.sh` → `main.py` → `ModelImp` 的 `Eval/EvalBatch/EvalBinary` 标准入口
+- **日志体系**：KustoLogHandler + BackgroundScheduler，自动上传 Kusto
+- **数据更新机制**：`OnDataUpdate`、动态数据路径支持 Cosmos 热更新
+- **部署脚手架**：Dockerfile、镜像构建流水线、Polaris 配置模板
+
+**OaasWrapper 只是可选的推理引擎封装**（查找 `_opt` 目录 → 读 `best_setting.json` → 创建 runner），完全可以绕过：
+- 直接用 `vllm.LLM()`（siwen、我的 v2）
+- 直接用 `Flux2KleinPipeline`（hanbangliang）
+- 只要保持 `ModelImp` 的接口契约（Eval/EvalBatch 等），推理引擎随便换
+
+---
+
+## DLMSLog 完整日志分析（2026-04-20）
+
+### 日志来源
+- 文件：`DLMSLog_.log`（310,217 行，512KB）
+- 声称来自 v2-direct-vllm 部署
+
+### 关键发现
+
+**1. 容器运行的是 v1 代码，不是 v2！**
+
+DLMSLog traceback 显示：
+```
+model.py line 149: step1_outputs = self.oaas_wrapper.run(step1_prompts)
+```
+- v2 branch `model.py` line 149 = `return res`（无 oaas_wrapper 引用）
+- v1 branch `model.py` line 149 = `self.oaas_wrapper.run(step1_prompts)` ← 匹配日志
+
+**2. 错误详情**
+- `RuntimeError: Could not get any available runner`（来自 `oaas_wrapper_v2.py:125`）
+- OaasWrapper 找不到 `_opt` 目录 → 无法创建 runner → 推理失败
+- 错误在 01:29 到 01:32 之间重复 22,467 次
+
+**3. Connection refused 阶段**
+- 01:18-01:29：大量 `Connection refused (localhost:56748)` 错误
+- 容器 health check 阶段，模型尚未启动完成
+
+### 根因分析
+
+**时间线不匹配：**
+- DLMSLog 时间戳：01:18-01:32 Apr 20
+- 最新 v2 镜像 build 时间：03:58 Apr 20（`20260420-0358-merge`）
+- DLMSLog 对应的部署使用的是 **03:58 之前的旧镜像**
+
+**旧镜像包含 v1 代码的原因：**
+- v2 分支的 refactor commit（b252dd1，移除 OaasWrapper）虽然已提交，但部署时可能使用了更早的镜像
+- PR build 标签格式：`YYYYMMDD-HHMM-merge`，所有 PR 共用 "merge" 后缀
+- 部署时需确认使用的具体 image tag
+
+### 修复状态
+- ✅ `unset CUDA_VISIBLE_DEVICES`（commit c146cf2）
+- ✅ 移除 `print(os.listdir("/Model"))` debug 行（commit c146cf2）
+- ✅ v2 代码已推送，最新镜像 `20260420-0358-merge` 应包含正确的 v2 代码
+
+### 下一步
+1. 使用最新镜像 `20260420-0358-merge` 重新部署
+2. 确认日志中不再出现 `oaas_wrapper` 相关调用
+3. 确认 vLLM 引擎正常启动（GPU 显存 >> 9MB）
+
+---
+
+## 部署 #8：Cosmos 目录结构修复 + 重新部署（2026-04-20）
+
+### 问题分析
+
+对比同事 hanbang（`user/hanbangliang/img-outpainting-v1` 分支）和 siwen（`users/siwenzhu/VLLM_MML_localbuild_pypi_kusto` 分支）的成功部署，发现以下问题：
+
+#### 1. Cosmos 目录结构不对
+
+旧的 `ModelDataPath` 指向 `local/users/jinjinchen/`，mount 后容器内结构：
+```
+/Model/
+  gemma-4-26B-A4B-it-AWQ-4bit/   ← 模型
+  Gemma4Deploy/                   ← dlis_inter.py 被嵌套在子目录里
+    dlis_inter.py
+    model.py                      ← 旧版 OaasWrapper 版本
+  gemma4-26B-AWQ-v1.tar           ← 26GB tar 包（不需要）
+  best_setting.json
+```
+
+代码中 `sys.path.append('/Model')` + `from dlis_inter import ...`，但 `dlis_inter.py` 在 `/Model/Gemma4Deploy/` 子目录下，**import 直接失败**。
+
+#### 2. 旧版 model.py 残留
+
+Cosmos 上的 `Gemma4Deploy/model.py`（4.81 KiB）是旧的 OaasWrapper 版本，而非 `Gemma4-v2-direct-vllm` 分支的 direct vLLM 版本。镜像里已经包含了正确的 model.py，不应在 cosmos 上放 model.py。
+
+#### 3. 参考 hanbang 的成功配置
+
+hanbang 的环境变量：`DLIS_MODEL_DATA_TARGET_PATH=/Model;FLUX_MODEL_PATH=/Model/FLUX.2-klein-4B;...`
+
+关键点：
+- `DLIS_MODEL_DATA_TARGET_PATH=/Model` 控制 cosmos 内容 mount 到 `/Model/` 而非 `/Model/model/`
+- `dlis_inter.py` 直接放在 cosmos 根目录下（不嵌套子文件夹）
+- `model.py` 不放 cosmos 上，用镜像自带的
+
+### 修复方案
+
+**新建 cosmos 目录**：`local/users/jinjinchen/gemma4-vllm/`，扁平结构：
+```
+gemma4-vllm/
+  gemma-4-26B-A4B-it-AWQ-4bit/   ← 模型文件夹
+  dlis_inter.py                   ← 直接放根目录
+  AggSvcAuthCert-prod.pfx
+  AggSvcAuthCert-si.pfx
+```
+
+**新 Job Config**：
+```
+ModelPath       docker-repo://dlisproddockerrepo.azurecr.io/dlis/llm_framework_vllm:20260420-0748-merge
+ModelDataPath   abfs://dlisstore@dlisstoregen2.dfs.core.windows.net/dlismodelrepository-c09/local/users/jinjinchen/gemma4-vllm/
+```
+
+**环境变量**：
+```
+DLIS_MODEL_DATA_TARGET_PATH=/Model;GPU_MEMORY_UTILIZATION=0.7
+```
+
+**镜像**：`llm_framework_vllm:20260420-0748-merge`（基于 `Gemma4-v2-direct-vllm` 分支最新 commit `c146cf2` 构建）
+
+### 预期容器内结构
+```
+/Model/
+  gemma-4-26B-A4B-it-AWQ-4bit/   ← 模型，代码中 os.path.join("/Model", "gemma-4-26B-A4B-it-AWQ-4bit") 匹配
+  dlis_inter.py                   ← sys.path.append('/Model') 能正确 import
+  AggSvcAuthCert-*.pfx
+```
+
+### 修复状态
+- ✅ 新建 cosmos 目录 `gemma4-vllm/`，扁平结构
+- ✅ `dlis_inter.py` 移到根目录
+- ✅ 不放 `model.py`（用镜像自带 direct-vllm 版本）
+- ✅ 不放 `gemma4-26B-AWQ-v1.tar`（只保留解压后的模型目录）
+- ⏳ 提交新 test job，等待结果
+- ⏳ 提交新 test job（cosmos 修复后），等待结果
+
+---
+
+## Deployment #9 — Cosmos 修复前的测试结果 (2026-04-20)
+
+### 配置
+```
+镜像:        llm_framework_vllm:20260420-0748-merge (基于 Gemma4-v2-direct-vllm 分支)
+ModelDataPath: abfs://.../gemma4-vllm/  (旧结构，尚未修复)
+环境变量:     DLIS_MODEL_DATA_TARGET_PATH=/Model;GPU_MEMORY_UTILIZATION=0.7
+```
+
+### 日志现象
+
+与 deployment #6-#8 **完全相同**的 crash-loop 模式：
+- 容器反复启动进程，绑定 ephemeral ports（49965→50011+），周期 ~18 秒
+- DLIS 检测不到 `EXPOSE 8888`：`Unable to find exposed port 8888`
+- `Stats response is null or timeout`
+- 最终 `Container is not serving`，整个 pod 被判定不健康
+
+### 分析
+
+此次测试仍使用旧的 cosmos 目录结构（未修复），因此失败原因可能包含：
+1. **Cosmos 目录结构问题**（`dlis_inter.py` 嵌套在子目录，import 失败）
+2. **Dockerfile 缺少 `EXPOSE 8888`**（见下方分析）
+3. **vLLM 初始化崩溃**
+
+#### Dockerfile `EXPOSE 8888` 风险
+
+OaaS_LLMTemplate 仓库中有两个 Dockerfile：
+| Dockerfile | `EXPOSE 8888` | 备注 |
+|---|---|---|
+| `Dockerfile_vllm_0.10.0` | ❌ **没有** | 完整 build，基于 nvidia/cuda |
+| `Dockerfile_vllm_fast` | ✅ **有** | 基于 vllm/vllm-openai:latest |
+
+镜像 `20260420-0748-merge` 很可能是用 `Dockerfile_vllm_0.10.0` 构建的。DLIS 依赖 `EXPOSE 8888` 来发现容器端口，缺少该声明会导致 `Unable to find exposed port 8888`。
+
+### 下一步
+
+1. ✅ 修复 cosmos 目录结构（已完成，见 deployment #8 分析）
+2. ⏳ 用修复后的 cosmos 路径重新提交 test job
+3. 如果仍失败：确认镜像用了哪个 Dockerfile，确保有 `EXPOSE 8888`
+
+---
+
+## DLIS 本地 A6000 Docker 测试 — 推理质量调优（2026-04-21）
+
+### 背景
+
+模型在本地 A6000 Docker 环境成功运行后，发现推理输出质量存在问题：
+- Step 1（scene 生成）正常，5 个 `<Scene>` tag 正确输出
+- Step 2（prompt 扩展）输出过于冗长，生成多个 Scene Concept 而非单个 30-50 词 prompt
+
+### 问题 1：输出过于冗长
+
+**现象**：Step 2 每个输出包含多个 "Scene Concept" 段落，远超 30-50 词要求。模型将 Step 2 当作 Step 1 在做。
+
+**curl 测试输出示例**：
+```
+"generated_prompts": [
+    "**Scene Concept 1: The Quiet Morning**\nA high-angle shot of a steaming camping mug...\n\n**Scene Concept 2: The Trailhead Perspective**\n..."
+]
+```
+
+每个 prompt 输出包含 2-3 个完整 Scene Concept，内容远超预期。
+
+### 根因分析
+
+对比 DLIS `model.py` 与批量测试脚本 `inference_gemma4_two_step_vllm.py` 的参数：
+
+| 参数 | 批量脚本（正常） | DLIS model.py（异常） |
+|------|-----------------|---------------------|
+| Step 1 max_tokens | 120 | 256（共用） |
+| Step 2 max_tokens | 128 | 256（共用） |
+| top_k | 64 | 无 |
+| temperature | 1.0 | 0.8 |
+| Step 1 stop | `["</Scene5>"]` | `["</Prompt>", "</Scene5>", "<end_of_turn>"]`（共用） |
+| Step 2 stop | `["</Prompt>"]` | 同上（共用） |
+
+核心问题：**DLIS 用同一个 `SamplingParams` 跑两个 step**，而批量脚本为 Step 1 和 Step 2 分别设了不同参数。缺少 `top_k=64` 导致生成更发散。
+
+### 修复
+
+#### 修复 1：启用 Prefix Caching + 降低 max_tokens（commit `6f90a93`）
+
+```python
+# 启用 APC，Step 2 的 5 个 prompt 共享前缀自动复用 KV cache
+self.llm = LLM(
+    ...
+    enable_prefix_caching=True,
+)
+```
+
+`max_tokens` 从 256 降至 128。
+
+#### 修复 2：Step 1/Step 2 使用独立 SamplingParams（commit `d496134`）
+
+与批量测试脚本完全对齐：
+
+```python
+self.step1_sampling_params = SamplingParams(
+    temperature=1.0, top_p=0.95, top_k=64,
+    max_tokens=120, stop=["</Scene5>"],
+)
+
+self.step2_sampling_params = SamplingParams(
+    temperature=1.0, top_p=0.95, top_k=64,
+    max_tokens=128, stop=["</Prompt>"],
+)
+```
+
+`_run_vllm()` 方法增加 `sampling_params` 参数，`Eval` 和 `EvalBatch` 分别传入对应的 params。
+
+### 测试命令
+
+```bash
+sudo docker run --gpus all -it --rm \
+  -v ~/data/gemma-4-26B-A4B-it-AWQ-4bit:/Model/gemma-4-26B-A4B-it-AWQ-4bit \
+  -v /path/to/OaaS_LLMTemplate/dlis_model/model/model.py:/dlis_model/model/model.py \
+  -e DLIS_MODEL_DATA_TARGET_PATH=/Model \
+  -e GPU_MEMORY_UTILIZATION=0.7 \
+  -p 8899:8888 \
+  gemma4-vllm:local \
+  ./dlis_model/run.sh http
+```
+
+### 状态
+
+- ✅ Prefix caching 启用
+- ✅ SamplingParams 与批量脚本对齐
+- ⏳ 待本地 A6000 验证修复后的输出质量
+

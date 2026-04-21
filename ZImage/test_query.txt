@@ -1,0 +1,1 @@
+{"prompt": "A beautiful sunset over the ocean with golden light reflecting on calm waves", "width": 1344, "height": 768}

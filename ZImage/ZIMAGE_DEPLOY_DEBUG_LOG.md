@@ -106,3 +106,59 @@ sudo docker run -d --name zimage-test \
 - `curl -X POST http://localhost:8889 --data '{"prompt": "A beautiful sunset over the ocean", "width": 1344, "height": 768}'` 推理成功
 - 返回 base64 编码的 PNG 图片，包含 `image`、`width`、`height` 字段
 - **结论：ZImage DLIS 本地 Docker 测试通过**
+
+## 代码修复与 Pipeline 构建（2026-04-21）
+
+### 修复 1：重命名 FLUX → ZIMAGE（commit `14caf90`）
+- `model.py` 和 `async_model.py`：`FLUX_MODEL_PATH` → `ZIMAGE_MODEL_PATH`
+- 默认值从 `self.model_dir`（`/dlis_model/model`）改为 `/Model`（DLIS 挂载路径）
+- DLIS 部署时不再需要额外设置 `ZIMAGE_MODEL_PATH` 环境变量
+
+### 修复 2：删除 dlis_inter.py 调试代码（commit `878b059`）
+- 删除 `print(os.listdir("/Model"))`，避免 `/Model` 未 mount 时报错
+
+### 修复 3：Pipeline 添加清华 PyPI 镜像（commit `3d99861`）
+- ZImage 分支的 `azure-pipelines-unified.yml` 缺少 `PIP_INDEX_URL` 配置
+- Pipeline agent 无法直连 `pypi.org`，`pip install` 超时导致构建失败
+- 添加 `PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple` 和 `UV_INDEX_URL`
+- main 分支已有此配置，但 ZImage 分支从早期 main 分出时尚未包含
+
+### Pipeline 构建 #1 失败分析
+```
+ERROR: Could not find a version that satisfies the requirement tornado (from versions: none)
+ERROR: No matching distribution found for tornado
+```
+- 原因：`PIP_INDEX_URL` 未配置，`docker exec pip install` 直连 `pypi.org` 超时
+- `build_vllm_image.sh` 中 `PIP_ARGS` 为空（日志：`Using PIP arguments:`）
+- 已通过 commit `3d99861` 修复
+
+### Cosmos 目录结构规划
+DLIS 部署时 cosmos 目录 mount 到 `/Model`，推荐扁平结构：
+```
+cosmos: local/users/jinjinchen/zimage-v1/
+├── Z-Image-Turbo/          ← 模型文件夹
+│   ├── model_index.json
+│   ├── scheduler/
+│   ├── text_encoder/
+│   ├── tokenizer/
+│   ├── transformer/
+│   └── vae/
+├── dlis_inter.py            ← 直接放根目录
+├── AggSvcAuthCert-prod.pfx  ← Kusto 证书（可选）
+└── AggSvcAuthCert-si.pfx
+```
+
+对应环境变量：
+```
+DLIS_MODEL_DATA_TARGET_PATH=/Model
+ZIMAGE_MODEL_PATH=/Model/Z-Image-Turbo
+```
+
+### 状态
+- [x] 重命名 FLUX → ZIMAGE
+- [x] 删除 dlis_inter.py 调试代码
+- [x] 添加清华 PyPI 镜像配置
+- [x] 确认 Gemma4 分支未被误改
+- [ ] Pipeline 构建成功
+- [ ] Cosmos 上传模型数据
+- [ ] DLIS 部署测试
