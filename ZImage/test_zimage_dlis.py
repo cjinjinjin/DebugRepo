@@ -9,7 +9,7 @@ Request format: JSON
 Response format:
   {"image": "<base64 PNG>", "width": 1344, "height": 768, "seed": 42}
 
-Auth: Client certificate (private1.cer + private1.key)
+Auth: AAD Bearer token via MSAL + PFX certificate
 """
 
 import argparse
@@ -19,16 +19,63 @@ import os
 import time
 import uuid
 
+import msal
 import requests
 import urllib3
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat
+from cryptography.hazmat.primitives.serialization.pkcs12 import load_key_and_certificates
+from cryptography.hazmat.primitives.hashes import SHA1
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 API_URL = "https://WestUS2.bing.prod.dlis.binginternal.com/route/PicassoAdsCreative.ZImage-V1-Jinjin"
 
-CERT_DIR = os.environ.get("CERT_DIR", "/home/jinjinchen/dlis/abo-models/team/dai/auto_image/client")
-CERT_FILE = os.path.join(CERT_DIR, "private1.cer")
-KEY_FILE = os.path.join(CERT_DIR, "private1.key")
+TENANT_ID = os.environ.get("TENANT_ID", "975f013f-7f24-47e8-a7d3-abc4752bf346")
+CLIENT_ID = os.environ.get("CLIENT_ID", "4fb0213c-e983-4210-b494-7b73d650e331")
+CERT_PATH = os.environ.get("CERT_PATH", "/home/jinjinchen/data/pfx_cert/AggSvcAuthCert-prod.pfx")
+DLIS_SCOPE = os.environ.get("DLIS_SCOPE", "e65e832b-d26e-4d59-be94-d261cd10435c/.default")
+
+_msal_app = None
+
+
+def _load_pfx(pfx_path: str, password=None) -> dict:
+    """Load PFX and return MSAL-compatible cert dict with private key + chain."""
+    with open(pfx_path, "rb") as f:
+        pfx_data = f.read()
+    private_key, certificate, additional_certs = load_key_and_certificates(
+        pfx_data, password, default_backend()
+    )
+    key_pem = private_key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption())
+    cert_pem = certificate.public_bytes(Encoding.PEM)
+    chain = [cert_pem]
+    if additional_certs:
+        chain += [c.public_bytes(Encoding.PEM) for c in additional_certs]
+    return {
+        "private_key": key_pem,
+        "thumbprint": certificate.fingerprint(SHA1()).hex().upper(),
+        "public_certificate": b"".join(chain).decode(),
+    }
+
+
+def _get_bearer_token() -> str:
+    global _msal_app
+    if _msal_app is None:
+        cert = _load_pfx(CERT_PATH)
+        authority = f"https://login.microsoftonline.com/{TENANT_ID}"
+        _msal_app = msal.ConfidentialClientApplication(
+            client_id=CLIENT_ID,
+            authority=authority,
+            client_credential={
+                "private_key": cert["private_key"].decode(),
+                "thumbprint": cert["thumbprint"],
+                "public_certificate": cert["public_certificate"],
+            },
+        )
+    result = _msal_app.acquire_token_for_client(scopes=[DLIS_SCOPE])
+    if "access_token" not in result:
+        raise RuntimeError(f"Failed to get token: {result.get('error_description', result)}")
+    return f"Bearer {result['access_token']}"
 
 
 def call_zimage(prompt: str, width: int = 1344, height: int = 768, timeout_s: int = 120) -> dict:
@@ -45,12 +92,17 @@ def call_zimage(prompt: str, width: int = 1344, height: int = 768, timeout_s: in
         },
     }
 
+    bearer_token = _get_bearer_token()
+    headers = {
+        "Authorization": bearer_token,
+        "Content-Type": "application/json",
+    }
+
     st = time.perf_counter()
     resp = requests.post(
         API_URL,
         json=payload,
-        cert=(CERT_FILE, KEY_FILE),
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         verify=False,
         timeout=timeout_s,
     )
@@ -60,7 +112,6 @@ def call_zimage(prompt: str, width: int = 1344, height: int = 768, timeout_s: in
 
     if resp.status_code == 200:
         result = resp.json()
-        # Save image if present
         if "image" in result:
             img_bytes = base64.b64decode(result["image"])
             out_path = f"zimage_output_{int(time.time())}.png"
@@ -82,7 +133,12 @@ def main():
     parser.add_argument("--width", type=int, default=1344)
     parser.add_argument("--height", type=int, default=768)
     parser.add_argument("--query-file", help="Read prompts from file (one JSON per line)")
+    parser.add_argument("--cert", default=None, help="Override PFX cert path")
     args = parser.parse_args()
+
+    if args.cert:
+        global CERT_PATH
+        CERT_PATH = args.cert
 
     if args.query_file:
         with open(args.query_file, encoding="utf-8") as f:
