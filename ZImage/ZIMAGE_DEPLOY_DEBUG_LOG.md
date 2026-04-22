@@ -159,6 +159,43 @@ ZIMAGE_MODEL_PATH=/Model/Z-Image-Turbo
 - [x] 删除 dlis_inter.py 调试代码
 - [x] 添加清华 PyPI 镜像配置
 - [x] 确认 Gemma4 分支未被误改
-- [ ] Pipeline 构建成功
-- [ ] Cosmos 上传模型数据
-- [ ] DLIS 部署测试
+- [x] Pipeline 构建成功
+- [x] Cosmos 上传模型数据
+- [x] DLIS 部署测试 ✅
+
+## DLIS 部署测试（2026-04-22）
+
+### 部署配置
+- **镜像**：`dlisproddockerrepo.azurecr.io/dlis/llm_framework_vllm:20260421-0328-merge`
+- **ModelName**：`ZImage-V1-Jinjin`
+- **Cosmos**：`abfs://dlisstore@dlisstoregen2.dfs.core.windows.net/dlismodelrepository-c09/local/users/jinjinchen/zimage-v1/`
+- **环境变量**：`DLIS_MODEL_DATA_TARGET_PATH=/Model;GPU_MEMORY_UTILIZATION=0.7`
+
+### 遇到的问题
+
+1. **请求超时（Connection timed out）**：
+   - 错误 URL：`http://WestUS2BE.bing.prod.dlis.binginternal.com:86/route/...`（HTTP + 端口 86）
+   - 正确 URL：`https://WestUS2.bing.prod.dlis.binginternal.com/route/...`（HTTPS + 默认 443）
+   - 注意：不需要 `:8888` 后缀，不需要 `/routebatch/`
+
+2. **需要客户端证书**：
+   - cert: `private1.cer` + `private1.key`
+   - 路径：`/home/jinjinchen/dlis/abo-models/team/dai/auto_image/client/`
+
+### 成功的请求方式
+```python
+import requests
+
+response = requests.post(
+    "https://WestUS2.bing.prod.dlis.binginternal.com/route/PicassoAdsCreative.ZImage-V1-Jinjin",
+    cert=("private1.cer", "private1.key"),
+    json={"prompt": "A beautiful sunset over the ocean", "width": 1344, "height": 768},
+    headers={"Content-Type": "application/json"},
+    verify=False,
+)
+```
+
+### 测试结果
+- HTTP 200，推理成功
+- 返回 base64 编码的 PNG 图片
+- **结论：ZImage DLIS 部署测试通过 ✅**
