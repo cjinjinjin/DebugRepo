@@ -4487,5 +4487,160 @@ sudo docker run --gpus all -it --rm \
 
 - ✅ Prefix caching 启用
 - ✅ SamplingParams 与批量脚本对齐
-- ⏳ 待本地 A6000 验证修复后的输出质量
+- ✅ 本地 A6000 真实数据验证通过（见下方）
+
+---
+
+## DLIS 本地 A6000 真实数据验证（2026-04-21）
+
+### 问题回顾
+
+前几轮修复后，使用 placeholder 内容（"Welcome to our outdoor adventure store!"）测试时，Step 2 输出仍然异常——生成多个 Scene Concepts 而非单条 30-50 词 prompt。怀疑是内容太少导致模型缺乏上下文。
+
+### Tokenizer Thinking Prefix 问题
+
+**根因**: AWQ 量化模型的 tokenizer chat_template 内置了 `<|channel>thought\n<channel|>` 前缀，导致模型进入 thinking mode，输出格式异常。
+
+**修复尝试 1** — `dlis_inter.py._apply_chat_template` 中 strip thinking prefix：
+```python
+text = text.replace("<|channel>thought\n<channel|>", "")
+```
+结果：**未生效**。容器内 Python 从 `__pycache__` 加载了旧版 `dlis_inter.py`，volume mount 的新文件被忽略。
+
+**修复尝试 2（最终方案）** — `model.py` 中直接 patch tokenizer 的 `chat_template` 属性：
+```python
+tokenizer = self.llm.get_tokenizer()
+if hasattr(tokenizer, 'chat_template') and tokenizer.chat_template and '<|channel>thought' in tokenizer.chat_template:
+    tokenizer.chat_template = tokenizer.chat_template.replace(
+        "<|channel>thought\n<channel|>", ""
+    )
+```
+结果：**生效**。`model.py` 在 `__init__` 时加载，不受 `__pycache__` 影响。输出中不再出现 `thought\n` 前缀。
+
+### 真实数据测试
+
+使用 `UHRS2K_SD_Random200_0324_GPT5.tsv` 中的真实 landing page 数据进行测试，共 4 个 case：
+
+| # | Case | URL | Step1 | Step2 | Total |
+|---|------|-----|-------|-------|-------|
+| 1 | Ford F-150 Lightning 经销商 | ford.com | 2.721s (冷启动) | 1.891s | 4.670s |
+| 2 | HSN 女装 | hsn.com | 0.951s | 0.871s | 1.823s |
+| 3 | OpenRent 房产出租 | openrent.co.uk | 0.911s | 0.925s | 1.837s |
+| 4 | Instant Gaming 游戏平台 | instant-gaming.com | 0.866s | 1.531s | 2.398s |
+
+**关键发现**：
+- Prefix caching 生效：Step1 从首次 2.7s 降到后续 ~0.9s
+- Step2 批量 5 个 prompt 并行推理，大部分 < 1s
+- 稳态总延迟 1.8-2.4s
+
+### 输出质量验证（Ford Case 示例）
+
+**Step 1 输出**（5 个场景概念）：
+```
+<Scene1>Extreme close-up of the electric F-150 Lightning headlight</Scene1>
+<Scene2>Smiling driver charging truck at a modern home</Scene2>
+<Scene3>F-150 Lightning parked at a rugged outdoor campsite</Scene3>
+<Scene4>Driver effortlessly hauling heavy gear with electric power</Scene4>
+<Scene5>Sleek truck silhouette against a dramatic sunrise horizon</Scene5>
+```
+
+**Step 2 输出**（每个 scene 扩展为 30-50 词 prompt）：
+- Prompt1: "Extreme close-up of a modern electric truck headlight, intricate LED crystalline textures reflecting a soft sunrise..."
+- Prompt2: "A relaxed homeowner in casual weekend attire stands in a sunlit driveway, smiling while plugging a sleek charging cable..."
+- Prompt3: "A sleek F-150 Lightning parked at a scenic, misty mountain campsite during golden hour..."
+- Prompt4: "A rugged adventurer standing by an open tailgate of a modern electric pickup..."
+- Prompt5: "Cinematic side profile of a modern electric pickup truck parked on a rugged mountain ridge..."
+
+**format_compliant**: `true`，**Status**: `Success`
+
+### 结论
+
+- placeholder 内容过于简短导致模型输出异常，真实 landing page 数据下模型表现完全正常
+- tokenizer thinking prefix 必须在 `model.py` 中 patch（`dlis_inter.py` 的修复因 `__pycache__` 无法生效）
+- 两个文件都已更新并保持一致（双保险）
+
+### 待办
+
+- ✅ 更新 cosmos 上的 `model.py` 和 `dlis_inter.py`
+- ⏳ 提交 DLIS 部署验证
+
+---
+
+## DLIS 部署通用注意事项总结（Gemma4 + ZImage 经验）
+
+基于 Gemma4（LLM）和 ZImage（Diffusion）两个模型的 DLIS 部署经验，总结以下共同踩坑点和最佳实践。
+
+### 1. 用 `vllm/vllm-openai` 作为基础镜像加速构建
+
+两个项目都从 `nvidia/cuda` 基础镜像构建失败或极慢的痛苦中学到：直接用 `vllm/vllm-openai:latest`（或特定 tag）做基础镜像（`Dockerfile_vllm_fast`），跳过 FlashInfer AOT、DeepGEMM 等源码编译。构建时间从**几十分钟降到不到 1 秒**。
+
+注意事项：
+- 基础镜像自带 ENTRYPOINT 会拦截 DLIS 的 CMD，必须在 Dockerfile 中 `ENTRYPOINT []` 显式重置
+- 基础镜像只有 `python3`，DLIS 框架调用 `python`，需创建 symlink：`ln -s /usr/bin/python3 /usr/bin/python`
+- 镜像自带的 `transformers` 版本可能不满足需求（如 Gemma4 需要 `>=5.5.0`），需在 Dockerfile 中显式安装
+
+### 2. 添加清华 PyPI 镜像源解决网络超时
+
+两个项目的 CI pipeline 都遇到 `pip install` 超时（Pipeline agent 无法直连 `pypi.org`）。必须在三个层面配置清华源：
+
+| 层面 | 配置方式 |
+|------|---------|
+| `azure-pipelines-unified.yml` | 设 `PIP_INDEX_URL` 和 `UV_INDEX_URL` 环境变量，指向 `https://pypi.tuna.tsinghua.edu.cn/simple` |
+| `build_vllm_image.sh` | 通过 `--build-arg` 传入 Dockerfile；通过 `PIP_ARGS` 变量传给 `docker exec pip install` |
+| `Dockerfile` | 用 `ARG PIP_INDEX_URL UV_INDEX_URL` 接收构建参数 |
+
+**关键**：不能用 `docker exec -e` 环境变量方式传清华源，必须通过 `--build-arg` 和 `PIP_ARGS`。
+
+### 3. 不必死搬硬套 OaaS Template，按模型类型选推理框架
+
+OaaS Template 提供的是**容器框架**（HTTP server、run.sh、Model 挂载、Kusto 日志等），推理部分应该用模型原生最合适的库：
+
+| 模型类型 | 推理框架 | 示例 |
+|---------|---------|------|
+| LLM | vLLM（复用 `vllm_runner.py`） | Gemma4：用 vLLM 的 `AsyncLLMEngine`，定制 `model.py` 实现 two-step 推理 |
+| Diffusion | diffusers | ZImage：直接用 `ZImagePipeline`，完全不需要 vLLM |
+| 其他 | 按需选择 | 图片 outpainting 用 `Flux2KleinPipeline` + LoRA |
+
+不要强行把所有模型都塞进 vLLM 推理路径，diffusion 模型用 diffusers 库、其他模型用各自最合适的推理库即可。
+
+### 4. `requirements-vllm.txt` 不要放 torch/torchvision/transformers
+
+两个项目都踩了依赖版本冲突的坑：
+- `torchvision==0.22.0` 会把 torch 从 2.10.0 降级到 2.7.0，导致 vllm ABI 不兼容（`_C.abi3.so: undefined symbol`）
+- `huggingface_hub>=1.0` 可能与基础镜像自带的 `transformers` 版本冲突
+- 这些包需要特定 CUDA 源（如 `--index-url https://download.pytorch.org/whl/cu128`）和安装顺序
+
+**原则**：torch/torchvision/transformers 由 Dockerfile 单独管理，`requirements-vllm.txt` 只放业务依赖。
+
+### 5. 模型挂载路径必须正确
+
+两个项目都在路径上反复踩坑：
+- DLIS 将 Cosmos 数据挂载到 `/Model`（**只读**），不要试图在 `/Model` 下用 `os.makedirs()` 创建子目录
+- 模型路径环境变量的默认值要设对（如 ZImage 的 `ZIMAGE_MODEL_PATH=/Model/Z-Image-Turbo`，Gemma4 的模型在 `/Model/model` 下）
+- 本地 Docker 测试时注意宿主机路径 vs 容器路径的映射（`-v /home/jinjinchen/data/Z-Image:/Model`）
+- 不要直接挂载到 `/dlis_model/Model`（会被 Dockerfile 已有目录覆盖），应挂载到 `/Model/model` 然后 `ln -s`
+
+### 6. 先本地 A6000 Docker 验证，再提交 CI
+
+两个项目都是在 A6000 上用 `docker run` 端到端跑通后，才把修改固化到代码提交 CI。这个流程能提前暴露：
+- 端口映射遗漏（必须 `-p 8888:8888` 或 `-p 8889:8888`）
+- GPU 设备冲突（GPU 0 被占用时改用 `--gpus '"device=1"'`）
+- 模型加载路径、环境变量缺失
+- 依赖安装失败
+
+### 7. `dlis_inter.py` / `best_setting.json` / `opt_type.txt` 定制要点
+
+| 文件 | 作用 | 注意事项 |
+|------|------|---------|
+| `dlis_inter.py` | `PreAndPostProcessor`，请求解析和响应格式化 | 每个模型不同，LLM 处理 system prompt / stop tokens，diffusion 处理 prompt / 图片 base64 编码 |
+| `best_setting.json` | vLLM 推理参数配置（`llm_type`、`model`、`stop` 等） | 放在 Cosmos 的 `_opt` 目录下；不要设 `quantization` 字段（`QUANTIZATION_MAP` 可能没有对应映射） |
+| `opt_type.txt` | 推理引擎类型标识 | 用 `printf "llm"` 写入，**不要用 `echo`**（末尾换行符导致类型识别失败） |
+
+### 8. DLIS 平台行为备忘
+
+- `/Model` 目录是**只读**挂载（Cosmos 存储），不可写入
+- DLIS 数据挂载机制不会拾取手动添加的子目录（需重新部署）
+- `ModelDataPath` 指向单个文件时，DLIS 挂载其**父目录**到 `/Model`
+- 健康检查依赖 port 8888，HTTP server 必须正常启动才能通过
+- `dlis_integration_validated` 文件必须存在于 `model_folder` 下，否则报 `RuntimeError`
 
