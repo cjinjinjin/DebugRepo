@@ -199,3 +199,81 @@ response = requests.post(
 - HTTP 200，推理成功
 - 返回 base64 编码的 PNG 图片
 - **结论：ZImage DLIS 部署测试通过 ✅**
+
+## 部署 #3：Kusto 日志调试（2026-04-24）
+
+### 问题
+ZImage 部署后 Kusto 中查不到任何日志，`appsvc_info` 表中 `ApplicationName == 'ZImageModel'` 无结果。
+
+### 根因分析（对比 siwen 和 hanbang 的实现）
+
+1. **`eventhub_sink.py` 静默吞掉认证错误**：原代码 try-except 包裹 credential 创建，失败时不抛异常，导致 EventHub producer 为 None，日志全部丢弃。
+   - **修复**：移除 try-except，直接创建 credential，认证失败时立即报错。
+
+2. **`kusto_log.py` 格式不兼容**：字段用引号包裹、时间戳格式错误、ticks 计算错误。
+   - **修复**：对齐 siwen 的格式 — 无引号、`%m/%d/%Y %H:%M:%S.%f` 时间戳、`int(timestamp * 1000)` ticks、逗号替换为 `[COMMA]`。
+
+3. **Logger level 默认 WARNING**：`logging.getLogger("zimage")` 创建的子 logger 默认继承 root level（WARNING），所有 INFO 日志被过滤。
+   - **修复**：在 `model.py` 和 `async_model.py` 中显式添加 `logger.setLevel(logging.INFO)`。
+
+4. **`record.msg` 不解析格式参数**：使用 `%s` 格式的日志只输出 `%` 符号。
+   - **修复**：改用 `record.getMessage()` 解析完整消息。
+
+5. **请求中缺少 tracking_data 提取**：`model.py` 未从请求 JSON 中提取 tracking_data 字段。
+   - **修复**：在 `_run_single` 中添加 tracking_data 解析逻辑。
+
+6. **证书与 EventHub namespace 不匹配**：`config.py` 默认使用 SI namespace（`aggregation-si-logging`），但挂载的是 prod 证书（`AggSvcAuthCert-prod.pfx`）。
+   - **修复**：在 `/Model/settings.json` 中覆盖 `eventhub_namespace` 为 prod（`aggregation-logging.servicebus.windows.net`），与 prod 证书匹配。
+
+### 相关 Commits（OaaS_LLMTemplate `jinjinchen/ZImage-v1` branch）
+- `63c8afe`：eventhub_sink 和 kusto_log 格式对齐 siwen
+- `6d845c8`：logger.setLevel(logging.INFO) + record.getMessage()
+- `8558bd7`：撤回误加的 tornado 依赖
+
+### 本地 Docker 测试命令
+
+#### 构建镜像（使用 build_vllm_image.sh）
+```bash
+cd ~/0424_test_zimage/OaaS_LLMTemplate
+git checkout jinjinchen/ZImage-v1
+sudo bash pipeline/build_vllm_image.sh
+```
+
+#### 创建 settings.json 覆盖 EventHub namespace
+```bash
+echo '{"eventhub_namespace": "aggregation-logging.servicebus.windows.net"}' > /home/jinjinchen/data/Z-Image/settings.json
+```
+
+#### 启动容器
+```bash
+sudo docker run -d --name zimage-test \
+  --gpus '"device=1"' \
+  -v /home/jinjinchen/data/Z-Image:/Model \
+  -v /home/jinjinchen/data/pfx_cert/AggSvcAuthCert-prod.pfx:/Model/AggSvcAuthCert-prod.pfx \
+  -p 8889:8888 \
+  dlisproddockerrepo.azurecr.io/dlis/llm_framework_vllm:20260424-0621- \
+  /dlis_model/run.sh http
+```
+
+#### 查看日志
+```bash
+sudo docker logs -f zimage-test
+```
+
+#### 测试推理请求
+```bash
+curl -X POST http://localhost:8889 --data '{"prompt": "A beautiful sunset over the ocean", "width": 1344, "height": 768, "seed": 42, "tracking_data": {"requestid": "test-001", "trackingid": "track-001", "sessionid": "sess-001", "customerid": "cust-001", "callername": "local-test"}}'
+```
+
+#### Kusto 查询验证
+```kql
+appsvc_info | union appsvc_warn | union appsvc_err
+| where Timestamp > ago(1d)
+| where ApplicationName == 'ZImageModel'
+```
+
+### 测试结果
+- 模型加载成功（~5s）
+- Kusto 日志发送成功，prod 证书 + prod namespace 认证通过
+- 推理请求正常返回 base64 图片
+- **结论：ZImage Kusto 日志调试通过 ✅**
