@@ -277,3 +277,113 @@ appsvc_info | union appsvc_warn | union appsvc_err
 - Kusto 日志发送成功，prod 证书 + prod namespace 认证通过
 - 推理请求正常返回 base64 图片
 - **结论：ZImage Kusto 日志调试通过 ✅**
+
+## 部署 #4：Kusto 日志增强（2026-04-24）
+
+### 设计理念
+参考团队同事的日志实现（hanbang 的分步耗时 + siwen 的配置日志和全量 tracking_data），结合 ZImage 的 T2I 推理特点进行增强。
+
+**核心目标**：
+- **可追踪性**：所有日志都带 `extra=tracking_data`，可通过 RequestId/TrackingId 追踪单个请求的完整生命周期
+- **性能分析**：每个阶段独立计时（preprocess → inference → encode → postprocess），便于定位瓶颈
+- **问题诊断**：记录完整 prompt 内容、配置参数、环境变量覆盖情况，出问题时可复现
+- **实例区分**：init tracking_data 包含 `hostname_pid`，多实例部署时可区分日志来源
+
+**参考对比**：
+| 特性 | Hanbang (outpainting) | Siwen (MML vLLM) | ZImage (增强后) |
+|------|----------------------|-------------------|-----------------|
+| 分步耗时 | ✅ preprocess/infer/postprocess | ❌ | ✅ preprocess/infer/encode/postprocess |
+| 配置日志 | ❌ | ✅ sampling params/tensor_parallel | ✅ device/dtype/size/cfg/steps/seed |
+| tracking_data | 部分（推理阶段） | ✅ 全量 | ✅ 全量（含初始化和错误） |
+| 错误 traceback | ✅ logger.exception | ❌ logger.error | ✅ logger.exception + tracking_data |
+| prompt 内容 | ❌ | ❌ | ✅ 完整 prompt 文本 |
+| 图片大小 | ❌ | ❌ | ✅ 输出 KB |
+| 环境变量覆盖 | ❌ | ✅ | ✅ |
+| EvalBatch 进度 | ❌ | ✅ | ✅ |
+
+### 改动内容
+
+1. **初始化配置日志**：记录 device、dtype、默认参数（width/height/steps/cfg/seed）、环境变量覆盖情况
+2. **所有日志加 `extra=tracking_data`**：包括初始化、推理、错误、OnDataUpdate
+3. **分步耗时细化**：新增 preprocess 和 encode 的独立计时
+4. **图片编码信息**：记录输出图片大小（KB）
+5. **完整耗时汇总**：`Eval total latency=Xms (preprocess=Xms, infer=Xms, encode=Xms, postprocess=Xms)`
+6. **EvalBatch 日志**：记录批量处理进度和总耗时
+7. **错误处理加 tracking_data**：错误日志也能追踪到具体请求
+8. **实例标识**：init tracking_data 包含 `hostname_pid`
+9. **Prompt 内容记录**：日志中记录完整 prompt 文本
+
+### 相关 Commits
+- `2d6d1c7`：综合日志增强
+- `d643e25`：添加 prompt 内容记录
+
+### 构建与测试
+
+#### 构建镜像
+```bash
+cd ~/0424_test_zimage/OaaS_LLMTemplate
+git pull origin jinjinchen/ZImage-v1
+sudo bash pipeline/build_vllm_image.sh
+# 镜像 tag: 20260424-0645-
+```
+
+#### 启动容器
+```bash
+sudo docker stop zimage-test && sudo docker rm zimage-test
+
+sudo docker run -d --name zimage-test \
+  --gpus '"device=1"' \
+  -v /home/jinjinchen/data/Z-Image:/Model \
+  -v /home/jinjinchen/data/pfx_cert/AggSvcAuthCert-prod.pfx:/Model/AggSvcAuthCert-prod.pfx \
+  -p 8889:8888 \
+  dlisproddockerrepo.azurecr.io/dlis/llm_framework_vllm:20260424-0645- \
+  /dlis_model/run.sh http
+```
+
+#### 测试推理请求
+```bash
+curl -X POST http://localhost:8889 --data '{"prompt": "A beautiful sunset over the ocean", "width": 1344, "height": 768, "seed": 42, "tracking_data": {"requestid": "test-002", "trackingid": "track-002", "sessionid": "sess-002", "customerid": "cust-002", "callername": "local-test"}}'
+```
+
+### 测试结果
+- 模型加载成功
+- 推理请求正常返回
+- Kusto 日志包含完整信息：配置参数、prompt 内容、分步耗时、图片大小
+
+#### Kusto 中预期看到的日志条目（按时间顺序）
+
+**初始化阶段**（容器启动时）：
+```
+Message: Model Path: /dlis_model/run.sh
+Message: Model Dir: /dlis_model/model
+Message: ZImage config: device=cuda:0[COMMA] dtype=bfloat16[COMMA] default_size=1344x768[COMMA] guidance_scale=0.0[COMMA] num_inference_steps=9[COMMA] seed=42
+Message: Using default parameters (no env overrides)
+Message: Initializing ZImage pipeline...
+Message: Loading ZImagePipeline from /Model[COMMA] dtype=bfloat16
+Message: Model loaded successfully[COMMA] total latency=4914ms    (Duration: 4914)
+```
+
+**推理阶段**（收到请求时）：
+```
+Message: Eval request received                                     (RequestId: test-002)
+Message: Preprocess done[COMMA] latency=0ms
+Message: Inference request: prompt='A beautiful sunset over the ocean'[COMMA] prompt_len=33[COMMA] size=1344x768[COMMA] cfg=0.0[COMMA] steps=9[COMMA] seed=42
+Message: Inference done[COMMA] latency=7634ms
+Message: Image encoded[COMMA] latency=345ms[COMMA] output_size=1344x768[COMMA] ~2800KB
+Message: Postprocess done[COMMA] latency=3ms
+Message: Eval total latency=7980ms (preprocess=0ms[COMMA] infer=7634ms[COMMA] encode=345ms[COMMA] postprocess=3ms)[COMMA] size=1344x768    (Duration: 7980)
+```
+
+#### 关键 Kusto 字段映射
+| Kusto 字段 | 来源 | 说明 |
+|-----------|------|------|
+| ApplicationName | config.py `application_name` | `ZImageModel` |
+| ApplicationSubSystem | logger name | `zimage` |
+| RequestId | tracking_data.requestid | 请求级追踪 |
+| TrackingId | tracking_data.trackingid | 会话级追踪 |
+| Duration | tracking_data["duration"] | 仅在 total latency 和 model loaded 时设置 |
+| MethodName | record.funcName | `__init__` / `_run_single` |
+| Reserved1 | hostname-pid | 实例标识 |
+| Reserved3 | filename:lineno | `model.py:142` |
+
+- **结论：ZImage Kusto 日志增强通过 ✅**
