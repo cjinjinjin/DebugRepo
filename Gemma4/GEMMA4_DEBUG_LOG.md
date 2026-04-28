@@ -4644,3 +4644,218 @@ OaaS Template 提供的是**容器框架**（HTTP server、run.sh、Model 挂载
 - 健康检查依赖 port 8888，HTTP server 必须正常启动才能通过
 - `dlis_integration_validated` 文件必须存在于 `model_folder` 下，否则报 `RuntimeError`
 
+---
+
+## config.py 重构：支持外部 settings.json 配置覆盖 + 切换 prod 证书（2026-04-22）
+
+### 背景
+
+之前 `config.py` 中 `eventhub_namespace` 和 `certificate_path` 硬编码在代码里，切换环境（si/prod）需要改代码重新构建镜像。参考同事 hanbang（`user/hanbangliang/img-outpainting-v1` 分支）的实现，改为支持通过外部 JSON 文件覆盖配置。
+
+### 参考实现
+
+hanbang 在 `img-outpainting-v1` 分支中的 `config.py` 使用了 `pydantic-settings` + 自定义 `JsonFileSettingsSource`：
+- 从 `/Model/settings.json` 读取配置覆盖
+- 优先级：init kwargs > 环境变量 > JSON 文件 > 代码默认值
+- JSON 文件不存在时静默忽略，不阻塞启动
+- `certificate_path` 默认指向 `AggSvcAuthCert-prod.pfx`
+
+### 改动内容
+
+**分支**：`jinjinchen/Gemma4-v2-direct-vllm`
+**commit**：`3600513`
+
+#### 1. `config.py` — 添加 JsonFileSettingsSource + 切换 prod 证书
+
+改动前：
+```python
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    eventhub_namespace: str = "aggregation-logging.servicebus.windows.net"
+    certificate_path: str = os.path.join("/Model/gemma-4-26B-A4B-it-AWQ-4bit", 'AggSvcAuthCert-si.pfx')
+    ...
+```
+
+改动后：
+```python
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+
+DEFAULT_SETTINGS_JSON_PATH = os.environ.get("SETTINGS_JSON_PATH", "/Model/settings.json")
+
+class JsonFileSettingsSource(PydanticBaseSettingsSource):
+    """从 JSON 文件加载配置覆盖，文件不存在时静默忽略"""
+    ...
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    eventhub_namespace: str = "aggregation-logging.servicebus.windows.net"
+    certificate_path: str = os.path.join("/Model", "AggSvcAuthCert-prod.pfx")
+    ...
+
+    @classmethod
+    def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):
+        json_source = JsonFileSettingsSource(settings_cls, DEFAULT_SETTINGS_JSON_PATH)
+        return (init_settings, env_settings, dotenv_settings, json_source, file_secret_settings)
+```
+
+关键变更：
+- `certificate_path`：`/Model/gemma-4-26B-A4B-it-AWQ-4bit/AggSvcAuthCert-si.pfx` → `/Model/AggSvcAuthCert-prod.pfx`
+- 路径不再硬编码模型子目录，与 cosmos 扁平结构一致
+- 添加 `SettingsConfigDict(extra="ignore")` 防止 JSON 中多余字段导致 ValidationError
+
+#### 2. `eventhub_sink.py` — 添加 credential 容错
+
+改动前：EventHub credential 创建失败会直接抛异常，阻塞容器启动。
+
+改动后：
+```python
+def _try_get_credential(tenant_id: str):
+    try:
+        return CertificateCredential(...)
+    except Exception as e:
+        logger.info("EventHub credential unavailable (%s), kusto logs will be local-only", e)
+        return None
+
+_credential = _try_get_credential(settings.corp_tenant_id)
+
+class EventHubSink:
+    def __init__(self, ...):
+        self.producer = None
+        if _credential is not None:
+            self.producer = EventHubProducerClient(...)
+
+    def send_messages_in_background(self, msgs):
+        if self.producer is None:
+            return  # 静默跳过，不阻塞推理
+        ...
+```
+
+### 使用方式
+
+部署时在 Cosmos `/Model/settings.json` 中放置需要覆盖的配置：
+
+```json
+{
+    "eventhub_namespace": "aggregation-si-logging.servicebus.windows.net",
+    "certificate_path": "/Model/AggSvcAuthCert-si.pfx"
+}
+```
+
+不放 `settings.json` 则使用代码默认值（prod 环境）。
+
+### 配置优先级
+
+1. **init kwargs**（代码显式传参）
+2. **环境变量**（如 `EVENTHUB_NAMESPACE=...`）
+3. **JSON 文件**（`/Model/settings.json`）
+4. **代码默认值**
+
+### 优点
+
+- 切换 si/prod 环境不需要改代码重新构建镜像，只需修改 cosmos 上的 `settings.json`
+- 证书文件放 cosmos 根目录 `/Model/`，不依赖模型子目录名
+- credential 创建失败不阻塞容器启动，便于在无证书环境下调试
+- 与 hanbang 的 img-outpainting 分支保持架构一致
+
+---
+
+## 2026-04-26 ~ 04-28: DLIS 部署 Crash Loop 排查
+
+### 问题现象
+
+Gemma4 vLLM 容器在 DLIS (Polaris) 上持续 crash loop，RestartCount 达到 346 次，CurrentStatus 始终为 `Starting`，GPU 内存使用仅 4MB（模型从未加载成功）。
+
+错误信息：`Engine core initialization failed`
+
+### 排查过程与修复
+
+#### 1. Kusto 日志格式 Bug（commit b3d6542）
+
+**问题**：`kusto_log.py` 使用 `record.msg` 而非 `record.getMessage()`，导致带 `%s` 格式化参数的日志消息未被展开，Kusto 里看到的是原始模板而非实际值。
+
+**修复**：`record.msg` → `record.getMessage()`
+
+#### 2. 添加详细 Eval 日志（commit 5733b8e）
+
+**原因**：推理过程中打印的 log 太少，无法判断每一步的耗时和输入内容。
+
+**修复**：在 `Eval()` 方法中添加 input url、prompt 数量、每步耗时的日志。
+
+#### 3. 添加 Init 诊断日志（commit db03bfd）
+
+**原因**：容器反复重启但 Kusto 里看不到任何有用的错误信息，需要了解 DLIS 机器的 GPU、内存、文件系统等环境。
+
+**修复**：在 `ModelImp.__init__` 中添加全面诊断日志：
+- GPU 信息（nvidia-smi: 型号、显存、温度、驱动版本、compute cap）
+- /dev/shm 大小（vLLM 多进程需要大 shm）
+- 模型文件清单
+- /Model 目录内容
+- CPU 核数、总 RAM
+- Python/vLLM/torch 版本
+- 所有环境变量
+
+#### 4. vLLM 加载错误捕获（commit 50200cf）
+
+**原因**：`LLM()` 初始化崩溃时异常未被捕获，进程直接退出，Kusto 里看不到失败原因。
+
+**修复**：在 `LLM()` 调用外包 try/except，用 `logger.error(exc_info=True)` 记录完整堆栈到 Kusto。
+
+#### 5. Init 失败时 Kusto 日志未 flush（commit a51a39a）
+
+**问题**：ModelImp() 崩溃后进程立即 exit，Kusto handler 的定时 scheduler 未触发 flush，日志丢失。
+
+**修复**：在 `main.py` 的 catch 块中手动调用 `handler.send()` flush 日志到 EventHub。
+
+#### 6. VLLM_USE_V1 环境变量设置
+
+**问题**：DLIS 通过配置设置 `VLLM_USE_V1=0`，但 vLLM 在 import 时就读取该变量。DLIS 设置环境变量的时机可能晚于 Python 进程启动。
+
+**修复**：在 model.py 中 `from vllm import` 之前加 `os.environ.setdefault("VLLM_USE_V1", "0")`。
+
+#### 7. max_model_len 和 enforce_eager 可配置化
+
+**修复**：
+- `max_model_len` 从硬编码 8192 改为 `int(os.environ.get("MAX_MODEL_LEN", "2048"))`
+- `enforce_eager` 从环境变量 `ENFORCE_EAGER` 读取
+
+### 根因定位：CUDA 驱动不兼容
+
+通过 Kusto 中新镜像的 `[Init] GPU:` 日志确认：
+
+```
+[Init] GPU: 0, NVIDIA A100 80GB PCIe, 81920 MiB, 81046 MiB, 4 MiB, 34, 535.129.03, 8.0
+```
+
+- **DLIS 机器驱动**：535.129.03（最高支持 CUDA 12.2）
+- **镜像内 PyTorch**：2.10.0+cu129（需要 CUDA 12.9）
+- **vLLM**：0.19.1
+
+CUDA 12.9 运行时无法在 driver 535 上初始化，EngineCore 子进程启动即崩溃。
+
+其他环境参数均正常：A100 80GB（81046 MiB free）、/dev/shm=1024MB、CPU=24 cores、RAM=226GB。
+
+### 修复尝试
+
+#### 尝试 1：ldconfig compat（commit 3dcb1a7）
+
+**思路**：在 Dockerfile_vllm_fast 中加 `ldconfig /usr/local/cuda-12.x/compat/` 启用 NVIDIA 前向兼容。
+
+**结果**：失败。`vllm/vllm-openai:latest` 基于 runtime 镜像，不包含 `/usr/local/cuda-12.x/compat/` 目录，ldconfig 被 `|| true` 静默跳过。
+
+#### 尝试 2：显式安装 cuda-compat + import 保护（commit 2208bc9）
+
+**思路**：
+1. **Dockerfile**：用 `apt-get install cuda-compat-{ver}` 显式安装前向兼容包
+2. **main.py**：将 `from model import ModelImp` 从顶层移到 `try/except` 内部，因为新镜像的 vLLM import 阶段就触发 CUDA 初始化，在 ModelImp 实例化之前就崩溃了（导致 `[Init] GPU:` 日志完全消失）
+3. **main.py**：添加 `_log_early_diagnostics()` 在 import vllm 之前打印 nvidia-smi 和 ldconfig 中 compat/libcuda 库信息
+
+**状态**：等待新镜像构建部署验证
+
+### 备选方案
+
+如果 cuda-compat 前向兼容仍不生效：
+- **方案 A**：联系 DLIS 团队升级 GPU 驱动到 ≥550（长期正解）
+- **方案 B**：用 `Dockerfile_vllm_0.10.0` 从源码构建，基于 CUDA 12.8 devel 镜像（自带 compat 目录）
+- **注意**：降级到 CUDA 12.2 不可行——Gemma4 需要新版 vLLM/transformers，而这些依赖 torch ≥2.6，最低 CUDA 12.4
+

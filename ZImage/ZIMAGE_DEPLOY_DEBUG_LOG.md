@@ -343,6 +343,7 @@ sudo docker run -d --name zimage-test \
 #### 测试推理请求
 ```bash
 curl -X POST http://localhost:8889 --data '{"prompt": "A beautiful sunset over the ocean", "width": 1344, "height": 768, "seed": 42, "tracking_data": {"requestid": "test-002", "trackingid": "track-002", "sessionid": "sess-002", "customerid": "cust-002", "callername": "local-test"}}'
+
 ```
 
 ### 测试结果
@@ -387,3 +388,13 @@ Message: Eval total latency=7980ms (preprocess=0ms[COMMA] infer=7634ms[COMMA] en
 | Reserved3 | filename:lineno | `model.py:142` |
 
 - **结论：ZImage Kusto 日志增强通过 ✅**
+
+import requests
+
+response = requests.post(
+    "https://WestUS2.bing.prod.dlis.binginternal.com/route/PicassoAdsCreative.ZImage-v2",
+    cert=("private1.cer", "private1.key"),
+    json={"prompt": "A beautiful sunset over the ocean", "width": 1344, "height": 768},
+    headers={"Content-Type": "application/json"},
+    verify=False,
+)
