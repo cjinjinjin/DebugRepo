@@ -110,6 +110,9 @@ DLIS_WIKI_DATA_TRANSFER = 'https://dlisinfrawiki.azurewebsites.net/wiki/Contents
 DLIS_WIKI_CENTRAL_LOG = 'https://dlisinfrawiki.azurewebsites.net/wiki/Contents/Debugging/How+to+use+Central+Log.html'
 ONE_INFERENCE_PORTAL = 'https://dlis-portal.microsoft.com/'
 OAAS_LLM_TEMPLATE_REPO = 'https://msasg.visualstudio.com/Bing_and_IPG/_git/OaaS_LLMTemplate'
+OAAS_LLM_TEMPLATE_PIPELINES = 'https://msasg.visualstudio.com/Bing_and_IPG/_build?definitionScope=%5COaaS_LLMTemplate'
+DLIS_COPY_PIPELINE = 'https://msasg.visualstudio.com/Bing_and_IPG/_build?definitionId=43927'
+COSMOS_REPO_URL = 'https://cosmos09.osdinfra.net:443/cosmos/DLISModelRepository/'
 KUSTO_SI_URL = 'https://bingadsppe.kusto.windows.net/'
 KUSTO_PROD_URL = 'https://bingads.kusto.windows.net/'
 JARVIS_PROD_URL = 'https://jarvis-west.dc.ad.msft.net/dashboard/DLIS-Model-Metrics'
@@ -314,21 +317,27 @@ add_code('''  ┌─────────────────────
 
 add_para('Key Principles:', bold=True)
 add_bullet('Test locally first. Only upload data and build images after local Docker tests pass')
+add_bullet('Integrate Kusto logging from the local testing phase. Do not wait until online deployment — configure certificates and EventHub during local Docker testing so you can view logs in Kusto in real-time and catch log format, auth, and connection issues early')
 add_bullet('DLIS reads model data from Gen2 (dlisstoregen2.dfs.core.windows.net), not Gen1')
 add_bullet('Images are automatically built via the OaaS_LLMTemplate repo CI pipeline')
+p = doc.paragraphs[-1]
+p.clear()
+p.add_run('Images are automatically built via the ')
+add_hyperlink(p, 'OaaS_LLMTemplate repo', OAAS_LLM_TEMPLATE_REPO)
+p.add_run(' CI pipeline')
 add_bullet('Step 2+3 (upload ckpt + data migration) and Step 4 (image build) can run in parallel, independently')
 
 # ========== Section 3 ==========
 add_heading('3. Step 1: Local Development & Testing', 1)
 add_heading('3.1 Development Flow Overview', 2)
-add_para('Create a personal branch in the OaaS_LLMTemplate repo (e.g., jinjinchen/ZImage-v1). Complete the following before pushing code to trigger CI build:')
+add_para_with_link('Create a personal branch in the ', 'OaaS_LLMTemplate repo', OAAS_LLM_TEMPLATE_REPO, ' (e.g., jinjinchen/ZImage-v1). Complete the following before pushing code to trigger CI build:')
 add_bullet('1. Modify model code (model.py, dlis_inter.py, etc.)')
 add_bullet('2. Evaluate whether OaaS template customization is needed (multimodal support, custom formats, etc.)')
 add_bullet('3. Choose the appropriate Dockerfile (fast iteration vs full build)')
 add_bullet('4. Build and test locally with Docker, confirm correct functionality')
 
 add_heading('3.2 Code File Reference', 2)
-add_para('In the OaaS_LLMTemplate repo, create a personal branch (e.g., jinjinchen/ZImage-v1) and modify the following files:')
+add_para_with_link('In the ', 'OaaS_LLMTemplate repo', OAAS_LLM_TEMPLATE_REPO, ', create a personal branch (e.g., jinjinchen/ZImage-v1) and modify the following files:')
 add_table(
     ['File', 'Description'],
     [
@@ -341,7 +350,7 @@ add_table(
 add_link_note('See "Appendix C: Model Code Writing Guide" for model.py details')
 
 add_heading('3.3 OaaS Template Customization (Optional)', 2)
-add_note('Template customization is optional. First check whether the original OaaS LLM Template repo template meets your needs. For pure text LLM inference, customization is usually unnecessary.')
+add_note_with_link('Template customization is optional. First check whether the original ', 'OaaS LLM Template repo', OAAS_LLM_TEMPLATE_REPO, ' template meets your needs. For pure text LLM inference, customization is usually unnecessary.')
 add_table(
     ['Customization Need', 'Description', 'File to Modify'],
     [
@@ -394,6 +403,22 @@ add_bullet('Must add -p <host_port>:8888 port mapping, otherwise host curl will 
 add_bullet('vllm/vllm-openai base image entrypoint is vllm serve; use --entrypoint bash for interactive shell')
 add_bullet('If Python files are volume-mounted, __pycache__ may cause stale code to be loaded')
 
+add_para('Verify Kusto Logging (recommended during local testing):', bold=True)
+add_para('After starting the local Docker container, verify Kusto log delivery alongside inference testing. This catches certificate and EventHub configuration issues before deployment.')
+add_bullet('1. Ensure the correct environment PFX certificate (e.g., AggSvcAuthCert-si.pfx) is in your Cosmos directory and volume-mounted to /Model in the container')
+add_bullet('2. Ensure settings.json has the correct EventHub namespace and kusto_log parameters (cert path, topic, etc.)')
+add_bullet('3. After sending a test request, check container logs (docker logs) for EventHub send success/failure output')
+add_bullet('4. Query the corresponding Kusto environment table in Kusto Explorer to confirm logs arrived (typically 1-2 minute delay)')
+add_code('''# SI environment Kusto query example
+// Kusto cluster: https://bingadsppe.kusto.windows.net/
+// Database: appsvc
+appsvc_info
+| where TIMESTAMP > ago(10m)
+| where ModelName == "<your_model_name>"
+| order by TIMESTAMP desc
+| take 20''')
+add_note('If no results: ① check cert environment matches namespace (SI cert + SI namespace); ② verify logger level is set to INFO; ③ check if EventHub send errors are silently swallowed. See Section 12 for details.')
+
 add_heading('3.6 Offline Testing (No HTTP Server)', 2)
 add_code('''sudo docker run --rm -it --gpus all \\
   -v /path/to/model:/Model/model_name \\
@@ -438,6 +463,11 @@ add_para_with_link('Reference Wiki: ', 'Data Transfer Tools (DLIS Wiki)', DLIS_W
 add_para_with_link('Gen1 to Gen2 Migration Steps (see ', 'How_to_Build_Your_Own_DLIS_Model.docx Step 6.2', ZHAHAO_DOC_URL, '):')
 add_bullet('1. Create a branch in Repos')
 add_bullet('2. Open DLIS copy pipeline, select View/Edit')
+p = doc.paragraphs[-1]
+p.clear()
+p.add_run('2. Open ')
+add_hyperlink(p, 'DLIS copy pipeline', DLIS_COPY_PIPELINE)
+p.add_run(', select View/Edit')
 add_image('zhahao_image002.png', 'Fig: Create branch and open pipeline (Source: Hao Zhang doc)')
 add_bullet('3. Select the newly created branch and update parameters')
 add_image('zhahao_image004.png', 'Fig: Select branch and set pipeline variables (Source: Hao Zhang doc)')
@@ -460,7 +490,7 @@ add_bullet('If runtime config files are needed, use the writable mirror approach
 # ========== Section 6 ==========
 add_heading('6. Step 4: PR Submission & CI Auto Image Build', 1)
 add_note('Note: Step 2+3 (upload ckpt + data migration) and Step 4 (image build) can run in parallel, independently.')
-add_para('After local development and testing, push code to your personal branch in the OaaS_LLMTemplate repo. The CI pipeline will automatically build the Docker image.')
+add_para_with_link('After local development and testing, push code to your personal branch in the ', 'OaaS_LLMTemplate repo', OAAS_LLM_TEMPLATE_REPO, '. The CI pipeline will automatically build the Docker image.')
 
 add_heading('6.1 Create Branch and Push Code', 2)
 add_code('''# Create a personal branch in OaaS_LLMTemplate repo
@@ -486,6 +516,10 @@ add_table(
 )
 add_para('Checking Build Status:', bold=True)
 add_bullet('View build progress and logs on the ADO Pipelines page')
+p = doc.paragraphs[-1]
+p.clear()
+p.add_run('View build progress and logs on the ')
+add_hyperlink(p, 'ADO Pipelines page', OAAS_LLM_TEMPLATE_PIPELINES)
 add_bullet('After a successful build, the Pipeline log outputs the final image tag')
 add_bullet('Use this image tag for the ModelPath configuration in subsequent Polaris Jobs')
 
@@ -712,6 +746,8 @@ add_hyperlink(p, 'Central Log', DLIS_WIKI_CENTRAL_LOG)
 add_link_note('See "Appendix E" for Central Log queries')
 
 add_heading('12.4 Local Kusto Log Testing', 2)
+add_para('Key principle: Integrate Kusto log output during the local development phase. Do not wait until online deployment to start using Kusto logging — you should be able to see Kusto logs during local Docker testing. This lets you catch log format, auth config, and EventHub connection issues early.', bold=True)
+add_para('Local testing only requires: ① the correct PFX certificate file; ② the matching EventHub namespace config; ③ network access to the EventHub endpoint. With these three prerequisites met, logs from your local Docker container will be sent to Kusto in real-time and can be queried directly in Kusto Explorer.')
 add_para('Test script using AAD Bearer token (MSAL + PFX certificate) authentication:')
 add_code('''import msal, requests
 from cryptography.hazmat.primitives.serialization.pkcs12 import load_key_and_certificates
@@ -738,6 +774,78 @@ resp = requests.post(API_URL, json=payload,
                      headers={"Authorization": f"Bearer {token}"},
                      verify=False, timeout=120)
 ''')
+
+add_heading('12.5 Common Kusto Log Issues & Debugging Tips', 2)
+add_para('The following lessons are summarized from real debugging experiences during ZImage, Gemma4, and other model deployments.')
+
+add_heading('Issue 1: EventHub Auth Errors Silently Swallowed', 3)
+add_para('Symptom: Local test returns results normally, but Kusto shows zero logs.')
+add_para('Root cause: kusto_log.py catches all EventHub send exceptions with a bare try/except pass, making certificate or namespace misconfigurations completely invisible.')
+add_code('''# ❌ Wrong — silently swallows auth failures
+try:
+    client.send(event_data)
+except Exception:
+    pass  # logs lost, no indication
+
+# ✅ Correct — fail fast, expose config issues
+try:
+    client.send(event_data)
+except Exception as e:
+    logger.error(f"EventHub send failed: {e}", exc_info=True)
+    raise  # first failure should be immediately visible''')
+
+add_heading('Issue 2: record.msg vs record.getMessage()', 3)
+add_para('Symptom: Kusto log messages show raw template strings (e.g., "%s loaded in %d seconds") instead of formatted values.')
+add_para('Root cause: kusto_log.py uses record.msg which is the unformatted template. Use record.getMessage() to get the fully formatted string.')
+add_code('''# ❌ record.msg → "Model %s loaded in %d seconds"
+# ✅ record.getMessage() → "Model gemma4 loaded in 42 seconds"''')
+
+add_heading('Issue 3: Kusto Logs Lost on Process Crash', 3)
+add_para('Symptom: OOM or CUDA errors during model loading crash the process, but Kusto shows no error logs.')
+add_para('Root cause: KustoHandler uses ScheduledBatchSender for periodic batch sending. When the process crashes, the scheduler thread dies with it and all buffered logs are lost.')
+add_code('''# Solution: manually flush in crash handler
+import signal, atexit
+
+def flush_kusto_on_exit():
+    for handler in logging.root.handlers:
+        if hasattr(handler, 'flush'):
+            handler.flush()
+
+atexit.register(flush_kusto_on_exit)
+signal.signal(signal.SIGTERM, lambda *_: (flush_kusto_on_exit(), sys.exit(1)))''')
+
+add_heading('Issue 4: SI/Prod Certificate-Namespace Mismatch', 3)
+add_para('Symptom: Log sending shows no errors (if exceptions are caught), but Kusto queries return nothing.')
+add_para('Root cause: Using an SI certificate with a Prod EventHub namespace (or vice versa). Auth may pass but messages are routed to the wrong environment.')
+add_bullet('SI environment: namespace has "si" suffix, use SI certificate')
+add_bullet('Prod environment: namespace has no suffix, use Prod certificate')
+add_para('Recommendation: Put environment config in settings.json and switch via environment variables — avoid hardcoding.', bold=True)
+
+add_heading('Issue 5: Logger Level Defaults to WARNING', 3)
+add_para('Symptom: Code has logger.info() calls, but Kusto only shows WARNING and above.')
+add_para('Root cause: Python logging child loggers inherit the root logger\'s level (WARNING) by default. Without explicit configuration, all INFO and DEBUG logs are filtered out.')
+add_code('''# Must explicitly set logger level
+logger = logging.getLogger("dlis_model")
+logger.setLevel(logging.INFO)  # defaults to WARNING if not set''')
+
+add_heading('Issue 6: Validate Kusto Logs During Local Testing', 3)
+add_para('Important: Do not defer Kusto log validation to the online deployment stage. Integrate Kusto logging during local Docker testing to ensure logs are sent to EventHub correctly.')
+add_para('Prerequisites for local Kusto log testing:')
+add_bullet('Correct environment PFX certificate file (SI or Prod)')
+add_bullet('settings.json configured with the correct EventHub namespace and topic')
+add_bullet('Network access to EventHub endpoint (corporate network or VPN)')
+add_para('Validation steps:')
+add_bullet('After starting local Docker, send a test request and check container logs for EventHub send success/failure output')
+add_bullet('Simultaneously query the corresponding Kusto environment table to confirm logs have arrived (typically 1-2 minute delay)')
+add_bullet('If network restrictions prevent EventHub access, temporarily use a console handler to verify log format, but do full EventHub validation as soon as possible')
+
+add_heading('Issue 7: EventHub Four Topics Explained', 3)
+add_para('DLIS EventHub provides four topics. Send logs to the correct topic based on log type:')
+add_bullet('appsvc_info — general information logs (model loading, request processing, etc.)')
+add_bullet('appsvc_warn — warning logs (non-fatal errors, performance degradation, etc.)')
+add_bullet('appsvc_err — error logs (exceptions, crash info, etc.)')
+add_bullet('appsvc_perf — performance logs (inference latency, throughput metrics, etc.)')
+add_para('Note: If you only send to appsvc_info, querying the errors table in Kusto will return nothing.', bold=True)
 
 # ========== Section 13 ==========
 add_heading('13. Common Issues & Solutions', 1)
@@ -1074,6 +1182,6 @@ add_table(
 )
 
 # Save
-output_path = r"C:\Users\jinjinchen\OneDrive - Microsoft\DLIS_Model_Deployment_Guide_v5_4_EN.docx"
+output_path = r"C:\Users\jinjinchen\OneDrive - Microsoft\DLIS_Model_Deployment_Guide_v5_5_EN.docx"
 doc.save(output_path)
 print(f"Saved to {output_path}")
