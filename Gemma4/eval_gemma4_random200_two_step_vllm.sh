@@ -11,6 +11,7 @@ set -e
 CKPT_ROOT="/vc_data/shares/bingads.algo.prod.adsplus/ProdAdsPlusShare/Team/RichAds/AIGC/CKPT"
 MODEL_ID="${1:-${CKPT_ROOT}/gemma-4-26B-A4B-it-AWQ-4bit}"
 TP_SIZE="${2:-1}"
+KV_CACHE_DTYPE="${3:-auto}"  # auto or fp8
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
@@ -37,6 +38,7 @@ echo "============================================"
 echo "Model        : ${MODEL_ID}"
 echo "Input TSV    : ${INPUT_TSV}"
 echo "TP size      : ${TP_SIZE}"
+echo "KV cache     : ${KV_CACHE_DTYPE}"
 echo "Output       : ${OUTPUT_FILE}"
 echo "Report       : ${REPORT_FILE}"
 echo "============================================"
@@ -74,6 +76,8 @@ python "${SCRIPT_DIR}/inference_gemma4_two_step_vllm.py" \
     --temperature 1.0 \
     --tensor_parallel_size "${TP_SIZE}" \
     --dtype half \
+    --kv_cache_dtype "${KV_CACHE_DTYPE}" \
+    --enable_prefix_caching \
     --output_file "${OUTPUT_FILE}"
 
 if [ $? -ne 0 ]; then

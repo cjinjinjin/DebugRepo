@@ -105,17 +105,7 @@ def call_gemma4(landing_page_content: str, url: str = "", num_prompts: int = 5, 
 
     if resp.status_code == 200:
         result = resp.json()
-        status = result.get("Status", "?")
-        compliant = result.get("format_compliant", "?")
-        prompts = result.get("generated_prompts", [])
-        scenes = result.get("scenes", [])
-        print(f"Status: {status}  format_compliant: {compliant}")
-        print(f"Scenes ({len(scenes)}):")
-        for i, s in enumerate(scenes, 1):
-            print(f"  {i}. {s}")
-        print(f"Prompts ({len(prompts)}):")
-        for i, p in enumerate(prompts, 1):
-            print(f"  {i}. {p[:120]}{'...' if len(p) > 120 else ''}")
+        print(json.dumps(result, indent=2, ensure_ascii=False))
         return result
     else:
         print(f"FAILED: {resp.text[:500]}")

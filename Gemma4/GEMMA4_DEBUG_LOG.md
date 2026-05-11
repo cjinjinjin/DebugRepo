@@ -4991,12 +4991,47 @@ vLLM V1 使用多进程 + 共享内存 IPC。1GB shm 可能导致子进程被 OO
 
 ### 下一步行动（更新于 2026-04-30）
 
-- [ ] **P0**: 确认 Docker 镜像 `20260429-0930-merge` 是否包含 run.sh 修复（commit `062aece`）。若未包含，需重新触发构建
-- [ ] **P0**: 排查 `CUDA_VISIBLE_DEVICES=not set` — 在 `source ~/.bashrc` 前后分别打印该变量，定位清除点
-- [ ] **P0**: Polaris 配置中删除 `VLLM_USE_V1=0`（已确认为模型加载失败的直接原因）
-- [ ] **P0**: Polaris 配置中设 `DisableModelLogging` 为 `false`，获取完整容器日志
-- [ ] **P1**: 重新部署，验证模型能否正常加载
-- [ ] **P1**: 检查 `dlis_inter.py` 的 prompt 构造逻辑，确保 Gemma4 格式正确（旧运行证明推理能跑但输出全错）
+- [x] **P0**: 确认 Docker 镜像 `20260429-0930-merge` 是否包含 run.sh 修复（commit `062aece`）。若未包含，需重新触发构建
+- [x] **P0**: 排查 `CUDA_VISIBLE_DEVICES=not set` — 在 `source ~/.bashrc` 前后分别打印该变量，定位清除点
+- [x] **P0**: Polaris 配置中删除 `VLLM_USE_V1=0`（已确认为模型加载失败的直接原因）
+- [x] **P0**: Polaris 配置中设 `DisableModelLogging` 为 `false`，获取完整容器日志
+
+### Polaris 运行结果 (4/30, Base_0507, noMariner)
+
+**配置摘要：**
+- 镜像: `20260430-0722-merge`
+- 机型: `DLIS-Linux-A100_23Cores`（非 Mariner）
+- Driver: **535.129.03**（不是 550 也不是 530）
+- EnvironmentVariables: `DLIS_MODEL_DATA_TARGET_PATH=/Model;GPU_MEMORY_UTILIZATION=0.9;ENFORCE_EAGER=true`（已删除 VLLM_USE_V1=0）
+- `DisableModelLogging=false` ✅
+
+**✅ 确认修复有效：**
+1. CUDA forward compat 工作了 — `torch.cuda.available=True, CUDA=12.9`，driver 535 成功跑 CUDA 12.9
+2. CUDA_VISIBLE_DEVICES 保护生效 — run.sh 打印 `CUDA_VISIBLE_DEVICES=GPU-7654603e-...`，model.py 成功 remap 为 `0`
+3. nvidia-smi OK
+4. 容器日志完整可见
+
+**❌ 新根因：`KeyError: 'layers.0.moe.experts.0.down_proj_packed'`**
+
+vLLM 0.19.1 的 EngineCore 在加载模型权重时崩溃：
+```
+gemma4.py:1388 → param = params_dict[name]
+KeyError: 'layers.0.moe.experts.0.down_proj_packed'
+```
+
+**原因分析：**
+- model.py 中 `LLM()` 初始化**没有指定 `quantization="awq"`** 参数
+- vLLM 默认使用 `default_loader`，期望未量化的权重名（如 `down_proj.weight`）
+- AWQ 4-bit 量化后的 safetensors 里权重名变为 packed 格式（`down_proj_packed` 含 `qweight`, `qzeros`, `scales`）
+- 需要显式告诉 vLLM 使用 AWQ quantization loader
+
+**修复：** 在 model.py 的 `LLM()` 中自动检测 config.json 的 `quantization_config.quant_method`，传入 `quantization` 参数。也支持通过环境变量 `QUANTIZATION` 手动覆盖。
+
+### 下一步行动（更新于 2026-05-07）
+
+- [ ] **P0**: 提交 model.py 的 quantization 自动检测修复，重新构建镜像
+- [ ] **P1**: 重新跑 Polaris 验证模型加载成功 + 推理结果
+- [ ] **P1**: 检查 `dlis_inter.py` 的 prompt 构造逻辑（旧 4/20 运行证明推理能跑但输出全错）
 - [ ] **P2**: 如确认是 ShmSize 问题，联系 DLIS 团队增大到 16GB
 - [ ] **P2**: 修复 protobuf 版本冲突（`protobuf<5.0.0` vs vLLM 需要 `>=5.29.6`）
 

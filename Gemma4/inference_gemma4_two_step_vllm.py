@@ -196,6 +196,10 @@ def parse_args():
     p.add_argument("--max_model_len", type=int, default=8192)
     p.add_argument("--dtype", type=str, default="auto",
                     help="Model dtype (auto, half, bfloat16). Use 'half' for GPTQ models.")
+    p.add_argument("--kv_cache_dtype", type=str, default="auto",
+                    help="KV cache dtype (auto, fp8). fp8 reduces memory and may improve throughput.")
+    p.add_argument("--enable_prefix_caching", action="store_true", default=False,
+                    help="Enable prefix caching for shared system prompts")
     return p.parse_args()
 
 
@@ -212,14 +216,21 @@ def main():
     print(f"  gpu_memory_utilization={args.gpu_memory_utilization}")
     print(f"  max_model_len={args.max_model_len}")
 
-    llm = LLM(
+    llm_kwargs = dict(
         model=args.model_id,
         tensor_parallel_size=args.tensor_parallel_size,
         gpu_memory_utilization=args.gpu_memory_utilization,
         max_model_len=args.max_model_len,
         dtype=args.dtype,
         trust_remote_code=True,
+        enable_prefix_caching=args.enable_prefix_caching,
     )
+    if args.kv_cache_dtype != "auto":
+        llm_kwargs["kv_cache_dtype"] = args.kv_cache_dtype
+    print(f"  kv_cache_dtype={args.kv_cache_dtype}")
+    print(f"  enable_prefix_caching={args.enable_prefix_caching}")
+
+    llm = LLM(**llm_kwargs)
 
     # Load data
     records = load_jsonl(args.input_file)
