@@ -5029,9 +5029,112 @@ KeyError: 'layers.0.moe.experts.0.down_proj_packed'
 
 ### 下一步行动（更新于 2026-05-07）
 
-- [ ] **P0**: 提交 model.py 的 quantization 自动检测修复，重新构建镜像
-- [ ] **P1**: 重新跑 Polaris 验证模型加载成功 + 推理结果
-- [ ] **P1**: 检查 `dlis_inter.py` 的 prompt 构造逻辑（旧 4/20 运行证明推理能跑但输出全错）
+- [x] **P0**: 提交 model.py 的 quantization 自动检测修复，重新构建镜像
+- [x] **P1**: 重新跑 Polaris 验证模型加载成功 + 推理结果
+- [x] **P1**: 检查 `dlis_inter.py` 的 prompt 构造逻辑（旧 4/20 运行证明推理能跑但输出全错）
+- [ ] **P2**: 如确认是 ShmSize 问题，联系 DLIS 团队增大到 16GB
+- [ ] **P2**: 修复 protobuf 版本冲突（`protobuf<5.0.0` vs vLLM 需要 `>=5.29.6`）
+
+### DLIS 部署验证 (5/11)
+
+**DLIS endpoint 测试通过：**
+- Endpoint: `https://WestUS2.bing.prod.dlis.binginternal.com/route/PicassoAdsCreative.Gemma4-AWQ-v2`
+- Latency: ~17-21s（单请求）
+- Step 2 prompt 质量修复已生效 — 5/5 个输出均为正确的单条 T2I prompt
+- `DLIS_DEBUG` 环境变量控制 debug 字段输出
+
+### FP8 KV Cache 优化尝试 (5/11)
+
+**目标：** 降低 KV cache 显存占用，提高推理吞吐
+
+**改动：** `model.py` 中 `LLM()` 添加 `kv_cache_dtype=os.environ.get("KV_CACHE_DTYPE", "fp8")`
+
+**A6000 测试结果：❌ 不支持 FP8**
+
+镜像 `20260511-0814-merge`，A6000 上启动报错：
+```
+ValueError("type fp8e4nv not supported in this architecture.
+The supported fp8 dtypes are ('fp8e4b15', 'fp8e5')")
+```
+
+**根因：** A6000 是 Ampere 架构（SM 86），原生 FP8（fp8e4nv）需要 Hopper/Ada 架构（SM 89+，如 H100、L40S）。Ampere 只支持 fp8e4b15 和 fp8e5（软件模拟），Triton autotuning 不兼容。
+
+**GPU 架构与 FP8 支持：**
+
+| GPU | 架构 | SM | FP8 原生支持 |
+|-----|------|-----|------------|
+| A6000 | Ampere | 86 | ❌ |
+| A100 | Ampere | 80 | ❌ |
+| H100 | Hopper | 90 | ✅ |
+| L40S | Ada Lovelace | 89 | ✅ |
+
+**结论：** FP8 KV cache 在 A6000 和 A100 上都不可用。DLIS 当前使用 A100，因此 `kv_cache_dtype` 默认值应改为 `auto` 而非 `fp8`，避免在不支持的硬件上崩溃。仅当部署到 H100/L40S 时才手动设 `KV_CACHE_DTYPE=fp8`。
+
+**修复：** 将 `model.py` 中 `KV_CACHE_DTYPE` 默认值从 `fp8` 改回 `auto`。
+
+### DLIS Polaris 验证 FP8 KV Cache (5/11)
+
+**配置：**
+- 镜像: `dlisproddockerrepo.azurecr.io/dlis/llm_framework_vllm:20260511-0814-merge`
+- GPU: **NVIDIA A100 80GB PCIe**, driver 535.129.03, Compute Capability **8.0**
+- 环境变量: `DLIS_MODEL_DATA_TARGET_PATH=/Model;GPU_MEMORY_UTILIZATION=0.9;ENFORCE_EAGER=true`
+- `KV_CACHE_DTYPE` 未设（镜像内代码默认 `fp8`）
+
+**结果：❌ A100 同样不支持 fp8e4nv**
+
+```
+ValueError("type fp8e4nv not supported in this architecture. The supported fp8 dtypes are ('fp8e4b15', 'fp8e5')")
+```
+
+vLLM 的 FP8 KV cache 使用 `fp8e4nv` 格式，这是 Hopper/Ada 架构的原生 FP8 类型。A100（SM 80）和 A6000（SM 86）的 Triton 只支持 `fp8e4b15` 和 `fp8e5`，不兼容 vLLM 的 fp8 KV cache 实现。
+
+**结论：FP8 KV cache 优化在当前所有可用硬件上均不可行。**
+
+**已修复：** commit `a75d37f` 将 `model.py` 中 `KV_CACHE_DTYPE` 默认值改回 `auto`。
+⚠️ 镜像 `20260511-0814-merge` 仍含 `fp8` 默认值，部署时必须显式设 `KV_CACHE_DTYPE=auto` 或重新构建镜像。
+
+### ENFORCE_EAGER=false (CUDA Graph) 性能测试 (5/11)
+
+**配置：**
+- 镜像: `dlisproddockerrepo.azurecr.io/dlis/llm_framework_vllm:20260511-0814-merge`
+- GPU: NVIDIA A100 80GB PCIe
+- 环境变量: `DLIS_MODEL_DATA_TARGET_PATH=/Model;GPU_MEMORY_UTILIZATION=0.9;ENFORCE_EAGER=false;KV_CACHE_DTYPE=auto`
+
+**结果：✅ 大幅降低 latency**
+
+| 指标 | 值 |
+|------|-----|
+| 平均 Latency | **1,441ms** |
+| P50 | 1,443ms |
+| P90 | 1,483ms |
+| P95 | 1,496ms |
+| P99 | 1,521ms |
+| 成功率 | 100% (84/84) |
+| QPS | 0.69 |
+| GPU Engine Activity | 96.7% (avg), 99% (P95) |
+| SM Activity | 46.8% (avg), 50% (P95) |
+
+**对比历史 latency：**
+
+| 配置 | 环境 | Latency |
+|------|------|---------|
+| ENFORCE_EAGER=true | DLIS A100 (端到端) | ~17-21s |
+| ENFORCE_EAGER=true | A6000 offline | ~3.1s |
+| **ENFORCE_EAGER=false** | **DLIS A100 (Polaris)** | **~1.4s** 🚀 |
+
+**分析：**
+- `ENFORCE_EAGER=true` 禁用了 CUDA Graph，每次推理都需要重新 launch GPU kernels，overhead 极大
+- 关闭 eager 模式后，vLLM 使用 CUDA Graph 捕获并重放 kernel 序列，减少了大量 CPU-GPU 同步开销
+- latency 从 ~17s 降到 ~1.4s，**提速 ~12x**
+- 之前 17-21s 的高延迟主要由 eager 模式 + 网络延迟构成，实际推理时间很短
+
+**结论：`ENFORCE_EAGER=false` 是当前最有效的 latency 优化。应作为生产默认配置。**
+
+### 下一步行动（更新于 2026-05-11）
+
+- [x] **P0**: 将 `KV_CACHE_DTYPE` 默认值改回 `auto`，避免 A100/A6000 崩溃（commit `a75d37f`）
+- [ ] **P0**: 重新构建镜像（不含 fp8 默认值），并将 DLIS 生产配置改为 `ENFORCE_EAGER=false;KV_CACHE_DTYPE=auto`
+- [ ] **P1**: 等 DLIS 升级到 H100 后再启用 FP8 KV cache
 - [ ] **P2**: 如确认是 ShmSize 问题，联系 DLIS 团队增大到 16GB
 - [ ] **P2**: 修复 protobuf 版本冲突（`protobuf<5.0.0` vs vLLM 需要 `>=5.29.6`）
 
