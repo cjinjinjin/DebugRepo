@@ -8,16 +8,20 @@ Outputs:
   - Console summary: top kernels, category breakdown (GEMM / Attention / etc.)
   - Chrome trace: profile_gemma4.json (viewable at chrome://tracing)
 
-Usage:
-  CUDA_VISIBLE_DEVICES=0 python Gemma4/profile_kernels.py \
+Usage (vLLM — recommended for AWQ models):
+  python Gemma4/profile_kernels.py \
+      --model_id /data/model \
+      --input_file QwenFinetune/data/dpo_combined_eval_cot.jsonl \
+      --num_tokens 128 --use_vllm
+
+Usage (HF Transformers — BF16 models only):
+  python Gemma4/profile_kernels.py \
       --model_id ./gemma-4-26B-A4B-it \
       --input_file QwenFinetune/data/dpo_combined_eval_cot.jsonl \
-      --num_tokens 128 \
-      --output profile_gemma4.json
+      --num_tokens 128
 
 Notes:
-  - This profiles HF Transformers inference (not vLLM), since torch.profiler
-    needs direct model access.
+  - AWQ compressed-tensors models MUST use --use_vllm (HF loading is broken).
   - Run with --warmup_steps 2 to let CUDA caches settle before profiling.
   - The profile captures both prefill and decode phases.
 """
@@ -35,50 +39,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from benchmark_speed import load_processor, load_jsonl, extract_user_content
 
 
-def _patch_compressed_tensors_group_size():
-    """Monkey-patch compressed_tensors to fix group_size=0 validation error.
-
-    The compressed-tensors library constructs QuantizationArgs with group_size=0
-    for ignore-listed layers, which fails its own pydantic validator. We wrap
-    __init__ to silently fix group_size=0 → 128 before pydantic validates.
-    """
-    try:
-        from compressed_tensors.quantization.quant_args import QuantizationArgs
-        _orig_init = QuantizationArgs.__init__
-
-        def _patched_init(self, **data):
-            if data.get("group_size") == 0:
-                data["group_size"] = 128
-            _orig_init(self, **data)
-
-        QuantizationArgs.__init__ = _patched_init
-        print("[INFO] Patched QuantizationArgs.__init__ for group_size=0 bug")
-    except (ImportError, Exception) as e:
-        print(f"[WARN] Could not patch compressed_tensors: {e}")
-
-
 def load_model_for_profile(args):
-    """Load model for profiling. Supports BF16 and AWQ (compressed-tensors) models."""
-    from transformers import AutoModelForCausalLM, AutoConfig
-
-    # Workaround: transformers 5.x bug where config.quantization_config is None
-    # for compressed-tensors format (AWQ). Manually load and inject it.
-    config = AutoConfig.from_pretrained(args.model_id)
-    if getattr(config, "quantization_config", None) is None:
-        config_path = Path(args.model_id) / "config.json"
-        if config_path.exists():
-            with open(config_path, "r", encoding="utf-8") as f:
-                raw = json.load(f)
-            if "quantization_config" in raw:
-                config.quantization_config = raw["quantization_config"]
-                print(f"[INFO] Manually injected quantization_config "
-                      f"(quant_method: {raw['quantization_config'].get('quant_method', 'unknown')})")
-
-    # Patch compressed_tensors group_size=0 bug before loading
-    _patch_compressed_tensors_group_size()
-
+    """Load model via HF Transformers (BF16 only)."""
+    from transformers import AutoModelForCausalLM
     kwargs = {
-        "config": config,
         "device_map": "auto",
         "dtype": torch.bfloat16,
     }
@@ -143,7 +107,7 @@ def categorize_kernel(name: str) -> str:
 
 
 def run_profile(model, processor, user_content, system_prompt, args):
-    """Run a single inference under torch.profiler and return the profiler."""
+    """Run a single inference under torch.profiler and return the profiler (HF path)."""
     try:
         from inference_gemma4 import SYSTEM_PROMPT_NO_COT
         if not system_prompt:
@@ -192,6 +156,74 @@ def run_profile(model, processor, user_content, system_prompt, args):
     print(f"  Generated {new_tokens} tokens")
 
     # Export chrome trace
+    prof.export_chrome_trace(trace_path)
+    print(f"  Chrome trace saved to: {trace_path}")
+
+    return prof, new_tokens
+
+
+def run_profile_vllm(args, user_content, system_prompt):
+    """Run profiling using vLLM offline inference (works with AWQ models)."""
+    from vllm import LLM, SamplingParams
+
+    print(f"Loading vLLM model from {args.model_id} ...")
+    llm = LLM(
+        model=args.model_id,
+        dtype="auto",
+        max_model_len=8192,
+        gpu_memory_utilization=0.90,
+        enforce_eager=True,  # disable CUDA graphs for accurate kernel profiling
+    )
+    print("vLLM model ready.")
+
+    # Build prompt
+    try:
+        from inference_gemma4 import SYSTEM_PROMPT_NO_COT
+        if not system_prompt:
+            system_prompt = SYSTEM_PROMPT_NO_COT
+    except ImportError:
+        pass
+
+    processor = load_processor(args.processor_id or args.model_id)
+    messages = [
+        {"role": "system", "content": system_prompt or "You are a helpful assistant."},
+        {"role": "user", "content": user_content},
+    ]
+    prompt = processor.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True,
+        enable_thinking=False,
+    )
+
+    sampling_params = SamplingParams(
+        max_tokens=args.num_tokens,
+        temperature=0,
+    )
+
+    # Warmup
+    for i in range(args.warmup_steps):
+        print(f"  Warmup {i+1}/{args.warmup_steps}...")
+        llm.generate([prompt], SamplingParams(max_tokens=16, temperature=0))
+        torch.cuda.synchronize()
+
+    # Profiled run
+    print("  Profiling...")
+    trace_path = args.output or "profile_gemma4.json"
+
+    with torch.profiler.profile(
+        activities=[
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.CUDA,
+        ],
+        record_shapes=True,
+        with_stack=False,
+        profile_memory=False,
+    ) as prof:
+        outputs = llm.generate([prompt], sampling_params)
+        torch.cuda.synchronize()
+
+    new_tokens = len(outputs[0].outputs[0].token_ids)
+    print(f"  Generated {new_tokens} tokens")
+
     prof.export_chrome_trace(trace_path)
     print(f"  Chrome trace saved to: {trace_path}")
 
@@ -281,17 +313,11 @@ def main():
                         choices=["sdpa", "flash_attention_2", "eager"])
     parser.add_argument("--output", type=str, default="profile_gemma4.json",
                         help="Chrome trace output path")
+    parser.add_argument("--use_vllm", action="store_true",
+                        help="Use vLLM offline inference (required for AWQ models)")
     args = parser.parse_args()
 
-    proc_id = args.processor_id or args.model_id
-
-    print(f"Loading processor from {proc_id} ...")
-    processor = load_processor(proc_id)
-
-    print(f"Loading model from {args.model_id} ...")
-    model = load_model_for_profile(args)
-    print("Model ready.")
-
+    # Load input data
     records = load_jsonl(args.input_file, max_records=args.sample_idx + 1)
     if args.sample_idx >= len(records):
         print(f"ERROR: sample_idx {args.sample_idx} out of range (only {len(records)} records)")
@@ -306,7 +332,19 @@ def main():
     except ImportError:
         pass
 
-    prof, new_tokens = run_profile(model, processor, user_content, system_prompt, args)
+    if args.use_vllm:
+        prof, new_tokens = run_profile_vllm(args, user_content, system_prompt)
+    else:
+        proc_id = args.processor_id or args.model_id
+        print(f"Loading processor from {proc_id} ...")
+        processor = load_processor(proc_id)
+
+        print(f"Loading model from {args.model_id} ...")
+        model = load_model_for_profile(args)
+        print("Model ready.")
+
+        prof, new_tokens = run_profile(model, processor, user_content, system_prompt, args)
+
     analyze_profile(prof)
 
     print(f"\n📊 Done! Open {args.output} in chrome://tracing for detailed visualization.")
