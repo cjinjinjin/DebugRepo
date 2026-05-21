@@ -2155,3 +2155,735 @@ fresh load 每次冷启动更接近 DLIS 实际部署场景（每个请求不共
 2. **FBC t=0.35 = 1.20x** — 接近 MagCache，之前已验证 PSNR 良好
 3. **TaylorSeer** — 对 ZImage 完全无效，hooks 不匹配 block 结构
 4. **下一步**：测试 MagCache 的图片质量（PSNR），以及 MagCache + torch.compile 组合
+
+---
+
+## TeaCache 实验（2026-05-20）
+
+### 背景
+
+同事建议测试 TeaCache（首尾步不cache），参考实现：https://github.com/ali-vilab/TeaCache
+
+TeaCache 核心思路：用 timestep embedding 的变化量预测 transformer 输出变化量，若变化小则跳过整个 transformer forward，复用上一步的输出+残差。与 FBC（跳过 block 内部计算）不同，TeaCache 跳过的是**整个 transformer**。
+
+### ZImage forward 接口特殊性
+
+经探测确认 ZImage transformer 的 I/O 结构：
+- **输入 `x`**: `list[Tensor]`，长度1，x[0] shape = `[16, 1, 96, 168]`（bf16）
+- **输出 `result`**: `tuple(list[Tensor],)`，result[0] 是 list 长度1，result[0][0] shape = `[16, 1, 96, 168]`
+- **NOT tensor** — 不能直接 `.clone()`，需要递归 deep copy
+
+实现中多次因假设输出为 tensor 导致 `'list' object has no attribute 'clone'` 错误。
+
+### TeaCache 实现方案
+
+Monkey-patch `ZImageTransformer2DModel.forward`：
+1. 计算 `adaln_input = self.t_embedder(t * self.t_scale)`
+2. 与上一步的 adaln_input 比较 relative L1 差异
+3. 通过多项式系数将 rel_diff 映射为 score，累积 score
+4. 累积值 < threshold → 跳过，复用 `prev_output + prev_residual`
+5. 累积值 ≥ threshold → 重置，执行完整 forward
+6. 第1步和最后1步强制执行
+
+### 实验1：TeaCache v5 初步验证（FLUX系数）
+
+使用 FLUX 模型的多项式系数 `[4.99e+02, -2.84e+02, 5.59e+01, -3.82, 0.264]`
+
+| Config | Computed | Skipped | Avg(s) | Speedup |
+|--------|----------|---------|--------|---------|
+| Baseline | 9 | 0 | 7.226 | 1.00x |
+| t=0.15 | 9 | 0 | 7.085 | 1.02x |
+| t=0.25 | 9 | 0 | 7.198 | 1.00x |
+| t=0.35 | 8 | 1 | 6.470 | **1.12x** |
+| t=0.50 | 8 | 1 | 6.472 | **1.12x** |
+
+**问题**：9步中最多只跳过1步。FLUX系数把 ZImage 的 rel_diff (~0.22~0.67) 映射后的 score 太大，难以累积跳过。
+
+### 实验2：TeaCache v6 自动校准 + 三模式对比 + PSNR
+
+#### Step 0：ZImage 专属系数校准
+
+跑一次完整推理，记录每步 rel_diff 和 output_change，做4阶多项式拟合：
+
+| Step | rel_diff | output_change |
+|------|----------|---------------|
+| 1 | 0.665 | 0.323 |
+| 2 | 0.521 | 0.202 |
+| 3 | 0.370 | 0.134 |
+| 4 | 0.259 | 0.146 |
+| 5 | 0.219 | 0.150 |
+| 6 | 0.340 | 0.168 |
+| 7 | 0.473 | 0.268 |
+| 8 | 1.640 | 0.727 |
+
+**校准系数（高→低阶）**: `[1.681, -5.575, 6.070, -2.171, 0.389]`，R² = 0.9797
+
+#### 结果汇总
+
+Baseline avg: 7.090s
+
+**FLUX 多项式（有效）**：
+
+| Config | Comp/Skip | Avg(s) | Speedup | PSNR(dB) |
+|--------|-----------|--------|---------|----------|
+| FLUX t=0.35 | 8/1 | 6.436 | 1.10x | 35.4 ✅ |
+| FLUX t=0.5 | 8/1 | 6.471 | 1.10x | 35.4 ✅ |
+| FLUX t=1.0 | 7/2 | 5.721 | **1.24x** | 28.4 ⚠️ |
+| FLUX t=1.5 | 6/3 | 4.945 | **1.43x** | 26.0 ⚠️ |
+
+**ZImage 校准系数（全部无效 — threshold 太小）**：
+
+| Config | Comp/Skip | Avg(s) | Speedup | PSNR(dB) |
+|--------|-----------|--------|---------|----------|
+| ZImg t=0.002~0.1 | 9/0 | ~7.25 | 0.98x | inf |
+
+校准后每步 score = 0.13~0.73，每步都超过 threshold → 永不跳过。
+
+**Raw 模式（全部无效）**：
+
+| Config | Comp/Skip | Avg(s) | Speedup | PSNR(dB) |
+|--------|-----------|--------|---------|----------|
+| raw t=0.01~0.20 | 9/0 | ~7.25 | 0.98x | inf |
+
+每步 rel_diff = 0.22~1.64，全都超过 threshold → 永不累积。
+
+### 关键发现
+
+1. **FLUX系数反而最有效** — 因为 FLUX 的4阶多项式恰好把中间步的 rel_diff (~0.22) 映射为较小的 score (~0.27)，允许累积跳过
+2. **ZImage校准系数无效** — 校准后 score 值为 output_change 本身（0.13~0.73），尺度太大，需要更大 threshold
+3. **TeaCache sweet spot**: FLUX t=0.35~0.5 → 1.10x + PSNR 35dB（高质量）；t=1.0 → 1.24x + 28dB（可接受）；t=1.5 → 1.43x + 26dB（质量明显下降）
+4. **vs FBC/MagCache**: TeaCache FLUX t=1.0 (1.24x) 略优于 FBC t=0.35 (1.20x) 和 MagCache (1.21x)，但 PSNR 28.4dB 低于30dB阈值
+
+### 实验3：TeaCache v7 精细扫描（FLUX 0.6-1.2 + ZImg 0.15-0.5 + raw 0.3-1.5）
+
+Baseline avg: 7.040s
+
+**FLUX 多项式精细扫**：
+
+| Config | Comp/Skip | Avg(s) | Speedup | PSNR(dB) |
+|--------|-----------|--------|---------|----------|
+| FLUX t=0.6 | 8/1 | 6.422 | 1.10x | 35.4 ✅ |
+| FLUX t=0.7 | 7/2 | 5.693 | **1.24x** | 28.4 ⚠️ |
+| FLUX t=0.8 | 7/2 | 5.696 | 1.24x | 28.4 ⚠️ |
+| FLUX t=0.9 | 7/2 | 5.706 | 1.23x | 28.4 ⚠️ |
+| FLUX t=1.0 | 7/2 | 5.691 | 1.24x | 28.4 ⚠️ |
+| FLUX t=1.1 | 7/2 | 5.693 | 1.24x | 28.4 ⚠️ |
+| FLUX t=1.2 | 7/2 | 5.752 | 1.22x | 28.4 ⚠️ |
+
+FLUX系数在 t=0.6→0.7 有台阶跳变（1步→2步跳过），之后 t=0.7~1.2 全部锁定在 7/2，无法进一步调优。PSNR 28.4dB 低于30dB。
+
+**ZImage 校准系数（最佳！）**：
+
+| Config | Comp/Skip | Avg(s) | Speedup | PSNR(dB) |
+|--------|-----------|--------|---------|----------|
+| ZImg t=0.15 | 8/1 | 6.465 | 1.09x | 35.4 ✅ |
+| ZImg t=0.20 | 7/2 | 5.697 | **1.24x** | **34.5** ✅ |
+| ZImg t=0.25 | 6/3 | 4.938 | **1.43x** | **30.1** ✅ |
+| ZImg t=0.30 | 5/4 | 4.158 | **1.69x** | 26.5 ⚠️ |
+| ZImg t=0.40 | 4/5 | 3.423 | **2.06x** | 9.6 ❌ |
+| ZImg t=0.50 | 4/5 | 3.393 | **2.07x** | 14.3 ❌ |
+
+**Raw 模式（无多项式）**：
+
+| Config | Comp/Skip | Avg(s) | Speedup | PSNR(dB) |
+|--------|-----------|--------|---------|----------|
+| raw t=0.3 | 8/1 | 6.455 | 1.09x | 35.4 ✅ |
+| raw t=0.5 | 6/3 | 4.948 | **1.42x** | **30.5** ✅ |
+| raw t=0.8 | 5/4 | 4.161 | **1.69x** | 21.5 ⚠️ |
+| raw t=1.0 | 4/5 | 3.397 | **2.07x** | 14.3 ❌ |
+| raw t=1.5 | 3/6 | 2.624 | **2.68x** | 10.3 ❌ |
+
+### 综合对比（所有 cache 方法）
+
+**PSNR ≥ 30dB（质量可接受）的最佳配置**：
+
+| 方法 | 最佳配置 | Speedup | PSNR | 跳过步数 |
+|------|----------|---------|------|----------|
+| FBC | t=0.35 | 1.20x | 未测 | N/A |
+| MagCache | 默认 | 1.21x | 未测 | N/A |
+| **TeaCache (ZImg)** | **t=0.25** | **1.43x** | **30.1** | **3/9** |
+| TeaCache (raw) | t=0.5 | 1.42x | 30.5 | 3/9 |
+| TeaCache (FLUX) | t=0.6 | 1.10x | 35.4 | 1/9 |
+
+**关键发现**：
+
+1. **ZImage校准系数是最优选择** — 同样跳3步，ZImg t=0.25 (PSNR 30.1) vs raw t=0.5 (PSNR 30.5) 效果相当，但校准系数理论上更精准
+2. **TeaCache ZImg t=0.25 是目前所有方法中的最佳** — 1.43x 加速 + PSNR 30.1dB，显著优于 FBC (1.20x) 和 MagCache (1.21x)
+3. **FLUX系数对ZImage不够灵活** — 在 t=0.6 和 t=0.7 之间有硬台阶，无法fine-tune，且 2步跳过时 PSNR 仅 28.4dB
+4. **激进配置可达 2x+** — ZImg t=0.40 (2.06x) 但 PSNR 9.6dB 完全不可用
+5. **speed-quality 曲线清晰**：1.1x@35dB → 1.24x@34.5dB → 1.43x@30dB → 1.69x@26.5dB → 2.07x@14dB
+
+### 推荐部署配置
+
+- **高质量**：TeaCache ZImg t=0.20 — 1.24x, PSNR 34.5dB
+- **平衡**：TeaCache ZImg t=0.25 — 1.43x, PSNR 30.1dB ← **推荐**
+- **激进**：TeaCache ZImg t=0.30 — 1.69x, PSNR 26.5dB（需人工验收）
+
+### 实验4：多 Prompt PSNR 稳定性验证（v8，8个prompt）
+
+8个不同风格的 prompt，每个生成 baseline + 三档 TeaCache，保存图片对比。
+
+#### 逐 Prompt PSNR（dB）
+
+| # | Prompt | t=0.20 | t=0.25 | t=0.30 |
+|---|--------|--------|--------|--------|
+| 0 | Sunset over ocean | 34.5 | 30.1 | 26.5 |
+| 1 | Portrait young woman | 34.1 | 29.5 | 26.2 |
+| 2 | Chinese temple, ink style | 32.2 | 28.1 | 23.8 |
+| 3 | Cyberpunk city | 33.3 | 29.6 | 25.2 |
+| 4 | White cat on windowsill | 36.8 | 31.5 | 28.9 |
+| 5 | Sushi plate, food photo | 32.4 | 27.6 | 24.2 |
+| 6 | Astronaut on Mars | 33.3 | 29.3 | 25.5 |
+| 7 | Cabin in snowy forest | 34.1 | 29.5 | 25.9 |
+
+#### 汇总统计
+
+| Config | Speedup | Mean PSNR | Min PSNR | Max PSNR | Std |
+|--------|---------|-----------|----------|----------|-----|
+| **t=0.20** | **1.24x** | **33.8** | 32.2 | 36.8 | 1.4 |
+| t=0.25 | 1.43x | 29.4 | 27.6 | 31.5 | 1.1 |
+| t=0.30 | 1.69x | 25.8 | 23.8 | 28.9 | 1.5 |
+
+#### 分析
+
+1. **t=0.25 的 mean PSNR 降到 29.4dB**（之前单 prompt 测是 30.1dB），多 prompt 下低于 30dB 阈值
+2. **t=0.20 稳定在 33.8dB（min 32.2）**，所有 prompt 均 >30dB，质量稳定可靠
+3. **t=0.30 min 仅 23.8dB**（中国寺庙 ink style），复杂风格质量损失大
+4. **PSNR 方差较小（std 1.1~1.5dB）**，说明 TeaCache 对不同 prompt 的行为一致
+5. **简单场景（猫、sunset）PSNR 更高**，复杂场景（寺庙、寿司）PSNR 更低
+
+#### 修正推荐
+
+- **生产推荐**：TeaCache ZImg **t=0.20** — 1.24x, mean PSNR 33.8dB, min 32.2dB ✅
+- **可选激进**：TeaCache ZImg t=0.25 — 1.43x, 但 mean 29.4dB 部分 prompt 低于 30dB ⚠️
+- **不推荐**：t=0.30 — min 23.8dB 质量不可接受 ❌
+
+对比其他方法：t=0.20 的 1.24x 仍优于 FBC t=0.35 (1.20x) 和 MagCache (1.21x)，且质量有保证。
+
+### 下一步
+
+1. TeaCache t=0.20 + torch.compile 组合测试
+2. TeaCache + FBC 组合测试
+3. 用户看图片确认实际视觉效果
+
+### 测试代码
+
+TeaCache v6 完整脚本见 `/tmp/test_teacache6.py`（docker 内），核心 monkey-patch 逻辑：
+
+```python
+def apply_teacache(transformer, num_steps, threshold, use_poly, coefficients):
+    cls = transformer.__class__
+    cls._original_forward = cls.forward
+
+    def teacache_forward(self, x, t, cap_feats, return_dict=True, **kwargs):
+        inp_tensor = x[0] if isinstance(x, list) else x
+        adaln_input = self.t_embedder(t * self.t_scale).type_as(inp_tensor)
+
+        should_calc = True
+        if self._tc_cnt == 0 or self._tc_cnt == self._tc_num_steps - 1:
+            should_calc = True
+            self._tc_accumulated = 0.0
+        elif self._tc_prev_adaln is not None:
+            diff = (adaln_input - self._tc_prev_adaln).abs().mean().item()
+            norm = self._tc_prev_adaln.abs().mean().item() + 1e-8
+            rel_diff = diff / norm
+            score = np.polyval(coefficients, rel_diff) if use_poly else rel_diff
+            self._tc_accumulated += score
+            if self._tc_accumulated < threshold:
+                should_calc = False
+            else:
+                self._tc_accumulated = 0.0
+
+        self._tc_prev_adaln = adaln_input.clone()
+
+        if should_calc:
+            result = cls._original_forward(self, x, t, cap_feats,
+                                           return_dict=False, **kwargs)
+            output = result[0]  # LIST, not tensor!
+            if self._tc_prev_output is not None:
+                self._tc_prev_residual = sub_outputs(output, self._tc_prev_output)
+            self._tc_prev_output = deep_copy_output(output)
+        else:
+            # Skip: reuse prev_output + prev_residual
+            output = add_outputs(self._tc_prev_output, self._tc_prev_residual)
+            self._tc_prev_output = deep_copy_output(output)
+            result = (output,)
+        return result
+
+    cls.forward = teacache_forward
+
+# List-aware helpers (ZImage output is list, not tensor)
+def deep_copy_output(out):
+    if isinstance(out, torch.Tensor): return out.clone()
+    if isinstance(out, list): return [deep_copy_output(i) for i in out]
+    return out
+
+def sub_outputs(a, b):
+    if isinstance(a, torch.Tensor) and isinstance(b, torch.Tensor): return a - b
+    if isinstance(a, list) and isinstance(b, list):
+        return [sub_outputs(x, y) for x, y in zip(a, b)]
+    return a
+```
+
+---
+
+## ⚠️ 重大问题：Mosaic/马赛克 Bug 诊断与修复（2026-05-20）
+
+### 问题描述
+
+所有 ZImage 生成的图片（包括无任何 cache 的 baseline）均出现明显的马赛克/颗粒伪影。
+
+### 诊断过程
+
+1. **H1: 权重损坏（NaN/Inf）** — ❌ 排除。`/tmp/diagnose_torchao.py` 检查所有 transformer 和 VAE 参数，NaN=0, Inf=0, all-zero=0。
+2. **H2: VAE bf16 精度不足** — ❌ 排除。bf16 vs fp32 decode 差异仅 0.20 像素，可忽略。
+3. **H3: FBC 测试残留 patch** — ✅ **确认为根因**
+
+### 根因
+
+之前测试 First Block Cache (FBC) 时，直接修改了 diffusers 源码中 4 个文件：
+
+| 文件 | 修改时间 |
+|------|---------|
+| `pipeline_z_image.py` | 19.5h 前 |
+| `first_block_cache.py` | 22.7h 前 |
+| `_helpers.py` | 43.8h 前 |
+| `transformer_z_image.py` | 43.8h 前 |
+
+这些修改在 FBC 测试后未恢复，导致后续所有推理（包括无 cache 的 baseline）都在被修改过的 diffusers 代码上运行，产生马赛克。
+
+### 修复
+
+```bash
+pip install --force-reinstall diffusers==0.38.0
+pip install huggingface-hub==0.34.0  # force-reinstall 升级了 huggingface-hub 到 1.15.0，不兼容 transformers
+```
+
+修复后 baseline 输出恢复正常，无马赛克。
+
+### 教训
+
+1. **永远不要直接修改 site-packages 源码做测试** — 用 monkey-patch 或 copy 到本地
+2. **测试完必须恢复** — 或使用 venv/conda 隔离环境
+3. **之前基于被污染代码的 TeaCache 结果全部无效** — 需要重新测试
+
+---
+
+## TeaCache 修正实验（2026-05-20，clean diffusers）
+
+### 背景
+
+修复 mosaic bug 后，之前的 TeaCache 系数和 sweep 结果全部基于被污染的 diffusers 代码，需要重新校准和评估。
+
+### 环境
+
+- diffusers 0.38.0（clean reinstall）
+- torch 2.11.0+cu129, bfloat16
+- 模型：`Tongyi-MAI/Z-Image-Turbo`（HuggingFace Hub）
+- A6000 单卡，768×1344, 9 steps
+
+### 新校准系数
+
+使用 3 个 prompt 校准，24 个数据点：
+
+**旧系数（污染代码）**: `[1.681, -5.575, 6.070, -2.171, 0.389]`
+**新系数（clean）**: `[-2.471, 5.428, -2.240, 0.260, 0.089]`
+
+R² = 0.9743（旧 0.9797）
+rel_diff 范围: [0.219, 1.640]
+score 范围: [0.090, 0.553]
+
+**系数差异巨大** — 说明之前 FBC patch 对 transformer 行为产生了根本性影响。
+
+### Threshold Sweep 结果
+
+Baseline latency: 6.593s
+
+| Threshold | Latency | Speedup | PSNR (单 prompt) | 推荐 |
+|-----------|---------|---------|-------------------|------|
+| 0.10 | 5.239s | 1.26x | 41.2dB | ★ |
+| 0.15 | 5.264s | 1.25x | 39.0dB | ★ |
+| 0.20 | 4.560s | 1.45x | 34.0dB | ★ |
+| 0.25 | 3.860s | 1.71x | 25.4dB | |
+| 0.30 | 3.859s | 1.71x | 18.2dB | |
+| 0.35 | 3.872s | 1.70x | 20.3dB | |
+| 0.40 | 3.158s | 2.09x | 15.0dB | |
+| 0.50 | 3.157s | 2.09x | 15.0dB | |
+
+★ = PSNR ≥ 30dB & speedup ≥ 1.15x
+
+### 多 Prompt PSNR 稳定性（8 个 prompt）
+
+#### t=0.10（保守）
+
+| # | Prompt | PSNR |
+|---|--------|------|
+| 0 | A red apple on a white table | 44.6dB |
+| 1 | A futuristic city skyline at night | 22.6dB |
+| 2 | A golden retriever playing in park | 37.4dB |
+| 3 | Abstract art with blue and orange | 30.7dB |
+| 4 | A cozy coffee shop interior | 27.7dB |
+| 5 | An astronaut floating in space | 30.5dB |
+| 6 | A Japanese garden with cherry blossoms | 21.8dB |
+| 7 | A vintage car on a desert road | 34.2dB |
+| **Mean: 31.2dB, Min: 21.8dB, Std: 7.1dB** |
+
+#### t=0.15
+
+| Mean: 28.4dB, Min: 18.2dB, Std: 7.3dB |
+
+#### t=0.20
+
+| Mean: 24.4dB, Min: 17.4dB, Std: 5.7dB |
+
+### 对比：旧结果 vs 新结果
+
+| Config | 旧结果 (污染代码) | 新结果 (clean) | 差异 |
+|--------|------------------|----------------|------|
+| 系数 | [1.681, -5.575, 6.070, -2.171, 0.389] | [-2.471, 5.428, -2.240, 0.260, 0.089] | **完全不同** |
+| t=0.20 speedup | 1.24x | 1.45x | 更快 |
+| t=0.20 mean PSNR (8 prompt) | 33.8dB | 24.4dB | **大幅下降** |
+| t=0.20 min PSNR | 32.2dB | 17.4dB | **严重下降** |
+
+### ⚠️ 关键发现：PSNR 方差极高
+
+新校准后，即使最保守的 t=0.10 配置：
+- Mean PSNR 31.2dB（看似可接受）
+- **Min PSNR 仅 21.8dB**（"日本花园" prompt）
+- **Std 7.1dB**（极大方差）
+
+说明 TeaCache 在 clean diffusers 上对 ZImage 的效果**高度 prompt 依赖**：
+- 简单场景（红苹果 44.6dB）效果好
+- 复杂场景（城市夜景 22.6dB、日本花园 21.8dB）质量严重下降
+
+这与旧结果（Std 1.1~1.5dB）形成鲜明对比——旧结果的低方差实际上是 FBC patch 污染导致的假象。
+
+### 修正后的 TeaCache 推荐
+
+鉴于高方差问题，TeaCache 在 ZImage 上的实际可用性存疑：
+
+- **t=0.10**: 1.26x 加速，mean 31.2dB 但 min 21.8dB — ⚠️ 部分 prompt 质量不可接受
+- **t=0.15~0.20**: 加速更多但 mean PSNR <30dB — ❌ 不推荐生产使用
+- **对比 FBC t=0.3**: 1.20x 加速，PSNR 32.3dB（单 prompt）— 更稳定可靠
+
+### 视觉验证结果（2026-05-20）
+
+用户对 8 个 prompt 的 baseline / t=0.10 / t=0.20 图片进行肉眼对比：
+
+- **t=0.10** (1.26x): 部分 case 可接受，但低 PSNR prompt（城市夜景、日本花园）有可见差异
+- **t=0.20** (1.45x): ❌ **大部分 case 有明显细节缺失**，不可接受
+- **t=0.25+**: ❌ 更严重
+
+### TeaCache 最终结论
+
+**❌ TeaCache 对 ZImage (clean diffusers) 实用价值有限**
+
+- 最保守配置 t=0.10 仅 1.26x 加速，且部分 prompt 质量不稳定（min PSNR 21.8dB）
+- t=0.20 起视觉质量明显下降，不可用于生产
+- 之前旧结果（t=0.20 mean 33.8dB, std 1.4dB）是 FBC patch 污染导致的假象
+- 与 FBC/torch.compile 相比，TeaCache 性价比不足
+
+### 当前推荐部署配置（最终确认）
+
+**方案 A（最佳性价比）**: `torch.compile(mode='default') + FBC(threshold=0.3)` = **1.55x** 加速，PSNR 30.6dB ✅
+**方案 B（无质量损失）**: `torch.compile(mode='reduce-overhead')` 单独 = **1.36x** 加速，PSNR 37.3dB ✅
+
+TeaCache 不纳入生产部署。
+
+## TeaCache 细粒度阈值扫描（2026-05-20）
+
+### 动机
+之前粗扫只测了 0.10、0.15、0.20，中间可能存在甜蜜点。做 0.11-0.19 每 0.01 一档的精扫。
+
+### 单 prompt 扫描结果（"A beautiful sunset over the ocean"）
+
+| Threshold | Latency | Speedup | PSNR |
+|-----------|---------|---------|------|
+| 0.11 | 6.630s | 0.97x | ∞（无跳过） |
+| 0.12 | 5.273s | 1.23x | 32.6dB |
+| 0.13 | 5.316s | 1.22x | 32.6dB |
+| 0.14 | 4.581s | 1.41x | 30.6dB |
+| 0.15 | 4.563s | 1.42x | 30.6dB |
+| 0.16 | 4.654s | 1.39x | 30.6dB |
+| 0.17 | 4.571s | 1.41x | 30.6dB |
+| 0.18 | 4.551s | 1.42x | 30.6dB |
+| 0.19 | 3.853s | 1.68x | 29.0dB |
+
+Baseline: 6.463s
+
+### 关键发现：阶梯式 cache hit
+
+9步推理下 TeaCache 的跳过行为是**量化的**，不存在连续的甜蜜点：
+
+| 跳过步数 | Threshold 范围 | Speedup | 单prompt PSNR |
+|---------|---------------|---------|--------------|
+| 0 步 | ≤0.11 | ~1.0x | ∞ |
+| 1 步 | 0.12-0.13 | ~1.22x | 32.6dB |
+| 2 步 | 0.14-0.18 | ~1.41x | 30.6dB |
+| 3 步 | ≥0.19 | ~1.68x | 29.0dB |
+
+0.14-0.18 范围内 PSNR 和 speedup 完全相同——因为跳过的是同样的步。
+
+### 多 prompt 稳定性测试（8 prompts）
+
+| Threshold | Speedup | Mean PSNR | Min PSNR | Std |
+|-----------|---------|-----------|----------|-----|
+| 0.12 | 1.23x | 29.6dB | 20.9dB | 5.0 |
+| 0.13 | 1.22x | 29.6dB | 20.9dB | 5.0 |
+| 0.14 | 1.41x | 26.8dB | 18.7dB | 5.0 |
+| 0.15 | 1.42x | 26.8dB | 18.7dB | 5.0 |
+| 0.16 | 1.39x | 26.8dB | 18.7dB | 5.0 |
+| 0.17 | 1.41x | 26.8dB | 18.7dB | 5.0 |
+| 0.18 | 1.42x | 26.8dB | 18.7dB | 5.0 |
+| 0.19 | 1.68x | 24.6dB | 17.1dB | 4.9 |
+
+最差 case 始终是 P6（Japanese garden）和 P1（futuristic city），min PSNR 均 <21dB。
+
+### 最终结论
+
+精细扫描**确认**了之前放弃 TeaCache 的决定：
+- 9步推理的 cache hit 是阶梯式的，无法通过微调阈值找到渐变甜蜜点
+- 跳1步（1.22x）收益太小，不值得引入复杂度
+- 跳2步（1.41x）多prompt min PSNR 仅 18.7dB，复杂场景质量不可接受
+- 对比 torch.compile+FBC 的 1.55x/30.6dB，TeaCache 在质量和速度上均劣势
+- **TeaCache 不适合步数极少的 turbo 模型**，仅适合 20+ 步的标准模型
+
+---
+
+## 优化测试 #12: TensorRT 兼容性修复（2026-05-21）
+
+### 背景
+
+部署 #6（2026-05-12）和部署 #8（2026-05-18）两次尝试 TensorRT 均失败：
+- 第一次：`torch.complex64` 不被 TRT 支持
+- 第二次：Real RoPE 解决了 complex64，但 `aten.scatter.src` 混合类型（BF16 input + Int32 updates）又阻塞
+
+本次目标：创建一个完全 TRT 兼容的 `transformer_z_image_trt.py`，解决所有 3 个 TRT 障碍，验证 TRT 编译能力和数值正确性。
+
+### 3 个 TRT 障碍及修复
+
+| # | 障碍 | 根因 | 修复方案 |
+|---|------|------|---------|
+| 1 | `torch.complex64` 不支持 | RoPE 使用 `torch.polar` + `view_as_complex` + `view_as_real` | **Real RoPE**: 用实数 cos/sin 旋转替换复数乘法 |
+| 2 | `aten.scatter.src` 混合类型 | `_prepare_sequence` 中 `tensor[indices] = values` 被 dynamo trace 为 scatter，BF16/Int32 类型不匹配 | **向量化 mask**: 用 `arange.unsqueeze(0) < seq_lens.unsqueeze(1)` 替换 for-loop index assignment |
+| 3 | 嵌套 list 输入签名 | transformer forward 接收 `list[Tensor, list[list[Tensor]]]`，dynamo 无法 trace | **展平输入签名**: 去掉嵌套 list，改用 flat tensor 输入 |
+
+### 实现文件
+
+`transformer_z_image_trt.py` — 基于 diffusers 0.38.0 的 `transformer_z_image.py` 修改，主要变更：
+
+#### 1. Real RoPE (`RopeEmbedder`)
+
+```python
+# 原始: complex64
+freqs_cis_i = torch.polar(torch.ones_like(freqs), freqs).to(torch.complex64)
+
+# TRT 兼容: 实数 cos/sin，float64 精度计算后截断
+freqs = torch.outer(timestep, freqs)  # keep float64
+all_cos.append(torch.cos(freqs).float())
+all_sin.append(torch.sin(freqs).float())
+# 返回 shape: (seq, 2, total_half_dim) — stack([cos, sin], dim=-2)
+```
+
+#### 2. RoPE 应用 (`ZSingleStreamAttnProcessor.__call__`)
+
+```python
+# 原始: complex 乘法
+x = torch.view_as_complex(x_in.float().reshape(*x_in.shape[:-1], -1, 2))
+x_out = torch.view_as_real(x * freqs_cis.unsqueeze(2)).flatten(3)
+
+# TRT 兼容: 实数旋转
+freqs_cos = freqs_cis[..., 0, :].unsqueeze(2)  # (batch, seq, 1, half_head_dim)
+freqs_sin = freqs_cis[..., 1, :].unsqueeze(2)
+x_even = x_in.float()[..., 0::2]
+x_odd = x_in.float()[..., 1::2]
+x_out = torch.stack([x_even * cos - x_odd * sin, x_even * sin + x_odd * cos], dim=-1).flatten(-2)
+```
+
+#### 3. 向量化 Mask (`_build_attn_mask_vectorized`)
+
+```python
+# 原始: for-loop + index assignment → aten.scatter
+for i in range(batch):
+    attn_mask[i, :seq_lens[i]] = 1
+
+# TRT 兼容: 向量化
+positions = torch.arange(max_len, device=device).unsqueeze(0)  # (1, max_len)
+attn_mask = (positions < seq_lens.unsqueeze(1))  # (batch, max_len) bool
+# 全部相同长度时返回 None（SDPA 默认全 attend）
+```
+
+#### 4. 去除 `with torch.device("cpu"):` 上下文管理器
+
+dynamo 不支持此 context manager，改为显式 `device="cpu"` 参数。
+
+### TRT 编译测试结果 ✅
+
+```
+torch_tensorrt: 2.11.0+cu129
+TensorRT: 10.15.1.29
+PyTorch: 2.11.0+cu129
+GPU: NVIDIA RTX A6000
+```
+
+**TRT 编译成功**：首次编译耗时 ~107.8s（包含 TRT engine 构建），后续推理正常。
+
+### 数值正确性验证
+
+#### 验证方法
+
+使用相同 seed (42)、相同 prompt ("A red apple on a white table")、相同参数 (768×1344, 4 steps, guidance_scale=0)：
+
+1. **原始 pipeline 跑两次** → max diff = 0.0（确认基线可重复）
+2. **原始 vs TRT 兼容 transformer** → max diff = 207.0
+
+#### 逐层差异追踪
+
+通过 hook 插桩 `noise_refiner[0]` 和 `layers[0]`，对比原始和 TRT 兼容版本的输入差异：
+
+```
+=== noise_refiner[0] inputs ===
+  arg[0] (hidden_states): max=0.000000 mean=0.000000   ← 完全相同
+  arg[2] (freqs_cis): SHAPE MISMATCH
+    原始: (1, 4032, 64) complex64
+    TRT:  (1, 4032, 2, 64) real float32
+  arg[3] (timestep_emb): max=0.000000 mean=0.000000    ← 完全相同
+
+=== layers[0] inputs ===
+  arg[0]: max=0.500000 mean=0.000005                   ← 2层refiner后已有差异
+  arg[2]: SHAPE MISMATCH (同上，freqs_cis 格式不同)
+```
+
+#### 差异根因分析
+
+| 层级 | 差异 | 说明 |
+|------|------|------|
+| RoPE 值（isolated） | max 3.5e-6 | float32 vs complex64 中间精度差异，可忽略 |
+| RoPE 应用（isolated） | max 4.95e-06 | cos/sin 旋转 vs complex 乘法，数学等价但浮点路径不同 |
+| 2 层 refiner 后 | max 0.5 | bf16 混沌放大开始 |
+| 30 层 main blocks 后 | max 207 像素 | bf16 混沌放大累积 |
+
+**结论：差异是 bf16 混沌放大（chaos amplification），不是实现 bug。**
+
+两种 RoPE 实现使用不同的浮点运算路径：
+- 原始：float32 → complex64 → `view_as_complex` → complex 乘法 → `view_as_real`
+- TRT：float64 → cos/sin → float32 → 实数旋转
+
+初始差异 ~1e-6 在每层 attention + FFN 的非线性运算中指数级放大，经过 32 层（2 refiner + 30 main）后达到像素级差异。
+
+#### 质量评估
+
+| 指标 | 值 | 评估 |
+|------|-----|------|
+| Max pixel diff | 207 | 个别像素有差异 |
+| Mean pixel diff | 0.33 | 平均差异极小 |
+| **PSNR** | **54.5 dB** | ✅ **极高质量**（>40dB 视为无损） |
+
+PSNR 54.5dB 远超 30dB 的可接受阈值，**视觉上完全无法区分**。
+
+### 对比：已被 TensorRT 支持的模型
+
+参考 Flux 和 Qwen2VL 等模型的 TensorRT 适配经验：
+
+| 模型 | TRT 障碍 | 解决方式 |
+|------|---------|---------|
+| Flux | 无 complex64，标准 RoPE | 原生支持 |
+| Qwen2VL | 标准 attention + RoPE | 原生支持 |
+| **ZImage** | complex64 RoPE + scatter + 嵌套 list | **需要自定义 TRT 兼容 transformer** |
+
+ZImage 的特殊性在于：
+1. 使用了非标准的 complex64 RoPE（大多数模型用实数 RoPE）
+2. mask 构建使用 for-loop index assignment（大多数模型用向量化操作）
+3. forward 签名使用嵌套 list（大多数模型用 flat tensor）
+
+### Inductor 编译测试 ✅
+
+TRT 兼容 transformer 在 inductor backend 上也编译成功（~7.2s），确认修改不影响 inductor 路径。
+
+### 文件清单
+
+| 文件 | 说明 |
+|------|------|
+| `ZImage/transformer_z_image_trt.py` | TRT 兼容 transformer（本地 + Docker `/tmp/`） |
+| `ZImage/test_trt_transformer.py` | 3 步测试脚本：eager 对比 → inductor → TRT |
+| `ZImage/benchmark_trt.py` | 性能基准测试：baseline vs inductor+FBC vs TRT |
+
+### 状态
+
+- [x] 创建 TRT 兼容 transformer（3 处修复）
+- [x] Eager 推理验证（PSNR 54.5dB）
+- [x] Inductor 编译 ✅（7.2s）
+- [x] TRT 编译 ✅（107.8s）
+- [x] 数值差异根因确认（bf16 混沌放大，非 bug）
+- [x] TRT 性能基准测试（benchmark_trt.py）→ 见优化测试 #13
+- [x] TRT vs torch.compile+FBC 性能对比 → TRT 无额外加速，与 inductor 持平
+
+### 结论
+
+**✅ TensorRT 编译成功** — 通过创建 TRT 兼容 transformer 解决了所有 3 个障碍。
+
+之前部署 #6 和 #8 结论（"TensorRT 与 ZImage 不兼容"）已被推翻。关键是需要同时解决 3 个问题（complex64 + scatter + 嵌套 list），缺一不可。
+
+数值质量 PSNR 54.5dB（远超无损阈值），可安全用于生产。
+
+## 优化测试 #13: TensorRT 性能基准测试（2026-05-21）
+
+### 测试环境
+- GPU: A6000 48GB
+- PyTorch 2.11.0+cu129
+- torch_tensorrt 2.11.0+cu129
+- TensorRT 10.15.1.29
+- diffusers (ZImagePipeline)
+
+### 测试参数
+```
+RESOLUTION: 1344x768
+STEPS: 9
+GUIDANCE_SCALE: 0
+SEED: 42
+WARMUP: 2 (TRT: 3)
+RUNS: 5
+```
+
+### 基准测试结果
+
+| 方案 | 延迟 (avg) | 加速比 |
+|------|-----------|--------|
+| Baseline (eager) | 6.442s | 1.00x |
+| Inductor (无FBC) | 5.224s | 1.23x |
+| TRT-compat + Inductor (无FBC) | 5.212s | 1.24x |
+| TRT (`torch_tensorrt` backend) | 5.187s | 1.24x |
+
+### 关键发现
+
+1. **TRT 与 Inductor 性能持平** — 三种编译方案都是 ~5.2s (1.23-1.24x)，TRT 没有额外加速
+2. **FBC 未生效** — `apply_first_batch_cache` 在该容器的 diffusers 版本中导入失败，所有 "inductor+FBC" 测试实际上只有 inductor。之前测得的 1.55x 加速中，FBC 贡献了额外 ~0.3x
+3. **TRT 编译时间远高于 Inductor** — TRT 首次编译 ~107s vs Inductor ~25s，但运行时无加速
+
+### 初步 bug 报告
+
+首次运行 benchmark 时 `STEPS=4`（而非正确的 9），导致 baseline 仅 ~3s，数据不可信。修正为 `STEPS=9` 后 baseline 回到 6.44s，与之前测试一致。
+
+### 假设分析：为什么 TRT 没有额外加速
+
+**H1: TRT 大量 fallback 到 PyTorch eager（最可能）**
+`torch.compile(backend='torch_tensorrt')` 遇到不支持的 op 会静默 fallback。编译日志中有多条 `Detected unparsable type: NoneType` warning，可能只是冰山一角。如果大部分算子 fallback，TRT 实际只编译了少量子图。
+
+**H2: 缺少显式精度/输入规格配置**
+`torch.compile` 是 "lazy" 路径，真正的 TRT 加速需要 `torch_tensorrt.compile()` 显式指定固定 shape + `enabled_precisions`。bf16 在 TRT 的优化也远不如 fp16。
+
+**H3: Graph breaks 太多**
+Transformer 中的条件分支、动态 shape 导致 Dynamo 把计算图切成多个小片段，TRT 无法跨片段融合。
+
+**H4: 应该用 ONNX → TRT engine 路线**
+社区真正获得 TRT 大幅加速的方案是 export ONNX → trtexec 构建 engine → 运行时加载。`torch.compile(backend='torch_tensorrt')` 是实验性路径，优化深度有限。
+
+**H5: A6000 上 inductor triton kernel 已接近硬件上限**
+Ampere 架构的 tensor core 在 inductor triton kernel 下利用率已经很高，TRT 的算子融合无额外收益。
+
+### 状态
+
+- [x] 基准测试完成（4 方案对比）
+- [x] 确认 TRT 无额外加速（与 inductor 持平）
+- [ ] 验证 H1：TRT fallback 比例诊断
+- [ ] 评估 H4：ONNX → TRT engine 路线可行性
