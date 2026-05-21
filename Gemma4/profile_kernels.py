@@ -230,6 +230,90 @@ def run_profile_vllm(args, user_content, system_prompt):
     return prof, new_tokens
 
 
+def analyze_chrome_trace(trace_path):
+    """Analyze Chrome trace JSON for CUDA kernel breakdown (works across processes)."""
+    with open(trace_path, "r", encoding="utf-8") as f:
+        trace = json.load(f)
+
+    # Chrome trace events with "cat": "kernel" or "cuda_runtime" are GPU kernels
+    kernel_times = defaultdict(lambda: {"cuda_us": 0, "count": 0})
+    for evt in trace.get("traceEvents", trace if isinstance(trace, list) else []):
+        if not isinstance(evt, dict):
+            continue
+        cat = evt.get("cat", "")
+        ph = evt.get("ph", "")
+        dur = evt.get("dur", 0)
+        name = evt.get("name", "")
+        # CUDA kernels show up as "kernel" category or "gpu_user_annotation"
+        if ph == "X" and dur > 0 and cat in ("kernel", "cuda_runtime", "gpu_user_annotation", "cuda"):
+            kernel_times[name]["cuda_us"] += dur
+            kernel_times[name]["count"] += 1
+
+    if not kernel_times:
+        # Fallback: try all duration events on non-CPU threads
+        gpu_pids = set()
+        for evt in trace.get("traceEvents", trace if isinstance(trace, list) else []):
+            if isinstance(evt, dict) and evt.get("name", "").startswith("process_labels") and "GPU" in str(evt.get("args", "")):
+                gpu_pids.add(evt.get("pid"))
+        for evt in trace.get("traceEvents", trace if isinstance(trace, list) else []):
+            if not isinstance(evt, dict):
+                continue
+            if evt.get("ph") == "X" and evt.get("dur", 0) > 0:
+                name = evt.get("name", "")
+                cat = evt.get("cat", "")
+                # Include if on GPU pid or if cat suggests kernel
+                if evt.get("pid") in gpu_pids or "kernel" in cat.lower() or "cuda" in cat.lower():
+                    kernel_times[name]["cuda_us"] += evt["dur"]
+                    kernel_times[name]["count"] += 1
+
+    if not kernel_times:
+        print("\nNo CUDA kernels found in trace. Dumping trace categories for debug...")
+        cats = defaultdict(int)
+        for evt in trace.get("traceEvents", trace if isinstance(trace, list) else []):
+            if isinstance(evt, dict):
+                cats[evt.get("cat", "<none>")] += 1
+        for c, n in sorted(cats.items(), key=lambda x: -x[1])[:20]:
+            print(f"  {c}: {n} events")
+        return
+
+    # Build sorted list
+    kl = [{"name": k, "cuda_us": v["cuda_us"], "count": v["count"],
+           "category": categorize_kernel(k)} for k, v in kernel_times.items()]
+    total_cuda_us = sum(k["cuda_us"] for k in kl)
+
+    kl.sort(key=lambda x: x["cuda_us"], reverse=True)
+    print(f"\n{'='*90}")
+    print(f"Top 20 CUDA Kernels by Time")
+    print(f"{'='*90}")
+    print(f"{'Rank':>4} | {'CUDA Time':>12} | {'%':>6} | {'Count':>6} | {'Category':<22} | Name")
+    print(f"{'-'*90}")
+    for i, k in enumerate(kl[:20]):
+        pct = k["cuda_us"] / total_cuda_us * 100
+        time_ms = k["cuda_us"] / 1000
+        print(f"{i+1:>4} | {time_ms:>9.1f} ms | {pct:>5.1f}% | {k['count']:>6} | {k['category']:<22} | {k['name'][:60]}")
+
+    # Category breakdown
+    cat_times = defaultdict(float)
+    cat_counts = defaultdict(int)
+    for k in kl:
+        cat_times[k["category"]] += k["cuda_us"]
+        cat_counts[k["category"]] += k["count"]
+
+    cat_sorted = sorted(cat_times.items(), key=lambda x: x[1], reverse=True)
+    print(f"\n{'='*70}")
+    print(f"CUDA Time Breakdown by Category")
+    print(f"{'='*70}")
+    print(f"{'Category':<25} | {'CUDA Time':>12} | {'%':>6} | {'Kernel Count':>12}")
+    print(f"{'-'*70}")
+    for cat, us in cat_sorted:
+        pct = us / total_cuda_us * 100
+        time_ms = us / 1000
+        print(f"{cat:<25} | {time_ms:>9.1f} ms | {pct:>5.1f}% | {cat_counts[cat]:>12}")
+    print(f"{'-'*70}")
+    print(f"{'TOTAL':<25} | {total_cuda_us/1000:>9.1f} ms | 100.0%")
+    print(f"{'='*70}")
+
+
 def analyze_profile(prof):
     """Analyze profiler results and print kernel-level breakdown."""
     # Get CUDA kernel events
@@ -334,6 +418,8 @@ def main():
 
     if args.use_vllm:
         prof, new_tokens = run_profile_vllm(args, user_content, system_prompt)
+        trace_path = args.output or "profile_gemma4.json"
+        analyze_chrome_trace(trace_path)
     else:
         proc_id = args.processor_id or args.model_id
         print(f"Loading processor from {proc_id} ...")
