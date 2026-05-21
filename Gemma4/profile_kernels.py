@@ -35,6 +35,28 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from benchmark_speed import load_processor, load_jsonl, extract_user_content
 
 
+def _patch_compressed_tensors_group_size():
+    """Monkey-patch compressed_tensors to fix group_size=0 validation error.
+
+    The compressed-tensors library constructs QuantizationArgs with group_size=0
+    for ignore-listed layers, which fails its own pydantic validator. We wrap
+    __init__ to silently fix group_size=0 → 128 before pydantic validates.
+    """
+    try:
+        from compressed_tensors.quantization.quant_args import QuantizationArgs
+        _orig_init = QuantizationArgs.__init__
+
+        def _patched_init(self, **data):
+            if data.get("group_size") == 0:
+                data["group_size"] = 128
+            _orig_init(self, **data)
+
+        QuantizationArgs.__init__ = _patched_init
+        print("[INFO] Patched QuantizationArgs.__init__ for group_size=0 bug")
+    except (ImportError, Exception) as e:
+        print(f"[WARN] Could not patch compressed_tensors: {e}")
+
+
 def load_model_for_profile(args):
     """Load model for profiling. Supports BF16 and AWQ (compressed-tensors) models."""
     from transformers import AutoModelForCausalLM, AutoConfig
@@ -51,6 +73,9 @@ def load_model_for_profile(args):
                 config.quantization_config = raw["quantization_config"]
                 print(f"[INFO] Manually injected quantization_config "
                       f"(quant_method: {raw['quantization_config'].get('quant_method', 'unknown')})")
+
+    # Patch compressed_tensors group_size=0 bug before loading
+    _patch_compressed_tensors_group_size()
 
     kwargs = {
         "config": config,
