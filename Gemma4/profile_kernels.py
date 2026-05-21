@@ -238,7 +238,7 @@ def analyze_profile(prof):
     # Collect CUDA time per kernel
     kernel_times = []
     for evt in events:
-        cuda_time = evt.cuda_time_total  # microseconds
+        cuda_time = getattr(evt, "cuda_time_total", 0) or getattr(evt, "self_cuda_time_total", 0)
         if cuda_time > 0:
             kernel_times.append({
                 "name": evt.key,
