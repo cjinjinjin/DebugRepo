@@ -36,9 +36,24 @@ from benchmark_speed import load_processor, load_jsonl, extract_user_content
 
 
 def load_model_for_profile(args):
-    """Load model (BF16 only, no GPTQ) for profiling."""
-    from transformers import AutoModelForCausalLM
+    """Load model for profiling. Supports BF16 and AWQ (compressed-tensors) models."""
+    from transformers import AutoModelForCausalLM, AutoConfig
+
+    # Workaround: transformers 5.x bug where config.quantization_config is None
+    # for compressed-tensors format (AWQ). Manually load and inject it.
+    config = AutoConfig.from_pretrained(args.model_id)
+    if getattr(config, "quantization_config", None) is None:
+        config_path = Path(args.model_id) / "config.json"
+        if config_path.exists():
+            with open(config_path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            if "quantization_config" in raw:
+                config.quantization_config = raw["quantization_config"]
+                print(f"[INFO] Manually injected quantization_config "
+                      f"(quant_method: {raw['quantization_config'].get('quant_method', 'unknown')})")
+
     kwargs = {
+        "config": config,
         "device_map": "auto",
         "dtype": torch.bfloat16,
     }
