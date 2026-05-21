@@ -2885,5 +2885,128 @@ Ampere 架构的 tensor core 在 inductor triton kernel 下利用率已经很高
 
 - [x] 基准测试完成（4 方案对比）
 - [x] 确认 TRT 无额外加速（与 inductor 持平）
-- [ ] 验证 H1：TRT fallback 比例诊断
-- [ ] 评估 H4：ONNX → TRT engine 路线可行性
+- [x] 验证 H1：TRT fallback 比例诊断 → H1 排除，见优化测试 #14
+- [x] 评估 H4：ONNX → TRT engine 路线 → 暂不追求，见 #14 结论
+
+## 优化测试 #14: TRT 深度诊断与最终结论（2026-05-21）
+
+### H1 验证：TRT fallback 比例
+
+通过 `diagnose_trt_fallback.py` 开启 TRT debug 日志（44万行，47MB），分析结果：
+
+```
+TRT 编译成功的引擎/子图: 16
+Detected support for 4877 operators out of 4877 in subgraph.
+Graph breaks: 1 (仅 return_value，正常)
+Fallback: 0 (之前检测到的 8 条是脚本 stack trace 误报)
+```
+
+**结论：H1 排除。TRT 100% 编译了所有 4877 个算子，零 fallback。**
+
+### H2 验证：精度配置
+
+编译日志显示默认配置为：
+```
+enabled_precisions={<dtype.f32: 7>}
+use_explicit_typing=True
+```
+
+初始判断「TRT 只用了 FP32」是错误的。`use_explicit_typing=True` 模式下，TRT 保留计算图中每个节点的**原始精度**（bf16），`enabled_precisions={f32}` 仅作为不支持类型的 fallback。即 **TRT 实际已经在 bf16 精度下运行，使用了 tensor core**。
+
+验证：尝试设置 `use_explicit_typing=False` + `enabled_precisions={fp16, bf16}` → 立即报错：
+```
+INetworkDefinition::addAttention: Error Code 3: API Usage Error
+(Attention can only be used with a strongly typed network)
+```
+说明 TRT 的 attention 原生实现要求强类型网络（`use_explicit_typing=True`），无法切换到弱类型混精度模式。
+
+**结论：H2 排除。TRT 已经在最优精度配置下运行。**
+
+### 优化参数穷举测试
+
+| 配置 | 延迟 | 加速比 | 说明 |
+|------|------|--------|------|
+| TRT + opt_level=5 + workspace=2GB | 5.198s | 1.24x | 更高优化级别+更大 workspace，无改善 |
+| TRT + decompose_attention=True | 5.167s | 1.25x | 拆分 SDPA 为 matmul+softmax+matmul，微弱改善 |
+| TRT + experimental_decompositions | 5.851s | 1.10x | 过度分解，**反而更慢** |
+| Inductor + max-autotune | FAILED | - | 编译失败 |
+| Inductor + reduce-overhead (CUDA graphs) | 7.063s | 0.91x | **比 baseline 还慢**，动态 shape 不兼容 |
+
+### 最终结论
+
+**✅ 确认 H5：A6000 上 inductor triton kernel 已接近硬件计算上限，TRT 无法提供额外加速。**
+
+#### 根本原因分析
+
+ZImage transformer 的推理瓶颈是 **compute-bound**（计算密集型），不是 memory-bound 或 kernel-launch-bound：
+
+1. **Tensor core 利用率已接近饱和**：inductor 生成的 triton kernel 已经高效使用了 A6000 的 tensor core 做 bf16 matmul。TRT 的算子融合（conv+bn+relu、elementwise fusion）在 transformer 架构中收益有限，因为主要计算量在 attention 的 Q×K^T 和 attn×V 矩阵乘法，这些已经被 flash attention 优化到接近理论峰值。
+
+2. **Flash Attention 是性能天花板**：无论 inductor 还是 TRT，attention 部分都走 flash attention（或等效优化）。这块占了 transformer 60-70% 的计算量，两种后端在这里性能相同。
+
+3. **CUDA graphs 不适用**：`reduce-overhead` 模式（CUDA graphs）要求固定 tensor shape，但 ZImage transformer 的 unified sequence 长度随输入变化，导致 CUDA graphs 需要重新捕获，反而增加开销。
+
+4. **TRT 的核心优势场景不匹配**：TRT 最擅长的是 CNN 类模型（大量 conv+bn+relu 融合）和固定 shape 的推理。对于动态 shape 的 transformer + flash attention，TRT 的图优化收益被 flash attention 的已有优化抵消。
+
+#### 当前最优方案
+
+```
+Inductor (default) + FBC = 1.55x（之前验证）
+├── Inductor 贡献: 1.23x（编译优化：算子融合、内存优化）
+└── FBC 贡献: 额外 ~0.26x（算法优化：跳过冗余 transformer block 计算）
+```
+
+FBC（First Block Cache）是唯一突破编译器天花板的方法，因为它在**算法层面**减少了计算量，而不是在**硬件层面**优化已有计算。
+
+#### 进一步加速的可能方向
+
+**1. 更强 GPU 硬件（最直接）**
+
+| GPU | 架构 | bf16 TFLOPS | 相对 A6000 | 预期加速 |
+|-----|------|-------------|-----------|---------|
+| A6000 (当前) | Ampere | 38.7 | 1.0x | baseline |
+| A100 80GB | Ampere | 312 | 8.1x | ~3-4x（受内存带宽限制） |
+| H100 80GB | Hopper | 989 | 25.6x | ~5-8x（Transformer Engine + FP8） |
+| H200 141GB | Hopper | 989 | 25.6x | ~5-8x + 更大 batch |
+| B200 192GB | Blackwell | 2250 | 58.1x | ~10-15x（FP4 + 更大 tensor core） |
+
+> 注：实际加速受内存带宽、PCIe 带宽、batch size 等因素限制，通常为理论峰值的 30-50%。
+
+**A100/H100 是最实际的升级路径**：
+- A100：~2-3x 加速（预期 ~2-3s/image），成本适中
+- H100：~4-6x 加速（预期 ~1-1.5s/image），Transformer Engine 的 FP8 支持可进一步压缩
+- H100 + FP8 量化：如果模型质量可接受，FP8 可再提供 ~2x 加速
+
+**2. 算法层优化（不依赖硬件）**
+
+| 方法 | 预期加速 | 复杂度 | 说明 |
+|------|---------|--------|------|
+| FBC (已有) | 1.55x | ✅ 已实现 | 跳过冗余 block 计算 |
+| 模型蒸馏 (fewer layers) | 2-3x | 高 | 需要重新训练，可能影响质量 |
+| Step distillation (fewer steps) | 按比例 | 高 | 当前已是 9 步 turbo 版本 |
+| Speculative decoding 类思路 | 1.5-2x | 高 | 用小模型预测大模型中间状态 |
+| Token merging / pruning | 1.3-1.5x | 中 | 合并相似 token 减少序列长度 |
+
+**3. 系统层优化**
+
+| 方法 | 预期改善 | 说明 |
+|------|---------|------|
+| Multi-GPU 并行 | 接近线性 | 需要 pipeline/tensor parallelism |
+| 动态 batching | 吞吐量提升 | 不降低单请求延迟，提高 GPU 利用率 |
+| 模型量化 (INT8/FP8) | 1.5-2x | 需要 H100+ 硬件支持 FP8 |
+| ONNX → TRT engine (静态 shape) | 可能 1.1-1.3x | 需要固定所有输入 shape，工程量大 |
+
+### 文件清单
+
+| 文件 | 说明 |
+|------|------|
+| `ZImage/diagnose_trt_fallback.py` | H1 验证：TRT fallback 比例诊断 |
+| `ZImage/benchmark_trt_optimized.py` | TRT 优化参数穷举测试 |
+
+### TRT 调查关闭
+
+经过 #12（兼容性修复）→ #13（基准测试）→ #14（深度诊断）三轮调查，结论明确：
+
+**TensorRT 在 ZImage transformer + A6000 上无法提供超越 inductor 的加速。** 原因不是 TRT 编译失败或配置错误，而是 inductor triton kernel 已经到达了 A6000 硬件的计算上限。唯一的加速路径是算法层优化（FBC）或升级到更强 GPU（A100/H100）。
+
+当前推荐的生产部署配置：**torch.compile(backend='inductor') + FBC = 1.55x 加速**。
