@@ -2972,6 +2972,14 @@ FBC（First Block Cache）是唯一突破编译器天花板的方法，因为它
 
 > 注：实际加速受内存带宽、PCIe 带宽、batch size 等因素限制，通常为理论峰值的 30-50%。
 
+**⚠️ 重要：TRT vs Inductor 的相对差距在更强 GPU 上同样不会拉开。** 即使部署到 DLIS 的 A100 上，TRT 和 inductor 的加速比仍然是相当的（均 ~1.2x vs baseline），原因：
+- 瓶颈本质不变：Flash attention 占 60-70% 计算量，TRT 和 inductor 都调用相同的 cuDNN/cuBLAS flash attention kernel，换 GPU 后两者同等受益
+- TRT 的优势在小算子融合（剩余 30-40% 的 LayerNorm/残差/投影），但 inductor triton kernel 已做了高效融合，差距极小
+- A6000 上 TRT 编译 4877/4877 算子零 fallback 仍只比 inductor 快 0.7%（5.187s vs 5.224s），这是算法层面的等价，不受硬件规模影响
+- 唯一例外：H100+ 的 **FP8** — TRT 的 FP8 kernel 比 inductor 成熟，此时 TRT 可能拉开差距（需要 Hopper 架构支持）
+
+因此，**在 A100 部署时无需引入 TRT 复杂度，直接用 `inductor + FBC` 即可获得相同的编译器加速**。TRT 只在 H100+ FP8 场景下才值得重新评估。
+
 **A100/H100 是最实际的升级路径**：
 - A100：~2-3x 加速（预期 ~2-3s/image），成本适中
 - H100：~4-6x 加速（预期 ~1-1.5s/image），Transformer Engine 的 FP8 支持可进一步压缩
