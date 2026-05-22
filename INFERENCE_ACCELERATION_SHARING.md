@@ -93,7 +93,7 @@
 
 | 技巧 | 分类 | 失败原因 | 教训 |
 |------|------|---------|------|
-| **TensorRT** | 计算加速 | ZImage RoPE 使用 `torch.complex64`，TRT 不支持；修补为 Real RoPE 后又遇 `aten.scatter` bf16/int32 类型不匹配 | 新架构的非标准算子是 TRT 的硬伤 |
+| **TensorRT** | 计算加速 | 经 3 次尝试最终编译成功（4877 算子零 fallback），但加速比 1.24x ≈ inductor 1.23x，无额外收益 | Inductor triton kernel 已接近硬件计算上限，TRT 算子融合无法突破 |
 | **FlashAttention** | 计算加速 | ZImage head_dim=512，超过 FA v2 上限 256；PyTorch SDPA 已自动选择 mem_efficient kernel | 非标准 head_dim 直接堵死 FA |
 | **ONNX Runtime** | 计算加速 | ① complex64 无法 export ② 嵌套 `list[Tensor]` 输入不兼容 ③ optimum 不支持 Qwen3 编码器 ④ PyTorch 2.11 移除了 onnxrt 后端 | 多重阻碍，短期无解 |
 | **DeepCache** | 缓存跳步 | 需要 UNet 架构，ZImage 用 Transformer（`'ZImagePipeline' has no attribute 'unet'`） | 架构差异导致方法完全不适用 |
@@ -150,14 +150,14 @@ torch.compile(mode='default') + FBC(threshold=0.3) = 1.55x 加速
 
 ### 3.3 逐步优化：每步都有明确收益
 
-#### Step 1: Tensor Parallel 调优 — 最大单项加速
+#### Step 1: Tensor Parallel + CoT 调优 — 最大单项加速
 
 | 配置 | 延迟 | 原因 |
 |------|------|------|
-| TP=4, CoT, C=8 | ~200s | 4 卡间通信开销巨大，远超计算收益 |
-| **TP=2, No-CoT, C=8** | **42s** | 通信减半 + 输出 token 减少 |
+| TP=4, CoT, C=8 | ~200s | 4 卡间通信开销 + CoT 输出大量 token |
+| **TP=2, No-CoT, C=8** | **42s** | TP 减半 (~2x) + CoT 移除 (~2.5x)，组合 ~5x |
 
-> **教训：TP 不是越大越好。** 对于 3.8B 激活参数的 MoE 模型，2 卡足够放下，4 卡的 AllReduce 通信反而成为瓶颈。
+> **教训：TP 不是越大越好。** 对于 3.8B 激活参数的 MoE 模型，2 卡足够放下，4 卡的 AllReduce 通信反而成为瓶颈。同时 No-CoT 大幅减少输出 token 数，两者组合才达到 ~5x。
 
 #### Step 2: vLLM Continuous Batching — 吞吐量飞跃
 
@@ -227,18 +227,18 @@ AWQ 4-bit + vLLM + Two-Step + TP=2 + C=32
 
 ### 技巧 × 模型类型 兼容性矩阵
 
-| 优化技巧 | ZImage (Diffusion Transformer) | Gemma4 (MoE LLM) | 差异原因 |
-|---------|-------------------------------|-------------------|---------|
-| **torch.compile** | ✅ 1.30x (核心优化) | ⚪ 不需要 (vLLM 内置) | Diffusion 有严重 Command Buffer Full 问题 |
-| **TensorRT** | ❌ complex64 + scatter 不支持 | ⚪ 不需要 (vLLM 内置) | 非标准算子阻断 |
-| **FlashAttention** | ❌ head_dim=512 > 256 限制 | ✅ vLLM 自动启用 | 架构参数不满足前提 |
-| **INT8/FP8 量化** | ❌ 质量崩溃 + 无优化 kernel | — 未测试 | Diffusion 迭代累积误差 |
-| **4-bit 量化 (AWQ/GPTQ)** | — 未测试 | ✅ AWQ 1.27x 吞吐提升 | LLM decode-bound，带宽收益 > dequant 开销 |
-| **FBC / TeaCache** | ✅ 1.20-1.24x | ❌ 不适用 | 仅限 diffusion 多步 denoise |
-| **DeepCache** | ❌ 需要 UNet 架构 | ❌ 不适用 | 架构限制 |
-| **Continuous Batching** | ⚪ 单请求场景 | ✅ **28-59x** (最大杠杆) | LLM serving 生态成熟 |
-| **Tensor Parallel** | ⚪ 单 GPU 够用 | ✅ TP=2 最优 (TP=4 反而慢) | 通信开销与模型大小的平衡 |
-| **减少输出量** | ✅ 减少步数 (线性) | ✅ No-CoT -18%, Two-Step -44% | decode-bound 模型收益最大 |
+| 分类 | 技巧 | ZImage (Diffusion Transformer) | Gemma4 (MoE LLM) | 差异原因 |
+|------|------|-------------------------------|-------------------|---------|
+| **① 算更快** | torch.compile | ✅ 1.30x | ⚪ 不需要 (vLLM 内置) | Diffusion 有严重 Command Buffer Full 问题 |
+| | CUDA Graphs | ✅ 通过 compile(reduce-overhead) | ✅ ~12x 延迟降低 | 两者均受益；Diffusion 与 FBC hooks 冲突 |
+| | TensorRT | ⚪ 第三次编译成功，但无额外加速（1.24x vs inductor 1.23x） | ⚪ 不需要 (vLLM 内置) | Inductor triton kernel 已接近硬件计算上限 |
+| | FlashAttention | ❌ head_dim=512 > 256 | ✅ vLLM 自动启用 | 架构参数不满足前提 |
+| | INT8/FP8 量化 | ❌ 质量崩溃 + 无优化 kernel | ❌ FP8 需要 H100 | Diffusion 迭代累积误差；LLM 硬件限制 |
+| | 4-bit AWQ | — 未测试 | ✅ 1.27x 吞吐 | LLM decode-bound，带宽收益 > dequant 开销 |
+| **② 少算** | FBC / TeaCache | ✅ 1.20–1.24x | ❌ 不适用 | 仅限 diffusion 多步 denoise |
+| | 减少步数 / 输出 | ✅ 减少 denoising 步数 (线性) | ✅ No-CoT -18%, Two-Step -44% | 两者均受益于减少计算量 |
+| **③ 多路并行** | Continuous Batching (vLLM) | ⚪ 单请求场景 | ✅ **28x** 单卡 | LLM serving 生态成熟 |
+| | Tensor Parallel | ⚪ 单 GPU 够用 | ⚪ TP=2 ~2x，被 AWQ 单卡取代 | 通信开销与模型大小的平衡 |
 
 ### 核心 Takeaway
 
@@ -256,7 +256,7 @@ AWQ 4-bit + vLLM + Two-Step + TP=2 + C=32
 #### 3. "教科书优化"不一定有效
 
 - INT8 量化："理论上应该更快" → 实际 2.1x 更慢 (无优化 kernel) 或质量崩溃 (9.6dB)
-- TP=4："更多卡应该更快" → 实际比 TP=2 慢 5x (通信开销)
+- TP=4："更多卡应该更快" → 实际比 TP=2 慢 ~2x (通信开销)
 - Channels-Last："NHWC 应该更快" → 实际慢 4% (转换开销)
 - **永远要实测，永远要看数据**
 
@@ -272,4 +272,4 @@ AWQ 4-bit + vLLM + Two-Step + TP=2 + C=32
 | 模型 | 优化前 | 优化后 | 总加速 |
 |------|--------|--------|--------|
 | **ZImage** | 4666ms / 请求 | ~3010ms / 请求 | **1.55x** |
-| **Gemma4** | 67 min / 190 条 (HF) | 68.8s / 190 条 (vLLM) | **59x** |
+| **Gemma4** | ~67 min / 190 条 (HF Transformers, 1×A100) | 70.0s / 190 条 (AWQ + vLLM + Two-Step, 1×A100) | **~57x** |

@@ -177,7 +177,7 @@ All techniques mapped to the 3 acceleration categories:
 |----------|-----------|--------|--------|------------|
 | **① Make Each Computation Faster** | torch.compile (reduce-overhead) | **1.36x** | ✅ | CUDA Graphs eliminates Command Buffer Full (36.8%) |
 | | torch.compile (default) | **1.25x** | ✅ | Operator fusion only, no CUDA Graphs |
-| | TensorRT | ❌ blocked | ❌ | `complex64` RoPE not supported → conversion fails at step 1 |
+| | TensorRT | ⚪ 1.24x (≈ inductor 1.23x) | ⚪ | 3rd attempt compiled all 4877 ops, but no speedup — inductor already at HW compute ceiling |
 | | ONNX Runtime | ❌ blocked | ❌ | `complex64` + nested inputs + Qwen3 encoder — multiple blockers |
 | | FlashAttention | No room | ❌ | SDPA already auto-selects flash_fwd_kernel; only 7.7% of CUDA time |
 | | INT8 W8A8 (torchao) | **2.1x slower** | ❌ | A100 lacks optimized INT8 GEMM kernel (need H100 SM90a) |
@@ -256,7 +256,7 @@ All techniques mapped to the 3 acceleration categories:
 |----------|-----------|--------|--------|------------|
 | **① Make Each Computation Faster** | CUDA Graphs (ENFORCE_EAGER=false) | **~12x** latency | ✅ | 17s→1.4s; vLLM captures and replays kernel sequence, eliminates CPU-GPU sync overhead |
 | | AWQ 4-bit (vLLM) | **1.27x** throughput | ✅ | VRAM 52GB→19GB → larger KV cache → higher batch capacity; single-GPU AWQ matches dual-GPU BF16 |
-| | TP=2 (vs TP=4) | **~5x faster** | ⚪ | 3.8B active params fits 2 GPUs; TP=4 AllReduce overhead dominates. Superseded by AWQ single-GPU |
+| | TP=2 + No-CoT (vs TP=4 + CoT) | **~5x faster** | ⚪ | Combined: TP 4→2 (~2x, less AllReduce) + CoT removal (~2.5x, fewer tokens). Superseded by AWQ single-GPU |
 | | GPTQ 4-bit | -14% tok/s | ⚪ | Pure dequant overhead; no fused kernel like AWQ |
 | | FP8 KV Cache | ❌ not supported | ❌ | A100 lacks FP8 hardware (need H100/Ada SM90+) |
 | | Prefix Caching | Marginal | ⚪ | Reuse KV cache for shared prompt prefix; limited gain with diverse inputs |
@@ -289,18 +289,18 @@ CUDA Graphs + AWQ 4-bit + vLLM + Two-Step + C=32
 
 ### Technique × Model Type Compatibility Matrix
 
-| Optimization Technique | ZImage (Diffusion Transformer) | Gemma4 (MoE LLM) | Reason for Difference |
-|----------------------|-------------------------------|-------------------|----------------------|
-| **torch.compile** | ✅ 1.30x (core optimization) | ⚪ Not needed (built into vLLM) | Diffusion has severe Command Buffer Full issue |
-| **TensorRT** | ❌ complex64 + scatter unsupported | ⚪ Not needed (built into vLLM) | Non-standard ops block conversion |
-| **FlashAttention** | ❌ head_dim=512 > 256 limit | ✅ Auto-enabled by vLLM | Architecture params don't meet prerequisites |
-| **INT8/FP8 Quantization** | ❌ Quality collapse + no optimized kernels | — Not tested | Diffusion iterative error accumulation |
-| **4-bit Quantization (AWQ/GPTQ)** | — Not tested | ✅ AWQ 1.27x throughput gain | LLM decode-bound: bandwidth gain > dequant overhead |
-| **FBC** | ✅ 1.20x | ❌ Not applicable | Only for diffusion multi-step denoising |
-| **DeepCache** | ❌ Requires UNet architecture | ❌ Not applicable | Architecture constraint |
-| **Continuous Batching** | ⚪ Single-request scenario | ✅ **28–59x** (biggest lever) | Mature LLM serving ecosystem |
-| **Tensor Parallel** | ⚪ Single GPU sufficient | ✅ TP=2 optimal (TP=4 is slower) | Balance between communication overhead and model size |
-| **Reduce Output Volume** | ✅ Fewer steps (linear) | ✅ No-CoT -18%, Two-Step -44% | Greatest gains for decode-bound models |
+| Category | Technique | ZImage (Diffusion Transformer) | Gemma4 (MoE LLM) | Reason for Difference |
+|----------|-----------|-------------------------------|-------------------|----------------------|
+| **① Faster Computation** | torch.compile | ✅ 1.30x | ⚪ Not needed (vLLM built-in) | Diffusion has severe Command Buffer Full issue |
+| | CUDA Graphs | ✅ via compile(reduce-overhead) | ✅ ~12x latency | Both benefit; Diffusion conflicts with FBC hooks |
+| | TensorRT | ⚪ Compiled successfully (3rd attempt), but no speedup over inductor (1.24x vs 1.23x) | ⚪ Not needed (vLLM built-in) | Inductor triton kernels already hit HW compute ceiling |
+| | FlashAttention | ❌ head_dim=512 > 256 | ✅ Auto-enabled by vLLM | Architecture params don't meet prerequisites |
+| | INT8/FP8 Quantization | ❌ Quality collapse + no kernels | ❌ FP8 needs H100 | Diffusion: error accumulation; LLM: hardware limit |
+| | 4-bit AWQ | — Not tested | ✅ 1.27x throughput | LLM decode-bound: bandwidth gain > dequant cost |
+| **② Fewer Computations** | FBC / TeaCache | ✅ 1.20–1.24x | ❌ Not applicable | Only for diffusion multi-step denoising |
+| | Reduce steps / output | ✅ Fewer denoise steps (linear) | ✅ No-CoT -18%, Two-Step -44% | Both benefit from doing less work |
+| **③ More Parallelism** | Continuous Batching (vLLM) | ⚪ Single-request scenario | ✅ **28x** single-GPU | Mature LLM serving ecosystem |
+| | Tensor Parallel | ⚪ Single GPU sufficient | ⚪ TP=2 ~2x, superseded by AWQ | Communication overhead vs model size tradeoff |
 
 ### Key Takeaways
 
@@ -318,7 +318,7 @@ CUDA Graphs + AWQ 4-bit + vLLM + Two-Step + C=32
 #### 3. "Textbook Optimizations" Don't Always Work
 
 - INT8 quantization: "Should be faster in theory" → actually 2.1x slower (no optimized kernels) or quality collapse (9.6dB)
-- TP=4: "More GPUs should be faster" → actually 5x slower than TP=2 (communication overhead)
+- TP=4: "More GPUs should be faster" → actually ~2x slower than TP=2 (communication overhead dominates for 3.8B active params)
 - Channels-Last: "NHWC should be faster" → actually 4% slower (conversion overhead)
 - **Always measure, always look at the data**
 
@@ -334,4 +334,4 @@ CUDA Graphs + AWQ 4-bit + vLLM + Two-Step + C=32
 | Model | Before | After | Total Speedup |
 |-------|--------|-------|---------------|
 | **ZImage** | 4666ms / request | ~3010ms / request | **1.55x** |
-| **Gemma4** | 67 min / 190 records (HF) | 68.8s / 190 records (vLLM) | **59x** |
+| **Gemma4** | ~67 min / 190 records (HF Transformers, 1×A100) | 70.0s / 190 records (AWQ + vLLM + Two-Step, 1×A100) | **~57x** |
