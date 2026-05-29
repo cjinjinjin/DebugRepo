@@ -3018,3 +3018,28 @@ FBC（First Block Cache）是唯一突破编译器天花板的方法，因为它
 **TensorRT 在 ZImage transformer + A6000 上无法提供超越 inductor 的加速。** 原因不是 TRT 编译失败或配置错误，而是 inductor triton kernel 已经到达了 A6000 硬件的计算上限。唯一的加速路径是算法层优化（FBC）或升级到更强 GPU（A100/H100）。
 
 当前推荐的生产部署配置：**torch.compile(backend='inductor') + FBC = 1.55x 加速**。
+
+**⚠️ 重要：TRT vs Inductor 的相对差距在更强 GPU 上同样不会拉开。** 即使部署到 DLIS 的 A100 上，TRT 和 inductor 的加速比仍然是相当的（均 ~1.2x vs baseline），原因：
+- 瓶颈本质不变：Flash attention 占 60-70% 计算量，TRT 和 inductor 都调用相同的 cuDNN/cuBLAS flash attention kernel，换 GPU 后两者同等受益
+- TRT 的优势在小算子融合（剩余 30-40% 的 LayerNorm/残差/投影），但 inductor triton kernel 已做了高效融合，差距极小
+- A6000 上 TRT 编译 4877/4877 算子零 fallback 仍只比 inductor 快 0.7%（5.187s vs 5.224s），这是算法层面的等价，不受硬件规模影响
+- 唯一例外：H100+ 的 **FP8** — TRT 的 FP8 kernel 比 inductor 成熟，此时 TRT 可能拉开差距（需要 Hopper 架构支持）
+
+因此，**在 A100 部署时无需引入 TRT 复杂度，直接用 `inductor + FBC` 即可获得相同的编译器加速**。TRT 只在 H100+ FP8 场景下才值得重新评估。
+
+### ONNX Runtime 评估（未实验，理论分析）
+
+基于 TRT 实验的结论，ONNX Runtime **无需实际尝试**，理由：
+
+1. **编译器无关的性能天花板已被证明**：TRT 和 inductor 是两个架构完全不同的编译器，均达到相同性能（差距 0.7%）。这说明瓶颈在硬件计算上限，不在编译器优化能力。ORT 作为第三个编译器，不可能突破同一天花板。
+
+2. **ORT 底层调用相同的 kernel**：
+   - ORT CUDA EP → cuDNN/cuBLAS（与 inductor 相同）
+   - ORT TRT EP → TensorRT（已测过）
+   - Flash attention 占 60-70% 计算量，所有编译器最终都调用相同的 flash attention kernel
+
+3. **导出成本高，收益为零**：ZImage transformer 存在多重 ONNX 导出障碍（complex64 RoPE、嵌套 list[Tensor] 输入、Qwen3 编码器不被 optimum 支持、PyTorch 2.11 移除了 onnxrt 后端），即使解决这些问题，预期加速仍与 inductor 相当。
+
+4. **投入产出比为负**：解决 ONNX 导出障碍的工程成本 >> 可能获得的 0-1% 边际收益。
+
+**结论：ONNX Runtime 路径关闭。** 与 TRT 相同的理由 — 编译器层面的优化已触及硬件天花板，更换编译器无法突破。

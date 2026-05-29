@@ -95,7 +95,7 @@
 |------|------|---------|------|
 | **TensorRT** | 计算加速 | 经 3 次尝试最终编译成功（4877 算子零 fallback），但加速比 1.24x ≈ inductor 1.23x，无额外收益 | Inductor triton kernel 已接近硬件计算上限，TRT 算子融合无法突破 |
 | **FlashAttention** | 计算加速 | ZImage head_dim=512，超过 FA v2 上限 256；PyTorch SDPA 已自动选择 mem_efficient kernel | 非标准 head_dim 直接堵死 FA |
-| **ONNX Runtime** | 计算加速 | ① complex64 无法 export ② 嵌套 `list[Tensor]` 输入不兼容 ③ optimum 不支持 Qwen3 编码器 ④ PyTorch 2.11 移除了 onnxrt 后端 | 多重阻碍，短期无解 |
+| **ONNX Runtime** | 计算加速 | TRT 实验已证明编译器无关的硬件天花板（TRT vs inductor 仅差 0.7%）；ORT 的 CUDA/TRT EP 底层同样调 cuDNN/cuBLAS kernel → 同样天花板。ONNX 导出工程成本 > 边际收益 | 编译器层面已触顶，换编译器无法突破 |
 | **DeepCache** | 缓存跳步 | 需要 UNet 架构，ZImage 用 Transformer（`'ZImagePipeline' has no attribute 'unet'`） | 架构差异导致方法完全不适用 |
 | **INT8 W8A8 (torchao)** | 量化 | **2.1x 更慢**——A100 (SM80) 没有优化的 INT8 GEMM kernel，只有 H100 (SM90a) 有 | ⚠️ 量化不等于加速，取决于硬件 kernel 支持 |
 | **INT8 (bitsandbytes)** | 量化 | 速度 1.09x 微增，但 **PSNR 9.6dB 质量完全崩溃**；每个 GEMM 被替换为 5-6 个 quant/dequant kernel | ⚠️ Diffusion 模型对精度极度敏感 |
@@ -231,7 +231,8 @@ AWQ 4-bit + vLLM + Two-Step + TP=2 + C=32
 |------|------|-------------------------------|-------------------|---------|
 | **① 算更快** | torch.compile | ✅ 1.30x | ⚪ 不需要 (vLLM 内置) | Diffusion 有严重 Command Buffer Full 问题 |
 | | CUDA Graphs | ✅ 通过 compile(reduce-overhead) | ✅ ~12x 延迟降低 | 两者均受益；Diffusion 与 FBC hooks 冲突 |
-| | TensorRT | ⚪ 第三次编译成功，但无额外加速（1.24x vs inductor 1.23x） | ⚪ 不需要 (vLLM 内置) | Inductor triton kernel 已接近硬件计算上限 |
+| | TensorRT | ⚪ 重构不支持的算子后编译成功，但无额外加速（1.24x vs inductor 1.23x） | ⚪ 不需要 (vLLM 内置) | Inductor triton kernel 已接近硬件计算上限 |
+| | ONNX Runtime | ⚪ 未追求（TRT 已证明硬件天花板，ORT 无法突破） | ⚪ 不需要 (vLLM 内置) | 编译器层面已触顶，导出成本 > 收益 |
 | | FlashAttention | ❌ head_dim=512 > 256 | ✅ vLLM 自动启用 | 架构参数不满足前提 |
 | | INT8/FP8 量化 | ❌ 质量崩溃 + 无优化 kernel | ❌ FP8 需要 H100 | Diffusion 迭代累积误差；LLM 硬件限制 |
 | | 4-bit AWQ | — 未测试 | ✅ 1.27x 吞吐 | LLM decode-bound，带宽收益 > dequant 开销 |
@@ -242,32 +243,13 @@ AWQ 4-bit + vLLM + Two-Step + TP=2 + C=32
 
 ### 核心 Takeaway
 
-#### 1. 模型架构决定优化路线
+1. **Profiling 先行，不要盲试** — Profiling 告诉你该往哪打。不做 profiling 就做优化 = 在黑暗中射箭。
 
-- **Diffusion Transformer**: 优化生态不成熟（TRT/FA/ONNX/量化全部失败），只有 torch.compile + 缓存跳步可走
-- **MoE LLM**: 优化生态成熟，Serving 架构 (vLLM + batching + TP) 是最大杠杆
+2. **"教科书优化"不一定有效** — INT8 反而慢 2.1x；TP=4 比 TP=2 慢 ~2x。永远要实测。
 
-#### 2. Profiling 先行，不要盲试
+3. **组合优化 ≠ 简单相加** — torch.compile + INT8 = 155x 更慢；torch.compile(reduce-overhead) + FBC = 冲突。组合前必须理解每个优化的实现机制。
 
-- ZImage profiling 发现 Command Buffer Full 36.8% → 直接指向 torch.compile
-- Gemma4 profiling 发现 decode 77% + TTFT 0.02s → 直接指向 reduce output tokens + batching
-- **不做 profiling 就做优化 = 在黑暗中射箭**
-
-#### 3. "教科书优化"不一定有效
-
-- INT8 量化："理论上应该更快" → 实际 2.1x 更慢 (无优化 kernel) 或质量崩溃 (9.6dB)
-- TP=4："更多卡应该更快" → 实际比 TP=2 慢 ~2x (通信开销)
-- Channels-Last："NHWC 应该更快" → 实际慢 4% (转换开销)
-- **永远要实测，永远要看数据**
-
-#### 4. 组合优化 ≠ 简单相加
-
-- torch.compile(reduce-overhead) + FBC → 冲突（CUDA Graphs vs 动态 hooks）
-- torch.compile(default) + FBC → **1.55x**（需要选对 compile mode）
-- torch.compile + INT8 → **155x 更慢**（子类破坏融合）
-- **组合前必须理解每个优化的实现机制**
-
-#### 5. 最终加速倍数
+4. **最终加速倍数**
 
 | 模型 | 优化前 | 优化后 | 总加速 |
 |------|--------|--------|--------|

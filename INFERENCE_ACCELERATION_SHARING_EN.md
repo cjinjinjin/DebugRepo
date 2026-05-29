@@ -177,8 +177,8 @@ All techniques mapped to the 3 acceleration categories:
 |----------|-----------|--------|--------|------------|
 | **① Make Each Computation Faster** | torch.compile (reduce-overhead) | **1.36x** | ✅ | CUDA Graphs eliminates Command Buffer Full (36.8%) |
 | | torch.compile (default) | **1.25x** | ✅ | Operator fusion only, no CUDA Graphs |
-| | TensorRT | ⚪ 1.24x (≈ inductor 1.23x) | ⚪ | 3rd attempt compiled all 4877 ops, but no speedup — inductor already at HW compute ceiling |
-| | ONNX Runtime | ❌ blocked | ❌ | `complex64` + nested inputs + Qwen3 encoder — multiple blockers |
+| | TensorRT | ⚪ 1.24x (≈ inductor 1.23x) | ⚪ | Refactored ZImage pipeline to remove unsupported ops (complex64, scatter, nested inputs), compiled successfully but no meaningful speedup — inductor already at HW compute ceiling |
+| | ONNX Runtime | ⚪ Not pursued | ⚪ | TRT experiment proved compiler-agnostic HW ceiling (TRT vs inductor only 0.7% diff); ORT's CUDA/TRT EP uses same cuDNN/cuBLAS kernels → same ceiling. Export cost > marginal gain |
 | | FlashAttention | No room | ❌ | SDPA already auto-selects flash_fwd_kernel; only 7.7% of CUDA time |
 | | INT8 W8A8 (torchao) | **2.1x slower** | ❌ | A100 lacks optimized INT8 GEMM kernel (need H100 SM90a) |
 | | INT8 (bitsandbytes) | PSNR **9.6dB** | ❌ | Quality collapse — 9-step denoise accumulates quantization error |
@@ -293,7 +293,8 @@ CUDA Graphs + AWQ 4-bit + vLLM + Two-Step + C=32
 |----------|-----------|-------------------------------|-------------------|----------------------|
 | **① Faster Computation** | torch.compile | ✅ 1.30x | ⚪ Not needed (vLLM built-in) | Diffusion has severe Command Buffer Full issue |
 | | CUDA Graphs | ✅ via compile(reduce-overhead) | ✅ ~12x latency | Both benefit; Diffusion conflicts with FBC hooks |
-| | TensorRT | ⚪ Compiled successfully (3rd attempt), but no speedup over inductor (1.24x vs 1.23x) | ⚪ Not needed (vLLM built-in) | Inductor triton kernels already hit HW compute ceiling |
+| | TensorRT | ⚪ Refactored unsupported ops, compiled successfully, but no speedup (1.24x vs inductor 1.23x) | ⚪ Not needed (vLLM built-in) | Inductor triton kernels already hit HW compute ceiling |
+| | ONNX Runtime | ⚪ Not pursued (TRT proved HW ceiling, ORT can't exceed it) | ⚪ Not needed (vLLM built-in) | Compiler-agnostic ceiling; export cost > gain |
 | | FlashAttention | ❌ head_dim=512 > 256 | ✅ Auto-enabled by vLLM | Architecture params don't meet prerequisites |
 | | INT8/FP8 Quantization | ❌ Quality collapse + no kernels | ❌ FP8 needs H100 | Diffusion: error accumulation; LLM: hardware limit |
 | | 4-bit AWQ | — Not tested | ✅ 1.27x throughput | LLM decode-bound: bandwidth gain > dequant cost |
@@ -304,34 +305,15 @@ CUDA Graphs + AWQ 4-bit + vLLM + Two-Step + C=32
 
 ### Key Takeaways
 
-#### 1. Model Architecture Determines the Optimization Path
+1. **Profile first, don't guess** — Profiling tells you where to aim. Without it, you're shooting in the dark.
 
-- **Diffusion Transformer**: Optimization ecosystem immature (TRT/FA/ONNX/quantization all failed) — only torch.compile + cache skipping are viable
-- **MoE LLM**: Optimization ecosystem mature — serving architecture (vLLM + batching + TP) is the biggest lever
+2. **"Textbook optimizations" don't always work** — INT8 was 2.1x *slower*; TP=4 was ~2x slower than TP=2. Always measure.
 
-#### 2. Profile First, Don't Guess
+3. **Combined optimizations ≠ simple addition** — torch.compile + INT8 = 155x slower; torch.compile(reduce-overhead) + FBC = conflict. Understand each mechanism before combining.
 
-- ZImage profiling revealed Command Buffer Full at 36.8% → directly pointed to torch.compile
-- Gemma4 profiling revealed decode at 77% + TTFT 0.02s → directly pointed to reduce output tokens + batching
-- **Optimizing without profiling = shooting arrows in the dark**
+4. **Final Results**
 
-#### 3. "Textbook Optimizations" Don't Always Work
-
-- INT8 quantization: "Should be faster in theory" → actually 2.1x slower (no optimized kernels) or quality collapse (9.6dB)
-- TP=4: "More GPUs should be faster" → actually ~2x slower than TP=2 (communication overhead dominates for 3.8B active params)
-- Channels-Last: "NHWC should be faster" → actually 4% slower (conversion overhead)
-- **Always measure, always look at the data**
-
-#### 4. Combined Optimizations ≠ Simple Addition
-
-- torch.compile(reduce-overhead) + FBC → conflict (CUDA Graphs vs dynamic hooks)
-- torch.compile(default) + FBC → **1.55x** (must choose the right compile mode)
-- torch.compile + INT8 → **155x slower** (subclass breaks fusion)
-- **Understand each optimization's implementation mechanism before combining**
-
-#### 5. Final Acceleration Results
-
-| Model | Before | After | Total Speedup |
-|-------|--------|-------|---------------|
+| Model | Before | After | Speedup |
+|-------|--------|-------|---------|
 | **ZImage** | 4666ms / request | ~3010ms / request | **1.55x** |
 | **Gemma4** | ~67 min / 190 records (HF Transformers, 1×A100) | 70.0s / 190 records (AWQ + vLLM + Two-Step, 1×A100) | **~57x** |
