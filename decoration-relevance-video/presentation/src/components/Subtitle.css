@@ -1,0 +1,29 @@
+/* ─────────────────────────────────────────
+ * Subtitle overlay
+ * Activated via ?sub=1 URL parameter
+ * ───────────────────────────────────────── */
+
+.subtitle-bar {
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  max-width: 1600px;
+  width: 90%;
+  text-align: center;
+  pointer-events: none;
+}
+
+.subtitle-text {
+  display: inline;
+  font-family: var(--font-body);
+  font-size: 28px;
+  line-height: 1.6;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 6px 20px;
+  /* box-decoration-break makes multi-line wraps each get their own bg box */
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}

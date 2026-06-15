@@ -1,0 +1,534 @@
+/* ─────────────────────────────────────────
+ * Chapter 01 — Hook
+ * CSS prefix: .hk-
+ * ───────────────────────────────────────── */
+
+/* ── layout ── */
+.hk-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--stage-pad-y) var(--stage-pad-x);
+}
+
+/* ═══════════════ step 0: bare ad ═══════════════ */
+.hk-ad-card {
+  width: 740px;
+  padding: 44px 48px;
+  background: var(--surface-2);
+  border: 2px solid var(--rule);
+}
+
+.hk-ad-url {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+}
+
+.hk-ad-headline {
+  font-family: var(--font-display-en);
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+  line-height: 1.25;
+}
+
+.hk-ad-desc {
+  font-family: var(--font-body);
+  font-size: 18px;
+  color: var(--text-2);
+  line-height: 1.5;
+  max-width: 600px;
+}
+
+.hk-hook-q {
+  position: absolute;
+  bottom: 140px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-display-en);
+  font-size: 40px;
+  font-weight: 700;
+  color: var(--accent);
+  text-align: center;
+  opacity: 0;
+  animation: hk-float-in 600ms var(--ease-quart) forwards;
+  animation-delay: 400ms;
+}
+
+@keyframes hk-float-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ═══════════════ step 1: decorated ad ═══════════════ */
+.hk-deco-section {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: var(--rule-w) var(--rule-style) var(--rule);
+}
+
+.hk-deco-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.hk-deco-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--accent);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  opacity: 0;
+  animation: hk-tag-in 400ms var(--ease-quart) forwards;
+}
+
+.hk-deco-tag:nth-child(1) { animation-delay: 200ms; }
+.hk-deco-tag:nth-child(2) { animation-delay: 350ms; }
+.hk-deco-tag:nth-child(3) { animation-delay: 500ms; }
+.hk-deco-tag:nth-child(4) { animation-delay: 650ms; }
+
+@keyframes hk-tag-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.hk-deco-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* sitelink grid */
+.hk-sitelinks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.hk-sitelink-item {
+  padding: 10px 16px;
+  border: 1px dashed var(--rule);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-2);
+  opacity: 0;
+  animation: hk-tag-in 400ms var(--ease-quart) forwards;
+}
+.hk-sitelink-item:nth-child(1) { animation-delay: 300ms; }
+.hk-sitelink-item:nth-child(2) { animation-delay: 400ms; }
+.hk-sitelink-item:nth-child(3) { animation-delay: 500ms; }
+.hk-sitelink-item:nth-child(4) { animation-delay: 600ms; }
+
+/* ═══════════════ step 2: match vs mismatch ═══════════════ */
+.hk-match-layout {
+  display: flex;
+  gap: 60px;
+  align-items: stretch;
+  width: 100%;
+  max-width: 1500px;
+}
+
+.hk-match-hero {
+  text-align: center;
+  margin-bottom: 64px;
+  opacity: 0;
+  animation: hk-rise 600ms var(--ease-quart) forwards;
+}
+
+/* shared rise animation — title entrance */
+@keyframes hk-rise {
+  from { opacity: 0; transform: translateY(30px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.hk-match-title {
+  font-family: var(--font-display-en);
+  font-size: 64px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.hk-match-sub {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--text-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.hk-match-col {
+  flex: 1;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* good column slides in from left */
+.hk-match-good {
+  border: 2px solid var(--accent);
+  background: var(--surface-2);
+  opacity: 0;
+  animation: hk-slide-left 600ms var(--ease-quart) 300ms forwards;
+}
+
+@keyframes hk-slide-left {
+  from { opacity: 0; transform: translateX(-40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* bad column slides in from right */
+.hk-match-bad {
+  border: 2px solid var(--bad);
+  background: var(--surface-2);
+  opacity: 0;
+  animation: hk-slide-right 600ms var(--ease-quart) 500ms forwards;
+}
+
+@keyframes hk-slide-right {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.hk-match-label {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.hk-match-label-good {
+  color: var(--accent);
+}
+
+.hk-match-label-bad {
+  color: var(--bad);
+}
+
+.hk-match-query {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  color: var(--text-mute);
+  margin-bottom: 8px;
+}
+
+.hk-match-query span {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.hk-match-deco {
+  font-family: var(--font-body);
+  font-size: 20px;
+  color: var(--text-2);
+  line-height: 1.5;
+  padding: 16px 20px;
+  border-left: 3px solid var(--rule);
+}
+
+.hk-match-verdict {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: var(--rule-w) var(--rule-style) var(--rule);
+}
+
+.hk-verdict-pass { color: var(--accent); }
+.hk-verdict-fail { color: var(--bad); }
+
+/* ═══════════════ step 3: four tasks ═══════════════ */
+.hk-tasks-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  width: 100%;
+  max-width: 1400px;
+}
+
+.hk-tasks-title {
+  font-family: var(--font-display-en);
+  font-size: 68px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: hk-rise 500ms var(--ease-quart) forwards;
+}
+
+.hk-tasks-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  width: 100%;
+}
+
+/* task boxes use .card primitive for theme-aware surface;
+   animation handled here */
+.hk-task-box {
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+  opacity: 0;
+  animation: hk-box-pop 500ms var(--ease-quart) forwards;
+}
+
+.hk-task-box:nth-child(1) { animation-delay: 200ms; }
+.hk-task-box:nth-child(2) { animation-delay: 350ms; }
+.hk-task-box:nth-child(3) { animation-delay: 500ms; }
+.hk-task-box:nth-child(4) { animation-delay: 650ms; }
+
+@keyframes hk-box-pop {
+  from { opacity: 0; transform: scale(0.85); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.hk-task-box.hk-deprecated {
+  animation-name: hk-box-pop-dim;
+  border-style: dashed;
+}
+
+@keyframes hk-box-pop-dim {
+  from { opacity: 0; transform: scale(0.85); }
+  to   { opacity: 0.25; transform: scale(1); }
+}
+
+/* task ID — uses .hero-num primitive, overrides color to accent */
+.hk-task-id {
+  font-size: 48px;
+  color: var(--accent);
+}
+
+.hk-task-name {
+  font-family: var(--font-display-en);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.hk-task-items {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-mute);
+  line-height: 1.7;
+}
+
+.hk-deprecated-tag {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  border: 1px solid var(--text-faint);
+  padding: 2px 8px;
+}
+
+/* ═══════════════ step 4: unified model ═══════════════ */
+.hk-arch-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.hk-arch-title {
+  font-family: var(--font-display-en);
+  font-size: 68px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+  opacity: 0;
+  animation: hk-rise 500ms var(--ease-quart) forwards;
+}
+
+.hk-arch-diagram {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+}
+
+/* backbone core — uses .card, overrides border to accent */
+.hk-arch-core {
+  width: 460px;
+  padding: 36px;
+  border: 2px solid var(--accent);
+  text-align: center;
+  position: relative;
+  opacity: 0;
+  animation: hk-core-in 600ms var(--ease-quart) 200ms forwards;
+}
+
+@keyframes hk-core-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.hk-arch-core-label {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.hk-arch-core-name {
+  font-family: var(--font-display-en);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.hk-arch-core-sub {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-mute);
+  margin-top: 6px;
+}
+
+/* connector lines — sequenced draw animation */
+.hk-arch-connectors {
+  display: flex;
+  justify-content: center;
+  gap: 0;
+  width: 700px;
+  height: 60px;
+  position: relative;
+}
+
+.hk-arch-horizontal {
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 2px;
+  background: var(--rule);
+  transform-origin: center;
+  transform: scaleX(0);
+  animation: hk-horiz-draw 400ms var(--ease-quart) 600ms forwards;
+}
+
+@keyframes hk-horiz-draw {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+.hk-arch-line {
+  position: absolute;
+  width: 2px;
+  height: 60px;
+  background: var(--rule);
+  top: 0;
+  transform-origin: top;
+  transform: scaleY(0);
+  animation: hk-line-draw 400ms var(--ease-quart) forwards;
+}
+
+@keyframes hk-line-draw {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+
+/* nth-child(2–5): child 1 is .hk-arch-horizontal */
+.hk-arch-line:nth-child(2) { left: 10%;   animation-delay: 700ms; }
+.hk-arch-line:nth-child(3) { left: 36.6%; animation-delay: 800ms; }
+.hk-arch-line:nth-child(4) { left: 63.3%; animation-delay: 900ms; }
+.hk-arch-line:nth-child(5) { left: 90%;   animation-delay: 1000ms; }
+
+/* heads grid */
+.hk-arch-heads {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  width: 700px;
+}
+
+.hk-arch-head {
+  padding: 20px 16px;
+  border: 2px dashed var(--rule);
+  text-align: center;
+  background: var(--surface);
+  opacity: 0;
+  animation: hk-head-in 500ms var(--ease-quart) forwards;
+}
+
+.hk-arch-head:nth-child(1) { animation-delay: 1000ms; }
+.hk-arch-head:nth-child(2) { animation-delay: 1100ms; }
+.hk-arch-head:nth-child(3) { animation-delay: 1200ms; }
+.hk-arch-head:nth-child(4) { animation-delay: 1300ms; }
+
+@keyframes hk-head-in {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.hk-arch-head.hk-head-active {
+  border-color: var(--accent);
+  border-style: solid;
+}
+
+/* deprecated head dims to 0.3 at animation end */
+.hk-arch-head.hk-head-dim {
+  animation-name: hk-head-in-dim;
+}
+
+@keyframes hk-head-in-dim {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 0.3; transform: translateY(0); }
+}
+
+.hk-arch-head-id {
+  font-family: var(--font-mono);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.hk-arch-head-name {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-mute);
+  letter-spacing: 0.05em;
+}
+
+/* bottom label — fades in last */
+.hk-arch-bottom-label {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  color: var(--text-mute);
+  text-align: center;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: hk-rise 500ms var(--ease-quart) 1400ms forwards;
+}

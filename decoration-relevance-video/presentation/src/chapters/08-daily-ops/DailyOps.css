@@ -1,0 +1,460 @@
+/* ─────────────────────────────────────────
+ * Chapter 08 — Daily Operations
+ * CSS prefix: .do-
+ * ───────────────────────────────────────── */
+
+.do-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--stage-pad-y) var(--stage-pad-x);
+}
+
+/* ═══════════ step 0: daily pipeline flow ═══════════ */
+/* dominant motion: SLIDE-DOWN (streams cascade vertically) */
+
+.do-pipeline-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  width: 100%;
+  max-width: 1100px;
+}
+
+.do-pipeline-title {
+  font-family: var(--font-display-en);
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: do-rise 500ms var(--ease-quart) forwards;
+}
+
+.do-pipeline-badge {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--accent);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: do-rise 400ms var(--ease-quart) 200ms forwards;
+}
+
+.do-pipeline-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.do-stream {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 28px 36px;
+  opacity: 0;
+  animation: do-slide-down 500ms var(--ease-quart) forwards;
+}
+
+.do-stream:nth-child(1) { animation-delay: 300ms; }
+.do-stream:nth-child(2) { animation-delay: 500ms; }
+.do-stream:nth-child(3) { animation-delay: 700ms; }
+
+@keyframes do-slide-down {
+  from { opacity: 0; transform: translateY(-20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.do-stream-num {
+  font-size: 40px;
+  color: var(--accent);
+  flex-shrink: 0;
+  width: 60px;
+  text-align: center;
+}
+
+.do-stream-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.do-stream-name {
+  font-family: var(--font-display-en);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.do-stream-desc {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-mute);
+}
+
+/* ═══════════ step 1: vector refresh + publish ═══════════ */
+/* dominant motion: SCALE + HORIZONTAL SLIDE (cycle icons pop, sequence slides) */
+
+.do-vector-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.do-vector-title {
+  font-family: var(--font-display-en);
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: do-rise 500ms var(--ease-quart) forwards;
+}
+
+.do-vector-cycles {
+  display: flex;
+  gap: 32px;
+}
+
+.do-cycle {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 36px;
+  opacity: 0;
+}
+
+.do-cycle:nth-child(1) {
+  animation: do-scale-in 500ms var(--ease-overshoot) 200ms forwards;
+}
+.do-cycle:nth-child(2) {
+  animation: do-scale-in 500ms var(--ease-overshoot) 400ms forwards;
+}
+
+@keyframes do-scale-in {
+  0%   { opacity: 0; transform: scale(0.7) rotate(-4deg); }
+  70%  { opacity: 1; transform: scale(1.05) rotate(0); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+.do-cycle-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  border: var(--rule-w) var(--rule-style) var(--accent);
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.do-cycle-name {
+  font-family: var(--font-display-en);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.do-publish-seq {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.do-publish-step {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  opacity: 0;
+  animation: do-slide-r 450ms var(--ease-quart) forwards;
+}
+
+@keyframes do-slide-r {
+  from { opacity: 0; transform: translateX(-30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.do-publish-arrow {
+  font-size: 28px;
+  color: var(--accent);
+  padding: 0 20px;
+}
+
+.do-publish-tag {
+  padding: 20px 32px;
+  text-align: center;
+}
+
+.do-publish-tag-name {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.do-publish-tag-desc {
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--text-mute);
+}
+
+.do-publish-note {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-faint);
+  letter-spacing: 0.06em;
+  opacity: 0;
+  animation: do-rise 400ms var(--ease-quart) 900ms forwards;
+}
+
+/* ═══════════ step 2: model check-in process ═══════════ */
+/* dominant motion: DRAW (connector lines draw between nodes) */
+
+.do-checkin-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.do-checkin-title {
+  font-family: var(--font-display-en);
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: do-rise 500ms var(--ease-quart) forwards;
+}
+
+.do-checkin-flow {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  width: 100%;
+  justify-content: center;
+}
+
+.do-checkin-step {
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  animation: do-rise 500ms var(--ease-quart) forwards;
+}
+
+.do-checkin-node {
+  padding: 36px 32px;
+  text-align: center;
+  min-width: 240px;
+}
+
+.do-checkin-num {
+  font-size: 40px;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+
+.do-checkin-name {
+  font-family: var(--font-display-en);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.do-checkin-detail {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-mute);
+  line-height: 1.5;
+}
+
+.do-checkin-connector {
+  width: 48px;
+  height: 2px;
+  background: var(--accent);
+  flex-shrink: 0;
+  margin: 0 4px;
+  align-self: center;
+  transform: scaleX(0);
+  transform-origin: left;
+  animation: do-draw-line 600ms var(--ease-quart) forwards;
+}
+
+.do-checkin-step:nth-child(1) .do-checkin-connector { animation-delay: 500ms; }
+.do-checkin-step:nth-child(2) .do-checkin-connector { animation-delay: 750ms; }
+
+@keyframes do-draw-line {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* ═══════════ step 3: monitoring stack ═══════════ */
+/* dominant motion: RISE-STAGGER (cards cascade upward) */
+
+.do-monitor-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.do-monitor-title {
+  font-family: var(--font-display-en);
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: do-rise 500ms var(--ease-quart) forwards;
+}
+
+.do-monitor-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+  width: 100%;
+}
+
+.do-monitor-card {
+  padding: 40px 32px;
+  text-align: center;
+  opacity: 0;
+  animation: do-monitor-in 500ms var(--ease-quart) forwards;
+}
+
+.do-monitor-card:nth-child(1) { animation-delay: 300ms; }
+.do-monitor-card:nth-child(2) { animation-delay: 500ms; }
+.do-monitor-card:nth-child(3) { animation-delay: 700ms; }
+
+@keyframes do-monitor-in {
+  from { opacity: 0; transform: translateY(28px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.do-monitor-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  border: var(--rule-w) var(--rule-style) var(--accent);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+  margin-bottom: 20px;
+}
+
+.do-monitor-name {
+  font-family: var(--font-display-en);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.do-monitor-desc {
+  font-family: var(--font-body);
+  font-size: 17px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+/* ═══════════ step 4: closing summary ═══════════ */
+/* dominant motion: SCALE-POP (grid items pop with overshoot) */
+
+.do-close-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.do-close-title {
+  font-family: var(--font-display-en);
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: do-rise 500ms var(--ease-quart) forwards;
+}
+
+.do-close-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  width: 100%;
+}
+
+.do-close-card {
+  padding: 36px 24px;
+  text-align: center;
+  opacity: 0;
+}
+
+.do-close-card:nth-child(1) { animation: do-pop 500ms var(--ease-overshoot) 300ms forwards; }
+.do-close-card:nth-child(2) { animation: do-pop 500ms var(--ease-overshoot) 450ms forwards; }
+.do-close-card:nth-child(3) { animation: do-pop 500ms var(--ease-overshoot) 600ms forwards; }
+.do-close-card:nth-child(4) { animation: do-pop 500ms var(--ease-overshoot) 750ms forwards; }
+
+@keyframes do-pop {
+  0%   { opacity: 0; transform: scale(0.6) rotate(-2deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+.do-close-val {
+  font-size: 56px;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+
+.do-close-label {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.do-close-cta {
+  font-family: var(--font-body);
+  font-size: 24px;
+  color: var(--text-2);
+  opacity: 0;
+  animation: do-rise 500ms var(--ease-quart) 1000ms forwards;
+}
+
+.do-close-handbook {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: var(--accent-soft);
+  text-underline-offset: 4px;
+}
+
+/* ═══════════ shared keyframes ═══════════ */
+
+@keyframes do-rise {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

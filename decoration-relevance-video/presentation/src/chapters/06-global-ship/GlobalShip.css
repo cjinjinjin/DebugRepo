@@ -1,0 +1,452 @@
+/* ─────────────────────────────────────────
+ * Chapter 06 — Going Global
+ * CSS prefix: .gs-
+ * ───────────────────────────────────────── */
+
+.gs-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--stage-pad-y) var(--stage-pad-x);
+}
+
+/* ═══════════ step 0 & 1: world map ═══════════ */
+/* dominant motion: SCALE (dots pulse into existence) */
+
+.gs-map-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  width: 100%;
+  max-width: 1400px;
+}
+
+.gs-map-title {
+  font-family: var(--font-display-en);
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: gs-rise 500ms var(--ease-quart) forwards;
+}
+
+.gs-culr-title {
+  font-family: var(--font-display-en);
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--accent);
+  opacity: 0;
+  animation: gs-rise 500ms var(--ease-quart) forwards;
+}
+
+.gs-map-canvas {
+  position: relative;
+  width: 100%;
+  height: 480px;
+  border: var(--rule-w) var(--rule-style) var(--rule);
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+}
+
+.gs-dot {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transform: translate(-50%, -50%);
+}
+
+.gs-dot-circle {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  transition: all 400ms var(--ease-quart);
+}
+
+.gs-dot-lit .gs-dot-circle {
+  background: var(--accent);
+  box-shadow: 0 0 20px var(--accent-glow), 0 0 40px var(--accent-soft);
+  opacity: 0;
+  animation: gs-dot-pop 500ms var(--ease-overshoot) 400ms forwards;
+}
+
+.gs-dot-dim .gs-dot-circle {
+  background: var(--text-faint);
+  opacity: 0;
+  animation: gs-dot-pop 400ms var(--ease-quart) 600ms forwards;
+}
+
+@keyframes gs-dot-pop {
+  0%   { opacity: 0; transform: scale(0); }
+  70%  { opacity: 1; transform: scale(1.3); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.gs-dot-pulse .gs-dot-circle {
+  animation: gs-dot-pop 500ms var(--ease-overshoot) forwards;
+}
+
+.gs-dot-code {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+}
+
+.gs-dot-lit .gs-dot-code {
+  color: var(--accent);
+}
+
+.gs-map-sub {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--text-mute);
+  letter-spacing: 0.08em;
+  opacity: 0;
+  animation: gs-rise 400ms var(--ease-quart) 800ms forwards;
+}
+
+.gs-culr-badge {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  color: var(--accent);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: gs-rise 400ms var(--ease-quart) 600ms forwards;
+}
+
+/* ═══════════ step 2: teacher config table ═══════════ */
+/* dominant motion: SLIDE-RIGHT (rows slide in from left) */
+
+.gs-config-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  width: 100%;
+  max-width: 900px;
+}
+
+.gs-config-title {
+  font-family: var(--font-display-en);
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: gs-rise 500ms var(--ease-quart) forwards;
+}
+
+.gs-config-table {
+  width: 100%;
+  padding: 8px 0;
+}
+
+.gs-config-row {
+  display: flex;
+  align-items: center;
+  padding: 18px 36px;
+  border-bottom: var(--rule-w) var(--rule-style) var(--rule);
+  opacity: 0;
+  animation: gs-slide-r 450ms var(--ease-quart) forwards;
+}
+
+.gs-config-row:last-child {
+  border-bottom: none;
+}
+
+.gs-config-label {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-mute);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  width: 220px;
+  flex-shrink: 0;
+}
+
+.gs-config-value {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  color: var(--accent);
+}
+
+@keyframes gs-slide-r {
+  from { opacity: 0; transform: translateX(-40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ═══════════ step 3: dramatic improvement ═══════════ */
+/* dominant motion: RISE + SCALE (hero numbers slam in) */
+
+.gs-jump-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+  width: 100%;
+  max-width: 1300px;
+}
+
+.gs-jump-title {
+  font-family: var(--font-display-en);
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: gs-rise 500ms var(--ease-quart) forwards;
+}
+
+.gs-jump-row {
+  display: flex;
+  gap: 40px;
+  width: 100%;
+}
+
+.gs-jump-pair {
+  flex: 1;
+  padding: 40px 36px;
+  text-align: center;
+  opacity: 0;
+  animation: gs-scale-in 500ms var(--ease-quart) forwards;
+}
+
+.gs-jump-pair:nth-child(1) { animation-delay: 300ms; }
+.gs-jump-pair:nth-child(2) { animation-delay: 500ms; }
+
+.gs-jump-metric {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+
+.gs-jump-nums {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+}
+
+.gs-jump-from {
+  font-size: 56px;
+  color: var(--text-mute);
+}
+
+.gs-jump-arrow {
+  font-size: 32px;
+  color: var(--accent);
+}
+
+.gs-jump-to {
+  font-size: 56px;
+  color: var(--accent);
+}
+
+.gs-jump-verdict {
+  font-family: var(--font-display-en);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+  opacity: 0;
+  animation: gs-rise 500ms var(--ease-quart) 700ms forwards;
+}
+
+@keyframes gs-scale-in {
+  0%   { opacity: 0; transform: scale(0.85); }
+  60%  { opacity: 1; transform: scale(1.03); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* ═══════════ step 4: per-language scoreboard ═══════════ */
+/* dominant motion: RISE-STAGGER (cards cascade upward) */
+
+.gs-lang-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 36px;
+  width: 100%;
+  max-width: 1400px;
+}
+
+.gs-lang-title {
+  font-family: var(--font-display-en);
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: gs-rise 500ms var(--ease-quart) forwards;
+}
+
+.gs-lang-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  width: 100%;
+}
+
+.gs-lang-card {
+  padding: 28px 20px;
+  text-align: center;
+  opacity: 0;
+  animation: gs-rise 450ms var(--ease-quart) forwards;
+}
+
+.gs-lang-card:nth-child(1) { animation-delay: 200ms; }
+.gs-lang-card:nth-child(2) { animation-delay: 300ms; }
+.gs-lang-card:nth-child(3) { animation-delay: 400ms; }
+.gs-lang-card:nth-child(4) { animation-delay: 500ms; }
+.gs-lang-card:nth-child(5) { animation-delay: 600ms; }
+.gs-lang-card:nth-child(6) { animation-delay: 700ms; }
+.gs-lang-card:nth-child(7) { animation-delay: 800ms; }
+
+.gs-lang-card-best {
+  border-color: var(--accent);
+}
+
+.gs-lang-code {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.gs-lang-auc {
+  font-size: 44px;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.gs-lang-auc-best {
+  color: var(--accent);
+}
+
+.gs-lang-name {
+  font-family: var(--font-body);
+  font-size: 15px;
+  color: var(--text-faint);
+}
+
+/* ═══════════ step 5: ablation experiments ═══════════ */
+/* dominant motion: DRAW (line-reveal + slide) */
+
+.gs-ablation-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.gs-ablation-title {
+  font-family: var(--font-display-en);
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: gs-rise 500ms var(--ease-quart) forwards;
+}
+
+.gs-ablation-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  width: 100%;
+}
+
+.gs-ablation-card {
+  padding: 32px 28px;
+  text-align: center;
+  opacity: 0;
+  animation: gs-draw-in 600ms var(--ease-quart) forwards;
+}
+
+.gs-ablation-card:nth-child(1) { animation-delay: 200ms; }
+.gs-ablation-card:nth-child(2) { animation-delay: 400ms; }
+.gs-ablation-card:nth-child(3) { animation-delay: 600ms; }
+
+@keyframes gs-draw-in {
+  0%   { opacity: 0; clip-path: inset(0 100% 0 0); }
+  60%  { opacity: 1; clip-path: inset(0 10% 0 0); }
+  100% { opacity: 1; clip-path: inset(0 0 0 0); }
+}
+
+.gs-ablation-label {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--text);
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
+}
+
+.gs-ablation-verdict {
+  font-family: var(--font-display-en);
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.gs-ablation-neutral {
+  color: var(--text-mute);
+}
+
+.gs-ablation-good {
+  color: var(--accent);
+}
+
+.gs-ablation-desc {
+  font-family: var(--font-body);
+  font-size: 16px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+.gs-ablation-hero {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  opacity: 0;
+  animation: gs-rise 500ms var(--ease-quart) 900ms forwards;
+}
+
+.gs-ablation-from {
+  font-size: 52px;
+  color: var(--text-mute);
+}
+
+.gs-ablation-arrow {
+  font-size: 28px;
+  color: var(--accent);
+}
+
+.gs-ablation-to {
+  font-size: 52px;
+  color: var(--accent);
+}
+
+.gs-ablation-tag {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-mute);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ═══════════ shared keyframes ═══════════ */
+
+@keyframes gs-rise {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

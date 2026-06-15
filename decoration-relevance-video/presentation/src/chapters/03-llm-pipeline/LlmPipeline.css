@@ -1,0 +1,558 @@
+/* ─────────────────────────────────────────
+ * Chapter 03 — LLM Pipeline
+ * CSS prefix: .lp-
+ * ───────────────────────────────────────── */
+
+.lp-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--stage-pad-y) var(--stage-pad-x);
+}
+
+/* shared rise */
+@keyframes lp-rise {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════ step 0: 3-stage pipeline ═══════════ */
+.lp-pipeline-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 56px;
+  width: 100%;
+  max-width: 1400px;
+}
+
+.lp-pipeline-title {
+  font-family: var(--font-display-en);
+  font-size: 64px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: lp-rise 500ms var(--ease-quart) forwards;
+}
+
+.lp-stages {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+}
+
+.lp-stage-box {
+  flex: 1;
+  padding: 36px 24px;
+  text-align: center;
+  opacity: 0;
+}
+
+.lp-stage-box:nth-child(1) { animation: lp-slide-r 500ms var(--ease-quart) 200ms forwards; }
+.lp-stage-box:nth-child(3) { animation: lp-slide-r 500ms var(--ease-quart) 500ms forwards; }
+.lp-stage-box:nth-child(5) { animation: lp-slide-r 500ms var(--ease-quart) 800ms forwards; }
+
+@keyframes lp-slide-r {
+  from { opacity: 0; transform: translateX(-30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.lp-stage-num {
+  font-size: 44px;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.lp-stage-name {
+  font-family: var(--font-display-en);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.lp-stage-desc {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-mute);
+  line-height: 1.5;
+}
+
+.lp-arrow {
+  font-size: 36px;
+  color: var(--accent);
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.lp-arrow:nth-child(2) { animation: lp-rise 300ms var(--ease-quart) 400ms forwards; }
+.lp-arrow:nth-child(4) { animation: lp-rise 300ms var(--ease-quart) 700ms forwards; }
+
+/* ═══════════ step 1: DV3 era ═══════════ */
+.lp-dv3-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.lp-dv3-title {
+  font-family: var(--font-display-en);
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: lp-rise 500ms var(--ease-quart) forwards;
+}
+
+.lp-dv3-badge {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: lp-rise 400ms var(--ease-quart) 200ms forwards;
+}
+
+.lp-dv3-acc {
+  display: flex;
+  align-items: center;
+  gap: 40px;
+  opacity: 0;
+  animation: lp-rise 500ms var(--ease-quart) 400ms forwards;
+}
+
+.lp-dv3-from {
+  font-size: 72px;
+  color: var(--text-mute);
+}
+
+.lp-dv3-arrow {
+  font-size: 36px;
+  color: var(--accent);
+}
+
+.lp-dv3-to {
+  font-size: 72px;
+  color: var(--accent);
+}
+
+.lp-dv3-quote {
+  max-width: 800px;
+  padding: 20px 32px;
+  border-left: 4px solid var(--accent);
+  font-family: var(--font-body);
+  font-size: 22px;
+  color: var(--text-2);
+  line-height: 1.5;
+  font-style: italic;
+  opacity: 0;
+  animation: lp-rise 500ms var(--ease-quart) 600ms forwards;
+}
+
+/* ═══════════ step 2: multi-market scoreboard ═══════════ */
+.lp-scores-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 36px;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.lp-scores-title {
+  font-family: var(--font-display-en);
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: lp-rise 500ms var(--ease-quart) forwards;
+}
+
+.lp-scores-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  width: 100%;
+}
+
+.lp-score-card {
+  padding: 28px 20px;
+  text-align: center;
+  opacity: 0;
+  animation: lp-card-in 400ms var(--ease-quart) forwards;
+}
+
+.lp-score-card:nth-child(1) { animation-delay: 200ms; }
+.lp-score-card:nth-child(2) { animation-delay: 300ms; }
+.lp-score-card:nth-child(3) { animation-delay: 400ms; }
+.lp-score-card:nth-child(4) { animation-delay: 500ms; }
+.lp-score-card:nth-child(5) { animation-delay: 600ms; }
+.lp-score-card:nth-child(6) { animation-delay: 700ms; }
+.lp-score-card:nth-child(7) { animation-delay: 800ms; }
+
+@keyframes lp-card-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.lp-score-market {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.lp-score-val {
+  font-size: 40px;
+  color: var(--text);
+}
+
+.lp-score-val-hi { color: var(--accent); }
+.lp-score-val-lo { color: var(--bad); }
+
+.lp-score-unit {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-faint);
+  margin-top: 4px;
+}
+
+/* ═══════════ step 3: GPT-4T fail ═══════════ */
+.lp-fail-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  width: 100%;
+  max-width: 900px;
+}
+
+.lp-fail-title {
+  font-family: var(--font-display-en);
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: lp-rise 500ms var(--ease-quart) forwards;
+}
+
+.lp-fail-year {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--text-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: lp-rise 300ms var(--ease-quart) 200ms forwards;
+}
+
+.lp-fail-big {
+  font-size: 160px;
+  color: var(--bad);
+  line-height: 1;
+  opacity: 0;
+  animation: lp-shake-in 600ms var(--ease-quart) 400ms forwards;
+}
+
+@keyframes lp-shake-in {
+  0% { opacity: 0; transform: scale(0.7); }
+  50% { opacity: 1; transform: scale(1.05); }
+  70% { transform: scale(0.97); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.lp-fail-label {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  color: var(--bad);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: lp-rise 400ms var(--ease-quart) 700ms forwards;
+}
+
+/* ═══════════ step 4: GPT-4T recovery ═══════════ */
+.lp-recover-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 36px;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.lp-recover-title {
+  font-family: var(--font-display-en);
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: lp-rise 500ms var(--ease-quart) forwards;
+}
+
+.lp-recover-fixes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  width: 100%;
+}
+
+.lp-recover-fix {
+  padding: 24px 28px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  opacity: 0;
+  animation: lp-slide-r 400ms var(--ease-quart) forwards;
+}
+
+.lp-recover-fix:nth-child(1) { animation-delay: 200ms; }
+.lp-recover-fix:nth-child(2) { animation-delay: 350ms; }
+.lp-recover-fix:nth-child(3) { animation-delay: 500ms; }
+.lp-recover-fix:nth-child(4) { animation-delay: 650ms; }
+
+.lp-recover-icon {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.lp-recover-text {
+  font-family: var(--font-body);
+  font-size: 18px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+.lp-recover-result {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  opacity: 0;
+  animation: lp-rise 500ms var(--ease-quart) 800ms forwards;
+}
+
+.lp-recover-exp {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  color: var(--text-mute);
+}
+
+.lp-recover-arrow { font-size: 28px; color: var(--accent); }
+
+.lp-recover-val {
+  font-size: 64px;
+  color: var(--accent);
+}
+
+/* ═══════════ step 5: flight verification ═══════════ */
+.lp-flight-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.lp-flight-title {
+  font-family: var(--font-display-en);
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: lp-rise 500ms var(--ease-quart) forwards;
+}
+
+.lp-flight-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  width: 100%;
+}
+
+.lp-flight-card {
+  padding: 32px 24px;
+  text-align: center;
+  opacity: 0;
+}
+
+.lp-flight-card:nth-child(1) { animation: lp-card-in 400ms var(--ease-quart) 300ms forwards; }
+.lp-flight-card:nth-child(2) { animation: lp-card-in 400ms var(--ease-quart) 500ms forwards; }
+.lp-flight-card:nth-child(3) { animation: lp-card-in 400ms var(--ease-quart) 700ms forwards; }
+
+.lp-flight-metric {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.lp-flight-value {
+  font-size: 48px;
+  margin-bottom: 8px;
+}
+
+.lp-flight-good { color: var(--accent); }
+.lp-flight-bad { color: var(--bad); }
+
+.lp-flight-pval {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-faint);
+}
+
+/* ═══════════ step 6: GPT-4o explain-then-judge ═══════════ */
+.lp-gpt4o-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  width: 100%;
+  max-width: 1300px;
+}
+
+.lp-gpt4o-title {
+  font-family: var(--font-display-en);
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: lp-rise 500ms var(--ease-quart) forwards;
+}
+
+.lp-gpt4o-compare {
+  display: flex;
+  gap: 48px;
+  width: 100%;
+}
+
+.lp-gpt4o-path {
+  flex: 1;
+  padding: 36px 32px;
+  text-align: center;
+  opacity: 0;
+}
+
+.lp-gpt4o-path:nth-child(1) { animation: lp-slide-r 500ms var(--ease-quart) 300ms forwards; }
+.lp-gpt4o-path:nth-child(2) { animation: lp-slide-r 500ms var(--ease-quart) 500ms forwards; }
+
+.lp-gpt4o-path-active {
+  border-color: var(--accent);
+}
+
+.lp-gpt4o-path-label {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.lp-gpt4o-path-value {
+  font-size: 72px;
+  margin-bottom: 8px;
+}
+
+.lp-gpt4o-dim { color: var(--text-mute); }
+.lp-gpt4o-bright { color: var(--accent); }
+
+.lp-gpt4o-path-desc {
+  font-family: var(--font-body);
+  font-size: 18px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+.lp-gpt4o-insight {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  color: var(--accent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: lp-rise 500ms var(--ease-quart) 700ms forwards;
+}
+
+/* ═══════════ step 7: cost trajectory ═══════════ */
+.lp-cost-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+  width: 100%;
+  max-width: 1100px;
+}
+
+.lp-cost-title {
+  font-family: var(--font-display-en);
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: lp-rise 500ms var(--ease-quart) forwards;
+}
+
+.lp-cost-tags {
+  display: flex;
+  gap: 32px;
+  align-items: flex-end;
+}
+
+.lp-cost-tag {
+  padding: 28px 36px;
+  text-align: center;
+  opacity: 0;
+}
+
+.lp-cost-tag:nth-child(1) { animation: lp-card-in 400ms var(--ease-quart) 200ms forwards; }
+.lp-cost-tag:nth-child(2) { animation: lp-card-in 400ms var(--ease-quart) 400ms forwards; }
+.lp-cost-tag:nth-child(3) { animation: lp-card-in 400ms var(--ease-quart) 600ms forwards; }
+
+.lp-cost-tag-name {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.lp-cost-tag-val {
+  font-size: 44px;
+  color: var(--text-2);
+}
+
+.lp-cost-tag-active .lp-cost-tag-val {
+  color: var(--accent);
+}
+
+.lp-cost-hero {
+  font-size: 72px;
+  color: var(--accent);
+  opacity: 0;
+  animation: lp-rise 500ms var(--ease-quart) 900ms forwards;
+}
+
+.lp-cost-sub {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  color: var(--text-mute);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: lp-rise 400ms var(--ease-quart) 1100ms forwards;
+}

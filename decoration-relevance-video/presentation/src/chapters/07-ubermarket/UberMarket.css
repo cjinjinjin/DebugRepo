@@ -1,0 +1,465 @@
+/* ─────────────────────────────────────────
+ * Chapter 07 — UberMarket Migration
+ * CSS prefix: .um-
+ * ───────────────────────────────────────── */
+
+.um-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--stage-pad-y) var(--stage-pad-x);
+}
+
+/* ═══════════ step 0: merge US + INTL ═══════════ */
+/* dominant motion: SLIDE-INWARD (boxes converge to center) */
+
+.um-merge-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+  width: 100%;
+  max-width: 1300px;
+}
+
+.um-merge-title {
+  font-family: var(--font-display-en);
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: um-rise 500ms var(--ease-quart) forwards;
+}
+
+.um-merge-visual {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  width: 100%;
+  justify-content: center;
+}
+
+.um-merge-box {
+  padding: 36px 40px;
+  text-align: center;
+  min-width: 200px;
+  opacity: 0;
+}
+
+.um-merge-box:nth-child(1) {
+  animation: um-slide-from-left 600ms var(--ease-quart) 200ms forwards;
+}
+.um-merge-box:nth-child(3) {
+  animation: um-slide-from-right 600ms var(--ease-quart) 200ms forwards;
+}
+
+@keyframes um-slide-from-left {
+  from { opacity: 0; transform: translateX(-60px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes um-slide-from-right {
+  from { opacity: 0; transform: translateX(60px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.um-merge-unified {
+  border-color: var(--accent);
+}
+
+.um-merge-unified .um-merge-label {
+  color: var(--accent);
+}
+
+.um-merge-label {
+  font-family: var(--font-display-en);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.um-merge-desc {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-mute);
+}
+
+.um-merge-plus {
+  font-size: 36px;
+  color: var(--text-mute);
+  opacity: 0;
+  animation: um-rise 300ms var(--ease-quart) 400ms forwards;
+}
+
+.um-merge-arrow {
+  font-size: 36px;
+  color: var(--accent);
+  opacity: 0;
+  animation: um-rise 300ms var(--ease-quart) 600ms forwards;
+}
+
+.um-merge-box:nth-child(5) {
+  animation: um-scale-in 600ms var(--ease-overshoot) 800ms forwards;
+}
+
+.um-merge-date {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 32px;
+  opacity: 0;
+  animation: um-rise 400ms var(--ease-quart) 1000ms forwards;
+}
+
+.um-merge-date-label {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.um-merge-date-val {
+  font-size: 32px;
+  color: var(--accent);
+}
+
+/* ═══════════ step 1: CPU explosion ═══════════ */
+/* dominant motion: WIDTH-GROW (bar stretches dangerously) */
+
+.um-latency-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+  width: 100%;
+  max-width: 1000px;
+}
+
+.um-latency-title {
+  font-family: var(--font-display-en);
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: um-rise 500ms var(--ease-quart) forwards;
+}
+
+.um-latency-visual {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.um-cpu-bar-track {
+  position: relative;
+  height: 56px;
+  background: var(--surface-2);
+  border: var(--rule-w) var(--rule-style) var(--rule);
+  border-radius: var(--r-card);
+  overflow: hidden;
+}
+
+.um-cpu-bar-fill {
+  position: absolute;
+  inset: 0;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--bad));
+  animation: um-bar-grow 1500ms var(--ease-soft) 400ms forwards;
+}
+
+@keyframes um-bar-grow {
+  0%   { width: 0; }
+  70%  { width: 85%; }
+  100% { width: 92%; }
+}
+
+.um-cpu-bar-danger {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 15%;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 6px,
+    var(--bad) 6px,
+    var(--bad) 8px
+  );
+  opacity: 0.3;
+}
+
+.um-cpu-labels {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-faint);
+}
+
+.um-cpu-label-hi {
+  color: var(--bad);
+}
+
+.um-latency-warn {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-family: var(--font-body);
+  font-size: 20px;
+  color: var(--bad);
+  opacity: 0;
+  animation: um-shake-in 600ms var(--ease-quart) 1600ms forwards;
+}
+
+.um-warn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bad);
+  color: var(--surface);
+  font-family: var(--font-display-en);
+  font-weight: 700;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+@keyframes um-shake-in {
+  0%   { opacity: 0; transform: translateX(-10px); }
+  30%  { opacity: 1; transform: translateX(5px); }
+  60%  { transform: translateX(-3px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+/* ═══════════ step 2: ConditionalCall terminal ═══════════ */
+/* dominant motion: TYPEWRITER (code block reveal) */
+
+.um-code-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  width: 100%;
+  max-width: 1000px;
+}
+
+.um-code-title {
+  font-family: var(--font-display-en);
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: um-rise 500ms var(--ease-quart) forwards;
+}
+
+.um-terminal {
+  width: 100%;
+  overflow: hidden;
+  opacity: 0;
+  animation: um-terminal-reveal 800ms var(--ease-quart) 300ms forwards;
+}
+
+@keyframes um-terminal-reveal {
+  0%   { opacity: 0; clip-path: inset(0 0 100% 0); }
+  40%  { opacity: 1; clip-path: inset(0 0 60% 0); }
+  100% { opacity: 1; clip-path: inset(0 0 0 0); }
+}
+
+.um-terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-bottom: var(--rule-w) var(--rule-style) var(--rule);
+}
+
+.um-terminal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.um-terminal-dot:nth-child(1) { background: var(--bad); }
+.um-terminal-dot:nth-child(2) { background: var(--text-mute); }
+.um-terminal-dot:nth-child(3) { background: var(--accent); }
+
+.um-terminal-name {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-faint);
+  letter-spacing: 0.06em;
+}
+
+.um-terminal-code {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  line-height: 1.65;
+  color: var(--text-2);
+  padding: 28px 32px;
+  margin: 0;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* ═══════════ step 3: two serving slots ═══════════ */
+/* dominant motion: SCALE (cards pop with overshoot) */
+
+.um-slots-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.um-slots-title {
+  font-family: var(--font-display-en);
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: um-rise 500ms var(--ease-quart) forwards;
+}
+
+.um-slots-row {
+  display: flex;
+  gap: 40px;
+  width: 100%;
+}
+
+.um-slot {
+  flex: 1;
+  padding: 40px 32px;
+  text-align: center;
+  opacity: 0;
+}
+
+.um-slot:nth-child(1) {
+  animation: um-scale-in 500ms var(--ease-overshoot) 300ms forwards;
+}
+.um-slot:nth-child(2) {
+  animation: um-scale-in 500ms var(--ease-overshoot) 500ms forwards;
+}
+
+.um-slot-region {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.um-slot-name {
+  font-size: 56px;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+
+.um-slot-scope {
+  font-family: var(--font-body);
+  font-size: 18px;
+  color: var(--text-2);
+}
+
+.um-slot-default {
+  width: 100%;
+  padding: 24px 36px;
+  text-align: center;
+  opacity: 0;
+  animation: um-rise 400ms var(--ease-quart) 700ms forwards;
+}
+
+.um-slot-default-label {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.um-slot-default-val {
+  font-family: var(--font-body);
+  font-size: 20px;
+  color: var(--text-2);
+}
+
+@keyframes um-scale-in {
+  0%   { opacity: 0; transform: scale(0.8); }
+  60%  { opacity: 1; transform: scale(1.05); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* ═══════════ step 4: summary badges ═══════════ */
+/* dominant motion: RISE-STAGGER (badges cascade up) */
+
+.um-summary-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 56px;
+  width: 100%;
+  max-width: 1100px;
+}
+
+.um-summary-title {
+  font-family: var(--font-display-en);
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--accent);
+  opacity: 0;
+  animation: um-rise 500ms var(--ease-quart) forwards;
+}
+
+.um-summary-badges {
+  display: flex;
+  gap: 40px;
+}
+
+.um-summary-badge {
+  padding: 44px 56px;
+  text-align: center;
+  opacity: 0;
+}
+
+.um-summary-badge:nth-child(1) { animation: um-badge-rise 500ms var(--ease-quart) 300ms forwards; }
+.um-summary-badge:nth-child(2) { animation: um-badge-rise 500ms var(--ease-quart) 500ms forwards; }
+.um-summary-badge:nth-child(3) { animation: um-badge-rise 500ms var(--ease-quart) 700ms forwards; }
+
+@keyframes um-badge-rise {
+  from { opacity: 0; transform: translateY(30px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.um-summary-badge-val {
+  font-size: 64px;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+
+.um-summary-badge-label {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ═══════════ shared keyframes ═══════════ */
+
+@keyframes um-rise {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

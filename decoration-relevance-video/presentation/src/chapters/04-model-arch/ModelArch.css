@@ -1,0 +1,611 @@
+/* ─────────────────────────────────────────
+ * Chapter 04 — Model Architecture
+ * CSS prefix: .ma-
+ * ───────────────────────────────────────── */
+
+.ma-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--stage-pad-y) var(--stage-pad-x);
+}
+
+/* shared rise */
+@keyframes ma-rise {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════ step 0: teacher-student pipeline ═══════════ */
+.ma-pipeline-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+  width: 100%;
+  max-width: 1400px;
+}
+
+.ma-pipeline-title {
+  font-family: var(--font-display-en);
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: ma-rise 500ms var(--ease-quart) forwards;
+}
+
+.ma-pipeline-flow {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+}
+
+.ma-pipeline-box {
+  flex: 1;
+  padding: 32px 24px;
+  text-align: center;
+  opacity: 0;
+}
+
+.ma-pipeline-teacher { animation: ma-grow 500ms var(--ease-quart) 200ms forwards; }
+.ma-pipeline-student { animation: ma-grow 500ms var(--ease-quart) 600ms forwards; }
+.ma-pipeline-endpoint { animation: ma-grow 500ms var(--ease-quart) 1000ms forwards; padding: 24px 32px; flex: 0.5; }
+
+@keyframes ma-grow {
+  from { opacity: 0; transform: scale(0.85); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.ma-pipeline-box-label {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.ma-pipeline-box-name {
+  font-size: 36px;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.ma-pipeline-box-desc {
+  font-family: var(--font-body);
+  font-size: 16px;
+  color: var(--text-mute);
+  line-height: 1.5;
+}
+
+.ma-pipeline-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  width: 80px;
+  opacity: 0;
+}
+
+.ma-pipeline-connector:nth-child(2) { animation: ma-rise 300ms var(--ease-quart) 400ms forwards; }
+.ma-pipeline-connector:nth-child(4) { animation: ma-rise 300ms var(--ease-quart) 800ms forwards; }
+
+.ma-pipeline-line {
+  width: 60px;
+  height: 3px;
+  background: var(--accent);
+}
+
+.ma-pipeline-connector-label {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-faint);
+  letter-spacing: 0.05em;
+}
+
+/* ═══════════ step 1: teacher evolution ═══════════ */
+.ma-evo-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 56px;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.ma-evo-title {
+  font-family: var(--font-display-en);
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: ma-rise 500ms var(--ease-quart) forwards;
+}
+
+.ma-evo-timeline {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0 40px;
+}
+
+.ma-evo-line {
+  position: absolute;
+  top: 12px;
+  left: 40px;
+  right: 40px;
+  height: 4px;
+  background: var(--surface-3);
+  transform-origin: left;
+  transform: scaleX(0);
+  animation: ma-line-draw 800ms var(--ease-quart) 200ms forwards;
+}
+
+@keyframes ma-line-draw {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+.ma-evo-node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  opacity: 0;
+  animation: ma-node-pop 400ms var(--ease-quart) forwards;
+  animation-delay: calc(300ms + var(--i) * 200ms);
+}
+
+.ma-evo-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  border: 3px solid var(--text-faint);
+}
+
+.ma-evo-node-active .ma-evo-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+@keyframes ma-node-pop {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ma-evo-name {
+  font-family: var(--font-display-en);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ma-evo-node-active .ma-evo-name {
+  color: var(--accent);
+}
+
+.ma-evo-desc {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-mute);
+}
+
+/* ═══════════ step 2: TriBert multi-task ═══════════ */
+.ma-tribert-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.ma-tribert-title {
+  font-family: var(--font-display-en);
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: ma-rise 500ms var(--ease-quart) forwards;
+}
+
+.ma-tribert-diagram {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+}
+
+.ma-tribert-core {
+  padding: 28px 64px;
+  text-align: center;
+  opacity: 0;
+  animation: ma-core-scale 500ms var(--ease-quart) 300ms forwards;
+  border-color: var(--accent);
+}
+
+@keyframes ma-core-scale {
+  from { opacity: 0; transform: scaleX(0.6); }
+  to   { opacity: 1; transform: scaleX(1); }
+}
+
+.ma-tribert-core-label {
+  font-family: var(--font-display-en);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.ma-tribert-branches {
+  display: flex;
+  justify-content: center;
+  gap: 48px;
+  width: 100%;
+}
+
+.ma-tribert-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  opacity: 0;
+  animation: ma-head-drop 400ms var(--ease-quart) forwards;
+  animation-delay: calc(600ms + var(--i) * 150ms);
+}
+
+@keyframes ma-head-drop {
+  from { opacity: 0; transform: translateY(-20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ma-tribert-stem {
+  width: 3px;
+  height: 40px;
+  background: var(--rule);
+}
+
+.ma-tribert-head-box {
+  padding: 20px 28px;
+  text-align: center;
+}
+
+.ma-tribert-head-id {
+  font-size: 32px;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.ma-tribert-head-name {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-2);
+}
+
+.ma-tribert-caption {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  color: var(--text-mute);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: ma-rise 400ms var(--ease-quart) 1200ms forwards;
+}
+
+/* ═══════════ step 3: feature breakdown ═══════════ */
+.ma-feat-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.ma-feat-title {
+  font-family: var(--font-display-en);
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: ma-rise 500ms var(--ease-quart) forwards;
+}
+
+.ma-feat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  width: 100%;
+}
+
+.ma-feat-card {
+  padding: 28px 32px;
+  opacity: 0;
+  animation: ma-feat-slide 400ms var(--ease-quart) forwards;
+  animation-delay: calc(200ms + var(--i) * 150ms);
+}
+
+@keyframes ma-feat-slide {
+  from { opacity: 0; transform: translateX(-24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.ma-feat-tag {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.ma-feat-name {
+  font-family: var(--font-display-en);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.ma-feat-desc {
+  font-family: var(--font-body);
+  font-size: 17px;
+  color: var(--text-mute);
+  line-height: 1.5;
+}
+
+/* ═══════════ step 4: QAS query categories ═══════════ */
+.ma-qas-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.ma-qas-title {
+  font-family: var(--font-display-en);
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: ma-rise 500ms var(--ease-quart) forwards;
+}
+
+.ma-qas-sub {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--text-mute);
+  letter-spacing: 0.08em;
+  opacity: 0;
+  animation: ma-rise 400ms var(--ease-quart) 200ms forwards;
+}
+
+.ma-qas-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+
+.ma-qas-tag {
+  padding: 10px 20px;
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-2);
+  opacity: 0;
+  animation: ma-tag-pop 300ms var(--ease-quart) forwards;
+  animation-delay: calc(300ms + var(--i) * 40ms);
+}
+
+@keyframes ma-tag-pop {
+  from { opacity: 0; transform: scale(0.8); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ═══════════ step 5: two-stage training ═══════════ */
+.ma-train-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+  width: 100%;
+  max-width: 1300px;
+}
+
+.ma-train-title {
+  font-family: var(--font-display-en);
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: ma-rise 500ms var(--ease-quart) forwards;
+}
+
+.ma-train-flow {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+}
+
+.ma-train-stage {
+  flex: 1;
+  padding: 32px 24px;
+  text-align: center;
+  opacity: 0;
+}
+
+.ma-train-stage:first-child { animation: ma-grow 500ms var(--ease-quart) 200ms forwards; }
+.ma-train-stage-active { animation: ma-grow 500ms var(--ease-quart) 800ms forwards; border-color: var(--accent); }
+
+.ma-train-stage-num {
+  font-size: 48px;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.ma-train-stage-name {
+  font-family: var(--font-display-en);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.ma-train-stage-desc {
+  font-family: var(--font-body);
+  font-size: 17px;
+  color: var(--text-mute);
+  line-height: 1.5;
+}
+
+.ma-train-arrow {
+  font-size: 36px;
+  color: var(--accent);
+  flex-shrink: 0;
+  padding: 0 16px;
+  opacity: 0;
+}
+
+.ma-train-arrow:nth-child(2) { animation: ma-rise 300ms var(--ease-quart) 400ms forwards; }
+.ma-train-arrow:nth-child(4) { animation: ma-rise 300ms var(--ease-quart) 700ms forwards; }
+
+.ma-train-ckpt {
+  padding: 20px 28px;
+  text-align: center;
+  flex-shrink: 0;
+  opacity: 0;
+  animation: ma-grow 400ms var(--ease-quart) 500ms forwards;
+  border-color: var(--text-faint);
+}
+
+.ma-train-ckpt-label {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ma-train-insight {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  color: var(--accent);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: ma-rise 500ms var(--ease-quart) 1000ms forwards;
+}
+
+/* ═══════════ step 6: V9 experiment results ═══════════ */
+.ma-v9-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.ma-v9-title {
+  font-family: var(--font-display-en);
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: ma-rise 500ms var(--ease-quart) forwards;
+}
+
+.ma-v9-compare {
+  display: flex;
+  align-items: center;
+  gap: 48px;
+  width: 100%;
+}
+
+.ma-v9-baseline,
+.ma-v9-best {
+  flex: 1;
+  padding: 36px 32px;
+  text-align: center;
+  opacity: 0;
+}
+
+.ma-v9-baseline { animation: ma-v9-slide-l 500ms var(--ease-quart) 300ms forwards; }
+.ma-v9-best { animation: ma-v9-slide-r 500ms var(--ease-quart) 500ms forwards; border-color: var(--accent); }
+
+@keyframes ma-v9-slide-l {
+  from { opacity: 0; transform: translateX(-30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes ma-v9-slide-r {
+  from { opacity: 0; transform: translateX(30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.ma-v9-arrow {
+  font-size: 36px;
+  color: var(--accent);
+  opacity: 0;
+  animation: ma-rise 300ms var(--ease-quart) 400ms forwards;
+}
+
+.ma-v9-label {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.ma-v9-value {
+  font-size: 64px;
+  color: var(--text-mute);
+  margin-bottom: 8px;
+}
+
+.ma-v9-value-hi {
+  color: var(--accent);
+}
+
+.ma-v9-unit {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-faint);
+}
+
+.ma-v9-findings {
+  display: flex;
+  gap: 40px;
+  opacity: 0;
+  animation: ma-rise 500ms var(--ease-quart) 800ms forwards;
+}
+
+.ma-v9-finding {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--text-2);
+  opacity: 0;
+  animation: ma-rise 400ms var(--ease-quart) forwards;
+  animation-delay: calc(900ms + var(--i) * 150ms);
+}
+
+.ma-v9-check {
+  color: var(--accent);
+  font-size: 22px;
+}

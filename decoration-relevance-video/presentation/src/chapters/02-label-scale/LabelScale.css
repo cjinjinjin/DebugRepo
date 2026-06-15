@@ -1,0 +1,574 @@
+/* ─────────────────────────────────────────
+ * Chapter 02 — Label Scale
+ * CSS prefix: .ls-
+ * ───────────────────────────────────────── */
+
+.ls-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--stage-pad-y) var(--stage-pad-x);
+}
+
+/* ═══════════ step 0: 4-level scale ═══════════ */
+.ls-scale-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 36px;
+  width: 100%;
+  max-width: 1300px;
+}
+
+.ls-scale-title {
+  font-family: var(--font-display-en);
+  font-size: 68px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: ls-rise 500ms var(--ease-quart) forwards;
+}
+
+@keyframes ls-rise {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ls-tiers {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  width: 100%;
+}
+
+.ls-tier {
+  padding: 36px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  opacity: 0;
+  animation: ls-tier-in 500ms var(--ease-quart) forwards;
+}
+
+.ls-tier:nth-child(1) { animation-delay: 200ms; }
+.ls-tier:nth-child(2) { animation-delay: 350ms; }
+.ls-tier:nth-child(3) { animation-delay: 500ms; }
+.ls-tier:nth-child(4) { animation-delay: 650ms; }
+
+@keyframes ls-tier-in {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ls-tier-letter {
+  font-size: 56px;
+  color: var(--accent);
+}
+
+.ls-tier-name {
+  font-family: var(--font-display-en);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ls-tier-desc {
+  font-family: var(--font-body);
+  font-size: 17px;
+  color: var(--text-mute);
+  line-height: 1.6;
+}
+
+.ls-tier-bad {
+  border-color: var(--bad) !important;
+}
+
+.ls-tier-bad .ls-tier-letter {
+  color: var(--bad);
+}
+
+/* ═══════════ step 1: binary collapse ═══════════ */
+.ls-collapse-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.ls-collapse-title {
+  font-family: var(--font-display-en);
+  font-size: 64px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: ls-rise 500ms var(--ease-quart) forwards;
+}
+
+.ls-collapse-row {
+  display: flex;
+  align-items: center;
+  gap: 48px;
+  width: 100%;
+}
+
+.ls-group {
+  flex: 1;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.ls-group-nonbad {
+  border-color: var(--accent);
+  opacity: 0;
+  animation: ls-merge-left 600ms var(--ease-quart) 300ms forwards;
+}
+
+@keyframes ls-merge-left {
+  from { opacity: 0; transform: translateX(-30px) scale(0.95); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.ls-group-bad {
+  border-color: var(--bad);
+  opacity: 0;
+  animation: ls-merge-right 600ms var(--ease-quart) 500ms forwards;
+}
+
+@keyframes ls-merge-right {
+  from { opacity: 0; transform: translateX(30px) scale(0.95); }
+  to   { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.ls-group-label {
+  font-family: var(--font-display-en);
+  font-size: 36px;
+  font-weight: 700;
+}
+
+.ls-group-label-good { color: var(--accent); }
+.ls-group-label-bad { color: var(--bad); }
+
+.ls-group-letters {
+  display: flex;
+  gap: 16px;
+}
+
+.ls-group-letter {
+  font-size: 48px;
+  color: var(--text-2);
+}
+
+.ls-collapse-arrow {
+  font-family: var(--font-mono);
+  font-size: 36px;
+  color: var(--text-mute);
+  opacity: 0;
+  animation: ls-rise 400ms var(--ease-quart) 400ms forwards;
+}
+
+.ls-group-action {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--text-mute);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ═══════════ step 2: managed era timeline ═══════════ */
+.ls-timeline-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 56px;
+  width: 100%;
+  max-width: 1400px;
+}
+
+.ls-timeline-title {
+  font-family: var(--font-display-en);
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: ls-rise 500ms var(--ease-quart) forwards;
+}
+
+.ls-timeline-bar-wrap {
+  width: 100%;
+  position: relative;
+  height: 80px;
+}
+
+.ls-timeline-bar {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  height: 6px;
+  background: var(--accent);
+  transform-origin: left;
+  transform: scaleX(0);
+  animation: ls-bar-grow 800ms var(--ease-quart) 300ms forwards;
+}
+
+@keyframes ls-bar-grow {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+.ls-timeline-managed {
+  width: 100%;
+}
+
+.ls-timeline-dot {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  top: 26px;
+}
+
+.ls-timeline-dot-start { left: 0; }
+.ls-timeline-dot-end { right: 0; }
+
+.ls-timeline-year {
+  position: absolute;
+  top: 52px;
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--text-2);
+}
+
+.ls-timeline-year-start { left: 0; }
+.ls-timeline-year-end { right: 0; }
+
+.ls-timeline-era {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.ls-cost-badge {
+  padding: 24px 48px;
+  border: 2px solid var(--accent);
+  text-align: center;
+  opacity: 0;
+  animation: ls-rise 500ms var(--ease-quart) 800ms forwards;
+}
+
+.ls-cost-label {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+  margin-bottom: 8px;
+}
+
+.ls-cost-value {
+  font-size: 64px;
+  color: var(--accent);
+}
+
+.ls-cost-unit {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--text-mute);
+}
+
+/* ═══════════ step 3: LLM era ═══════════ */
+.ls-llm-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+  width: 100%;
+  max-width: 1400px;
+}
+
+.ls-llm-title {
+  font-family: var(--font-display-en);
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: ls-rise 500ms var(--ease-quart) forwards;
+}
+
+.ls-llm-timeline-wrap {
+  width: 100%;
+  position: relative;
+  height: 80px;
+}
+
+.ls-llm-bar-old {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  width: 50%;
+  height: 6px;
+  background: var(--text-faint);
+}
+
+.ls-llm-bar-new {
+  position: absolute;
+  top: 30px;
+  left: 50%;
+  right: 0;
+  height: 6px;
+  background: var(--accent);
+  transform-origin: left;
+  transform: scaleX(0);
+  animation: ls-bar-grow 600ms var(--ease-quart) 300ms forwards;
+}
+
+.ls-llm-dot {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  top: 26px;
+}
+
+.ls-llm-dot-start { left: 0; background: var(--text-faint); }
+.ls-llm-dot-mid { left: 50%; background: var(--accent); }
+.ls-llm-dot-end { right: 0; background: var(--accent); }
+
+.ls-llm-year {
+  position: absolute;
+  top: 52px;
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--text-2);
+}
+
+.ls-llm-year-start { left: 0; }
+.ls-llm-year-mid { left: 50%; transform: translateX(-50%); }
+.ls-llm-year-end { right: 0; }
+
+.ls-llm-models {
+  display: flex;
+  gap: 32px;
+  justify-content: center;
+}
+
+.ls-llm-model {
+  padding: 28px 36px;
+  text-align: center;
+  opacity: 0;
+  animation: ls-model-pop 400ms var(--ease-quart) forwards;
+}
+
+.ls-llm-model:nth-child(1) { animation-delay: 500ms; }
+.ls-llm-model:nth-child(2) { animation-delay: 650ms; }
+.ls-llm-model:nth-child(3) { animation-delay: 800ms; border-color: var(--accent); }
+
+.ls-llm-model-name {
+  font-family: var(--font-display-en);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ls-llm-model-year {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-mute);
+  margin-top: 6px;
+}
+
+@keyframes ls-model-pop {
+  from { opacity: 0; transform: scale(0.85); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ═══════════ step 4: accuracy gauge ═══════════ */
+.ls-acc-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+  width: 100%;
+  max-width: 900px;
+}
+
+.ls-acc-title {
+  font-family: var(--font-display-en);
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: ls-rise 500ms var(--ease-quart) forwards;
+}
+
+.ls-gauge-wrap {
+  position: relative;
+  width: 360px;
+  height: 200px;
+  overflow: hidden;
+}
+
+.ls-gauge-track {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 360px;
+  height: 360px;
+  border-radius: 50%;
+  border: 12px solid var(--surface-3);
+  clip-path: inset(0 0 50% 0);
+}
+
+.ls-gauge-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 360px;
+  height: 360px;
+  border-radius: 50%;
+  border: 12px solid var(--accent);
+  clip-path: inset(0 0 50% 0);
+  transform: rotate(-180deg);
+  transform-origin: center;
+  animation: ls-gauge-sweep 1200ms var(--ease-quart) 300ms forwards;
+}
+
+@keyframes ls-gauge-sweep {
+  from { transform: rotate(-180deg); }
+  to   { transform: rotate(-30.6deg); }  /* 83% of 180° = 149.4° → -180+149.4 = -30.6 */
+}
+
+.ls-gauge-value {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 80px;
+  color: var(--accent);
+}
+
+.ls-acc-model-badge {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  color: var(--text-2);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0;
+  animation: ls-rise 500ms var(--ease-quart) 800ms forwards;
+}
+
+.ls-acc-cost-line {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  color: var(--text);
+  opacity: 0;
+  animation: ls-rise 500ms var(--ease-quart) 1000ms forwards;
+}
+
+.ls-acc-cost-line span {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ═══════════ step 5: cost waterfall ═══════════ */
+.ls-waterfall-layout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+  width: 100%;
+  max-width: 1300px;
+}
+
+.ls-waterfall-title {
+  font-family: var(--font-display-en);
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--text);
+  opacity: 0;
+  animation: ls-rise 500ms var(--ease-quart) forwards;
+}
+
+.ls-waterfall-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 32px;
+  height: 400px;
+  width: 100%;
+  padding: 0 40px;
+  border-bottom: 2px dashed var(--rule);
+  position: relative;
+}
+
+.ls-waterfall-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.ls-waterfall-bar {
+  width: 100%;
+  max-width: 160px;
+  background: var(--surface-3);
+  border: 1px solid var(--rule);
+  position: relative;
+  transform-origin: bottom;
+  transform: scaleY(0);
+  animation: ls-bar-rise 600ms var(--ease-quart) forwards;
+}
+
+.ls-waterfall-col:nth-child(1) .ls-waterfall-bar { animation-delay: 200ms; }
+.ls-waterfall-col:nth-child(2) .ls-waterfall-bar { animation-delay: 400ms; }
+.ls-waterfall-col:nth-child(3) .ls-waterfall-bar { animation-delay: 600ms; }
+.ls-waterfall-col:nth-child(4) .ls-waterfall-bar { animation-delay: 800ms; }
+
+@keyframes ls-bar-rise {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+
+.ls-waterfall-bar-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.ls-waterfall-price {
+  font-size: 28px;
+  color: var(--text);
+  text-align: center;
+}
+
+.ls-waterfall-price-active {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.ls-waterfall-name {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-mute);
+  text-align: center;
+  letter-spacing: 0.05em;
+}
+
+.ls-waterfall-hero {
+  font-size: 80px;
+  color: var(--accent);
+  opacity: 0;
+  animation: ls-rise 500ms var(--ease-quart) 1200ms forwards;
+}
