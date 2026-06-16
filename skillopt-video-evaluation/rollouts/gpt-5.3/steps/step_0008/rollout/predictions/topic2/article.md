@@ -111,7 +111,9 @@ Common Docker Build Network Issues:
 
 ## 3.5 Local Docker Testing
 
+```bash
 # 1. Build image cd /path/to/OaaS_LLMTemplate export SOURCE_BRANCH="test" sudo bash pipeline/build_vllm_image.sh # 2. Start container IMAGE_TAG="<build_tag>" sudo docker run -d --name model-test \ --gpus all \ -v /path/to/model_weights:/Model/model_name \ -p <host_port>:8888 \ <image_name>:$IMAGE_TAG \ /dlis_model/run.sh http # 3. Test request curl -X POST http://localhost:<host_port> \ -H "Content-Type: application/json" \ -d '{"prompt": "test input"}'
+```
 
 Important Notes:
 
@@ -133,7 +135,9 @@ If no results: ① check cert environment matches namespace (SI cert + SI namesp
 
 ## 3.6 Offline Testing (No HTTP Server)
 
+```bash
 sudo docker run --rm -it --gpus all \ -v /path/to/model:/Model/model_name \ <image>:<tag> \ bash -c 'cd /dlis_model && ./run.sh offline /tmp/input.json /tmp/output.json'
+```
 
 # 4. Step 2: Upload Checkpoint to Gen1
 
@@ -185,7 +189,9 @@ Fig: Save and run pipeline (Source: Hao Zhang doc)
 
 [Attachment] Source doc: How_to_Build_Your_Own_DLIS_Model.docx (Hao Zhang)
 
+```bash
 Gen2 path format: abfs://dlisstore@dlisstoregen2.dfs.core.windows.net/dlismodelrepository-c09/local/users/<username>/<model-dir>/
+```
 
 Gen2 Verification (Important):
 
@@ -414,7 +420,9 @@ Previously discovered SI Kusto logs erroneously written to Prod DB (Image Model 
 
 [Attachment] Auto Image Service DLIS Documentation (ChunChen) — includes Kusto log analysis examples
 
+```bash
 appsvc_info | union appsvc_warn | union appsvc_err | where Timestamp > ago(30min) | where ApplicationName == 'ImgLPRelevanceModel'
+```
 
 The ApplicationName value comes from the application_name field in the config file (confirmed by Siwen).
 
@@ -593,7 +601,9 @@ Principle: Do not add torch, torchvision, or transformers to requirements-vllm.t
 
 ## A.4 Local Manual Build Test
 
+```bash
 cd OaaS_LLMTemplate IMAGE_TAG="local-test" # Block 1: Build base image sudo docker build -t my-vllm-base:$IMAGE_TAG \ --file pipeline/Dockerfile_vllm_fast pipeline/ # Block 2: Install OaaS code and dependencies sudo docker run -d --name temp my-vllm-base:$IMAGE_TAG sleep infinity sudo docker cp . temp:/ sudo docker exec temp chmod +x /dlis_model/run.sh /dlis_model/async_run.sh /LLMModelOptimization.sh sudo docker exec temp python3 -m pip install -r /requirements-common.txt sudo docker exec temp python3 -m pip install -r /requirements-vllm.txt sudo docker exec temp python3 -m pip install -e / sudo docker commit temp my-final:$IMAGE_TAG sudo docker rm -f temp
+```
 
 # Appendix B: Tsinghua Mirror Configuration
 
@@ -605,7 +615,9 @@ variables: PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple UV_INDEX_URL:
 
 ## B.2 Docker Build (build_vllm_image.sh)
 
+```bash
 docker build \ --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \ --build-arg UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \ --build-arg PIP_EXTRA_INDEX_URL=https://pypi.org/simple \ ... # docker exec installation phase: PIP_ARGS="-i https://pypi.tuna.tsinghua.edu.cn/simple --extra-index-url https://pypi.org/simple" docker exec container pip install $PIP_ARGS -r requirements.txt
+```
 
 ## B.3 Dockerfile Parameter Reception
 

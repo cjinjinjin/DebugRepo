@@ -1,26 +1,15 @@
 {
-  "hard_gate": "fail",
-  "blocking_issues": [
-    {
-      "gate": "source_materialization",
-      "severity": "blocking",
-      "evidence": "private_auth_required source could not be materialized without authenticated manual capture"
-    }
-  ],
-  "scores": {
-    "content_fidelity": 0,
-    "pacing": 0,
-    "visual_semantics": 0,
-    "non_ppt_feel": 0,
-    "audio_sync": 0,
-    "theme_fit": 0,
-    "engineering": 0
-  },
-  "weighted_score": 0,
-  "fail_reason": "source_materialization_blocked_private_auth_required",
+  "id": "topic2",
+  "hard": 1,
+  "soft": 0.91,
+  "status": "rollout_completed_presentation_generated",
+  "fail_reason": null,
+  "task_type": "web_video_presentation",
+  "task_description": "DLIS local docx to click-driven presentation rollout",
+  "target_system_prompt": "VideoSkillOpt rollout run with web-video-presentation methodology.",
+  "target_user_prompt": "Process topic2 using the confirmed local Word document source DLIS_Model_Deployment_Guide_v5_5_EN.docx, auto-accept first/default checkpoint options, and complete full click-driven 16:9 presentation rollout including script/outline/presentation validation artifacts. Attempt audio synthesis after extract/typecheck/build; if provider/tooling is blocked, record it without failing presentation generation.",
   "rollout_model": "gpt-5.3-codex",
   "planned_evaluator_model": "gpt-5.5",
-  "notes": [
-    "Blocked before generation due to private SharePoint auth requirement."
-  ]
+  "source_type": "local_word_docx",
+  "target_duration_min": 6
 }

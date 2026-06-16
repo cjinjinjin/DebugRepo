@@ -1,0 +1,74 @@
+[
+  {
+    "chapter": "hook-heat",
+    "step": 1,
+    "text": "OpenClaw 这波爆火，不是因为它多了一个聊天界面，而是因为它把会回答推进到了会执行。",
+    "audio": "hook-heat/1.mp3"
+  },
+  {
+    "chapter": "hook-heat",
+    "step": 2,
+    "text": "热度数据很直接：微信指数破亿，项目短时间冲到 297K Stars、116K+ 社区规模、1000+ 贡献者。",
+    "audio": "hook-heat/2.mp3"
+  },
+  {
+    "chapter": "hook-heat",
+    "step": 3,
+    "text": "普通聊天工具和 OpenClaw 的差异，在于后者把记忆、工具、流程都接进来了。",
+    "audio": "hook-heat/3.mp3"
+  },
+  {
+    "chapter": "hook-heat",
+    "step": 4,
+    "text": "你可以把它看成中枢：前面接消息入口，后面接工具执行层，中间是 OpenClaw 运行时。",
+    "audio": "hook-heat/4.mp3"
+  },
+  {
+    "chapter": "concept-deploy",
+    "step": 1,
+    "text": "OpenClaw 的能力链路可以拆成五层：Inference、Memory、RAG、MCP、Skills。",
+    "audio": "concept-deploy/1.mp3"
+  },
+  {
+    "chapter": "concept-deploy",
+    "step": 2,
+    "text": "推理服务本身无状态，所以必须用记忆层做短期与长期的上下文管理。",
+    "audio": "concept-deploy/2.mp3"
+  },
+  {
+    "chapter": "concept-deploy",
+    "step": 3,
+    "text": "部署时先跑通主链路：环境检查、安装初始化、基础联调，不要一开始就过度优化。",
+    "audio": "concept-deploy/3.mp3"
+  },
+  {
+    "chapter": "concept-deploy",
+    "step": 4,
+    "text": "参数层重点看 temperature、top_p、penalty、max_tokens，并给主模型配置 fallback。",
+    "audio": "concept-deploy/4.mp3"
+  },
+  {
+    "chapter": "feishu-security-usecases",
+    "step": 1,
+    "text": "把 Agent 接进飞书，不是换一个聊天入口，而是把自动化放进团队日常协作流。",
+    "audio": "feishu-security-usecases/1.mp3"
+  },
+  {
+    "chapter": "feishu-security-usecases",
+    "step": 2,
+    "text": "MCP 负责给模型工具能力，Skills 负责把多步动作编排成可复用 SOP。",
+    "audio": "feishu-security-usecases/2.mp3"
+  },
+  {
+    "chapter": "feishu-security-usecases",
+    "step": 3,
+    "text": "能力放大后，安全必须同步放大：最小权限、风险动作确认、供应链审计、凭证治理缺一不可。",
+    "audio": "feishu-security-usecases/3.mp3"
+  },
+  {
+    "chapter": "feishu-security-usecases",
+    "step": 4,
+    "text": "当这套链路跑通，你拿到的是可以稳定执行任务串的系统，而不是一次性演示。",
+    "audio": "feishu-security-usecases/4.mp3"
+  }
+]

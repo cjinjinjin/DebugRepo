@@ -3,7 +3,7 @@ import "./HookHeat.css";
 
 const METRICS = [
   { key: "Stars", value: "297K" },
-  { key: "Forks", value: "56K" },
+  { key: "Community", value: "116K+" },
   { key: "Contrib", value: "1000+" },
 ];
 

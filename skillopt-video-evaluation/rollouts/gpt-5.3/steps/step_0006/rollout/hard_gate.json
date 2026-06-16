@@ -1,10 +1,24 @@
 {
   "id": "topic7",
-  "hard": 0,
-  "pass": false,
-  "gate": "source_materialization",
-  "fail_reason": "source_materialization_blocked",
-  "detail": "Automated source materialization blocked; manual capture required.",
-  "rollout_model": "gpt-5.3-codex",
-  "planned_evaluator_model": "gpt-5.5"
+  "hard_gate": "pass",
+  "hard": 1,
+  "reason": null,
+  "status": "rollout_completed_presentation_generated",
+  "gates": [
+    {
+      "gate": "source_materialized",
+      "status": "pass",
+      "evidence": "article.md materialized from local saved WeChat HTML #js_content"
+    },
+    {
+      "gate": "script_outline_generated",
+      "status": "pass",
+      "evidence": "script.md and outline.md generated in Chinese with focused chapter-step plan"
+    },
+    {
+      "gate": "presentation_generated",
+      "status": "pass",
+      "evidence": "presentation generated with 3 chapters / 12 steps; npm run extract-narrations, npx tsc --noEmit, npm run build passed; audio synthesis attempted and blocked by bash pipefail on Windows"
+    }
+  ]
 }

@@ -1,6 +1,12 @@
 import type { ChapterDef } from "./types";
-import ExampleChapter from "../chapters/01-example/Example";
-import { narrations as exampleNarrations } from "../chapters/01-example/narrations";
+import FlowOverview from "../chapters/01-flow-overview/FlowOverview";
+import { narrations as flowOverviewNarrations } from "../chapters/01-flow-overview/narrations";
+import LocalDataImage from "../chapters/02-local-data-image/LocalDataImage";
+import { narrations as localDataImageNarrations } from "../chapters/02-local-data-image/narrations";
+import PolarisProduction from "../chapters/03-polaris-production/PolarisProduction";
+import { narrations as polarisProductionNarrations } from "../chapters/03-polaris-production/narrations";
+import OpsHardening from "../chapters/04-ops-hardening/OpsHardening";
+import { narrations as opsHardeningNarrations } from "../chapters/04-ops-hardening/narrations";
 
 /**
  * Order = order of presentation.
@@ -15,9 +21,27 @@ import { narrations as exampleNarrations } from "../chapters/01-example/narratio
  */
 export const CHAPTERS: ChapterDef[] = [
   {
-    id: "example",
-    title: "示例章节",
-    narrations: exampleNarrations,
-    Component: ExampleChapter,
+    id: "flow-overview",
+    title: "Deployment spine and failure surface",
+    narrations: flowOverviewNarrations,
+    Component: FlowOverview,
+  },
+  {
+    id: "local-data-image",
+    title: "Local validation and parallel prep",
+    narrations: localDataImageNarrations,
+    Component: LocalDataImage,
+  },
+  {
+    id: "polaris-production",
+    title: "Polaris quality gate to production cutover",
+    narrations: polarisProductionNarrations,
+    Component: PolarisProduction,
+  },
+  {
+    id: "ops-hardening",
+    title: "Environment separation and observability reliability",
+    narrations: opsHardeningNarrations,
+    Component: OpsHardening,
   },
 ];

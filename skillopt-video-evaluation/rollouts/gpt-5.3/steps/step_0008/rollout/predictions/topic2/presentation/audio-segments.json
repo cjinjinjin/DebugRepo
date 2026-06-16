@@ -1,0 +1,146 @@
+[
+  {
+    "chapter": "flow-overview",
+    "step": 1,
+    "text": "You can have a strong model and still fail deployment if your pipeline is weak.",
+    "audio": "flow-overview/1.mp3"
+  },
+  {
+    "chapter": "flow-overview",
+    "step": 2,
+    "text": "Keep one backbone in mind: local validation, parallel prep, Polaris gate, production cutover, and operations hardening.",
+    "audio": "flow-overview/2.mp3"
+  },
+  {
+    "chapter": "flow-overview",
+    "step": 3,
+    "text": "The guide explicitly allows data migration and CI image build to run in parallel lanes.",
+    "audio": "flow-overview/3.mp3"
+  },
+  {
+    "chapter": "flow-overview",
+    "step": 4,
+    "text": "Version five point five merges Gemma4, ZImage, and team debugging lessons into one practical runbook.",
+    "audio": "flow-overview/4.mp3"
+  },
+  {
+    "chapter": "flow-overview",
+    "step": 5,
+    "text": "If you remember one rule, remember this: validate locally before you upload and deploy.",
+    "audio": "flow-overview/5.mp3"
+  },
+  {
+    "chapter": "flow-overview",
+    "step": 6,
+    "text": "Only move forward when each gate has objective pass evidence.",
+    "audio": "flow-overview/6.mp3"
+  },
+  {
+    "chapter": "local-data-image",
+    "step": 1,
+    "text": "Step one starts in your personal OaaS template branch so you can iterate safely.",
+    "audio": "local-data-image/1.mp3"
+  },
+  {
+    "chapter": "local-data-image",
+    "step": 2,
+    "text": "Most edits happen in model dot py and dlis_inter dot py, with server changes only when custom payload format is needed.",
+    "audio": "local-data-image/2.mp3"
+  },
+  {
+    "chapter": "local-data-image",
+    "step": 3,
+    "text": "For build strategy, choose fast iteration Dockerfile or full pinned stack depending on control needs.",
+    "audio": "local-data-image/3.mp3"
+  },
+  {
+    "chapter": "local-data-image",
+    "step": 4,
+    "text": "The local loop is build image, run container with mapping, send request, and check logs.",
+    "audio": "local-data-image/4.mp3"
+  },
+  {
+    "chapter": "local-data-image",
+    "step": 5,
+    "text": "On data lane, upload to Gen1 with flat layout and migrate to Gen2 because serving reads from Gen2.",
+    "audio": "local-data-image/5.mp3"
+  },
+  {
+    "chapter": "local-data-image",
+    "step": 6,
+    "text": "On image lane, push branch, capture CI image tag, and merge only when both lanes are green.",
+    "audio": "local-data-image/6.mp3"
+  },
+  {
+    "chapter": "polaris-production",
+    "step": 1,
+    "text": "When both preparation lanes finish, merge at Polaris testing gate.",
+    "audio": "polaris-production/1.mp3"
+  },
+  {
+    "chapter": "polaris-production",
+    "step": 2,
+    "text": "In Polaris, the highest-risk fields are ModelPath, ModelDataPath, environment variables, and ready timeout.",
+    "audio": "polaris-production/2.mp3"
+  },
+  {
+    "chapter": "polaris-production",
+    "step": 3,
+    "text": "Treat loading one hundred percent plus success as the real pass signal.",
+    "audio": "polaris-production/3.mp3"
+  },
+  {
+    "chapter": "polaris-production",
+    "step": 4,
+    "text": "Validate output quality, latency, stability, and resource usage together.",
+    "audio": "polaris-production/4.mp3"
+  },
+  {
+    "chapter": "polaris-production",
+    "step": 5,
+    "text": "If any dimension fails, go back to code or configuration, rebuild, and retest.",
+    "audio": "polaris-production/5.mp3"
+  },
+  {
+    "chapter": "polaris-production",
+    "step": 6,
+    "text": "After Polaris passes, verify production hardware choice, portal pages, ACL, and endpoint request path.",
+    "audio": "polaris-production/6.mp3"
+  },
+  {
+    "chapter": "ops-hardening",
+    "step": 1,
+    "text": "After go-live, reliability depends on strict SI and Prod separation.",
+    "audio": "ops-hardening/1.mp3"
+  },
+  {
+    "chapter": "ops-hardening",
+    "step": 2,
+    "text": "Treat certificates as lifecycle assets with explicit environment matching and expiry planning.",
+    "audio": "ops-hardening/2.mp3"
+  },
+  {
+    "chapter": "ops-hardening",
+    "step": 3,
+    "text": "Kusto visibility follows cert context, so cert and namespace mismatches can hide traffic in your target environment.",
+    "audio": "ops-hardening/3.mp3"
+  },
+  {
+    "chapter": "ops-hardening",
+    "step": 4,
+    "text": "Fix logging anti-patterns: no silent EventHub exception swallow, use formatted messages, and flush on crash paths.",
+    "audio": "ops-hardening/4.mp3"
+  },
+  {
+    "chapter": "ops-hardening",
+    "step": 5,
+    "text": "Recurring deployment incidents include OOM fallback, CUDA UUID mapping, read-only model paths, and ACL mismatches.",
+    "audio": "ops-hardening/5.mp3"
+  },
+  {
+    "chapter": "ops-hardening",
+    "step": 6,
+    "text": "Final readiness checklist is image tag, Gen2 integrity, Polaris metrics, ACL, endpoint format, certificate expiry, and Kusto visibility.",
+    "audio": "ops-hardening/6.mp3"
+  }
+]

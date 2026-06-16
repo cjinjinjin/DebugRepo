@@ -1,7 +1,9 @@
 {
-  "generated_project_path": null,
+  "generated_project_path": "C:\\Users\\jinjinchen\\OneDrive - Microsoft\\code\\ms-image-quality-filters-aether-module-main\\skillopt-video-evaluation\\rollouts\\gpt-5.3\\steps\\step_0008\\rollout\\predictions\\topic2\\presentation",
   "copied_artifacts": [
     "article.md",
+    "script.md",
+    "outline.md",
     "current_skill.md",
     "source.json",
     "conversation.json",
@@ -9,8 +11,34 @@
     "target_user_prompt.txt",
     "evaluator-report.json"
   ],
-  "referenced_artifacts": [
-    "C:\\Users\\jinjinchen\\.agents\\skills\\web-video-presentation\\README.md"
+  "generated_artifacts": [
+    "presentation/package.json",
+    "presentation/audio-segments.json",
+    "presentation/src/registry/chapters.ts",
+    "presentation/src/hooks/useStepper.ts",
+    "presentation/src/chapters/01-flow-overview/FlowOverview.tsx",
+    "presentation/src/chapters/01-flow-overview/FlowOverview.css",
+    "presentation/src/chapters/01-flow-overview/narrations.ts",
+    "presentation/src/chapters/02-local-data-image/LocalDataImage.tsx",
+    "presentation/src/chapters/02-local-data-image/LocalDataImage.css",
+    "presentation/src/chapters/02-local-data-image/narrations.ts",
+    "presentation/src/chapters/03-polaris-production/PolarisProduction.tsx",
+    "presentation/src/chapters/03-polaris-production/PolarisProduction.css",
+    "presentation/src/chapters/03-polaris-production/narrations.ts",
+    "presentation/src/chapters/04-ops-hardening/OpsHardening.tsx",
+    "presentation/src/chapters/04-ops-hardening/OpsHardening.css",
+    "presentation/src/chapters/04-ops-hardening/narrations.ts",
+    "presentation/dist/index.html"
   ],
-  "note": "Blocked rollout: source materialization failed due to private auth requirement."
+  "referenced_artifacts": [
+    "presentation/scripts/synthesize-audio.sh",
+    "presentation/scripts/tts-providers/minimax.sh",
+    "presentation/scripts/tts-providers/openai.sh",
+    "extract-log.txt",
+    "typecheck-log.txt",
+    "build-log.txt",
+    "audio-log.txt"
+  ],
+  "status": "rollout_completed_presentation_generated",
+  "note": "Topic2 completed from local docx source; extract/typecheck/build passed; audio synthesis blocked by bash pipefail compatibility on Windows."
 }

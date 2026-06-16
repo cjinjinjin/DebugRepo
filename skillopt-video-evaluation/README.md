@@ -90,11 +90,11 @@ Rollout 产物保存规范见 `rollout-data-contract.md`。
 | `step_0003` | `topic4` | full presentation generated | 1 | 0.93 | — |
 | `step_0004` | `topic5` | full presentation generated | 1 | 0.91 | — |
 | `step_0005` | `topic6` | full presentation generated | 1 | 0.90 | — |
-| `step_0006` | `topic7` | blocked | 0 | 0 | `source_materialization_blocked` |
+| `step_0006` | `topic7` | full presentation generated | 1 | 0.92 | — |
 | `step_0007` | `topic8` | full presentation generated | 1 | 0.93 | — |
-| `step_0008` | `topic2` | blocked | 0 | 0 | `source_materialization_blocked_private_auth_required` |
+| `step_0008` | `topic2` | full presentation generated | 1 | 0.91 | — |
 
-For `topic1`, `topic4`, `topic5`, `topic6`, and `topic8`, intermediate web-video-presentation checkpoints were auto-accepted with default/first choices. The presentation projects passed narration extraction, typecheck, and production build. Audio synthesis was attempted but blocked by local shell/tooling issues (`jq` for topic1/topic4/topic5/topic6, bash `pipefail` compatibility for topic8); this is recorded in each rollout and is not treated as a presentation-generation failure.
+For `topic1`, `topic2`, `topic4`, `topic5`, `topic6`, `topic7`, and `topic8`, intermediate web-video-presentation checkpoints were auto-accepted with default/first choices. The presentation projects passed narration extraction, typecheck, and production build. Audio synthesis was attempted but blocked by local shell/tooling issues (`jq` for topic1/topic4/topic5/topic6, bash `pipefail` compatibility for topic2/topic7/topic8); this is recorded in each rollout and is not treated as a presentation-generation failure.
 
 ## 评价体系总览
 

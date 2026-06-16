@@ -1,22 +1,24 @@
 {
-  "hard_gate": "fail",
-  "hard": 0,
-  "reason": "source_materialization_blocked_private_auth_required",
+  "id": "topic2",
+  "hard_gate": "pass",
+  "hard": 1,
+  "reason": null,
+  "status": "rollout_completed_presentation_generated",
   "gates": [
     {
-      "gate": "source_materialization",
-      "status": "fail",
-      "evidence": "topic2 SharePoint source is private_auth_required and unavailable in non-interactive harness"
+      "gate": "source_materialized",
+      "status": "pass",
+      "evidence": "article.md materialized from local Word document C:\\Users\\jinjinchen\\OneDrive - Microsoft\\DLIS_Model_Deployment_Guide_v5_5_EN.docx"
     },
     {
-      "gate": "engineering",
-      "status": "not_applicable",
-      "evidence": "generation not started because source was unavailable"
+      "gate": "script_outline_generated",
+      "status": "pass",
+      "evidence": "script.md and outline.md generated in English with 4 chapters / 24-step plan"
     },
     {
-      "gate": "step_consistency",
-      "status": "not_applicable",
-      "evidence": "no script/outline/presentation generated"
+      "gate": "presentation_generated",
+      "status": "pass",
+      "evidence": "presentation generated with 4 chapters; extract/typecheck/build passed; audio synthesis attempted and blocked by bash pipefail on Windows"
     }
   ]
 }

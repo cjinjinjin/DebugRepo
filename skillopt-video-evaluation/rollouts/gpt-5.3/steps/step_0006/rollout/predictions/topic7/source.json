@@ -10,9 +10,9 @@
   "planned_evaluator_model": "gpt-5.5",
   "materialization": {
     "status": "completed",
-    "method": "local_html_extraction",
+    "method": "local_html_extraction_js_content",
     "local_html_path": "C:\\Users\\jinjinchen\\Downloads\\OpenClaw 完全指南：这可能是全网最新最全的系统化教程了！（3.2W字，建议收藏）.html",
     "local_asset_dir": "C:\\Users\\jinjinchen\\Downloads\\OpenClaw 完全指南：这可能是全网最新最全的系统化教程了！（3.2W字，建议收藏）_files",
-    "note": "Readable Chinese article body extracted from saved HTML; raw JS/CSS noise excluded."
+    "note": "Materialized article.md from local saved WeChat HTML #js_content; cleaned JS/CSS/UI noise and preserved key sections for focused video generation."
   }
 }

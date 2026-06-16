@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "extract-narrations": "tsx scripts/extract-narrations.ts",
+    "synthesize-audio": "bash scripts/synthesize-audio.sh",
     "lint": "eslint .",
     "preview": "vite preview"
   },

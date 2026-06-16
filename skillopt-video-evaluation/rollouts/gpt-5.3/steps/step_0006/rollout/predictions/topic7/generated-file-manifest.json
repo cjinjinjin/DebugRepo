@@ -1,9 +1,6 @@
 {
-  "topic_id": "topic7",
-  "rollout_model": "gpt-5.3-codex",
-  "planned_evaluator_model": "gpt-5.5",
-  "status": "completed_with_blocked_source",
-  "files": [
+  "generated_project_path": "C:\\Users\\jinjinchen\\OneDrive - Microsoft\\code\\ms-image-quality-filters-aether-module-main\\skillopt-video-evaluation\\rollouts\\gpt-5.3\\steps\\step_0006\\rollout\\predictions\\topic7\\presentation",
+  "copied_artifacts": [
     "article.md",
     "script.md",
     "outline.md",
@@ -12,7 +9,34 @@
     "conversation.json",
     "target_system_prompt.txt",
     "target_user_prompt.txt",
-    "evaluator-report.json",
-    "generated-file-manifest.json"
-  ]
+    "evaluator-report.json"
+  ],
+  "generated_artifacts": [
+    "presentation/package.json",
+    "presentation/audio-segments.json",
+    "presentation/src/registry/chapters.ts",
+    "presentation/src/hooks/useStepper.ts",
+    "presentation/src/chapters/01-hook-heat/HookHeat.tsx",
+    "presentation/src/chapters/01-hook-heat/HookHeat.css",
+    "presentation/src/chapters/01-hook-heat/narrations.ts",
+    "presentation/src/chapters/02-concept-deploy/ConceptDeploy.tsx",
+    "presentation/src/chapters/02-concept-deploy/ConceptDeploy.css",
+    "presentation/src/chapters/02-concept-deploy/narrations.ts",
+    "presentation/src/chapters/03-feishu-security-usecases/FeishuSecurityUsecases.tsx",
+    "presentation/src/chapters/03-feishu-security-usecases/FeishuSecurityUsecases.css",
+    "presentation/src/chapters/03-feishu-security-usecases/narrations.ts",
+    "presentation/dist/index.html"
+  ],
+  "referenced_artifacts": [
+    "presentation/scripts/synthesize-audio.sh",
+    "presentation/scripts/tts-providers/minimax.sh",
+    "presentation/scripts/tts-providers/openai.sh",
+    "npm-install-log.txt",
+    "extract-log.txt",
+    "typecheck-log.txt",
+    "build-log.txt",
+    "audio-log.txt"
+  ],
+  "status": "rollout_completed_presentation_generated",
+  "note": "Topic7 completed from local saved WeChat HTML; full presentation generated and validated. Audio synthesis attempted after checks and blocked by bash pipefail compatibility on Windows."
 }
