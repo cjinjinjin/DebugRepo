@@ -1,0 +1,11 @@
+.oh-scene { display:flex; flex-direction:column; justify-content:center; gap:30px; height:100%; }
+.oh-head { font-family:var(--font-display-en); font-size:58px; }
+.oh-split { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.oh-card { min-height:250px; display:flex; align-items:center; justify-content:center; font-size:44px; }
+.oh-time { min-height:220px; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; align-items:center; justify-items:center; font-size:38px; }
+.oh-route { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+.oh-route-card { min-height:220px; display:flex; align-items:center; justify-content:center; text-align:center; font-size:32px; }
+.oh-fixes { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+.oh-fix { min-height:220px; display:flex; align-items:center; justify-content:center; text-align:center; font-size:32px; }
+.oh-issues { min-height:260px; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; align-items:center; justify-items:center; font-size:30px; }
+.oh-final { min-height:280px; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; align-items:center; justify-items:center; font-size:30px; }

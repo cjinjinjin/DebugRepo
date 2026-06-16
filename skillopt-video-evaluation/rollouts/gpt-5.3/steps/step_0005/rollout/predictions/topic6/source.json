@@ -1,0 +1,20 @@
+{
+  "id": "topic6",
+  "title_hint": "WeChat article 2247505867",
+  "split": "train",
+  "url": "https://mp.weixin.qq.com/s?__biz=Mzk0MDMwMzQyOA==&mid=2247505867&idx=1&sn=206a23d0c3de7f0fef4cf217a731f754&chksm=c39f8e2a6faf28ec48acff1cf5338fa0948bc4118494bfe55f359c57af4f098f1ba5dc9f4113&mpshare=1&scene=1&srcid=06161sKKHkm3qjJwcp2c1ryA&sharer_shareinfo=b145cf893e57b32443c1c9f5f27eb1c4&sharer_shareinfo_first=b145cf893e57b32443c1c9f5f27eb1c4#rd",
+  "source_type": "wechat_article",
+  "access": "local_saved_html",
+  "local_html": "C:\\\\Users\\\\jinjinchen\\\\Downloads\\\\GPT-Image-2 完全指南！附大量玩法案例，顺便开源我的生图 Skill ～.html",
+  "local_assets_dir": "C:\\\\Users\\\\jinjinchen\\\\Downloads\\\\GPT-Image-2 完全指南！附大量玩法案例，顺便开源我的生图 Skill ～_files",
+  "language_hint": "zh",
+  "rollout_model": "gpt-5.3-codex",
+  "planned_evaluator_model": "gpt-5.5",
+  "materialization": {
+    "status": "completed_from_local_html",
+    "fail_reason": null,
+    "hard": 1,
+    "soft": 0.9,
+    "note": "Materialized from local WeChat HTML and local image assets."
+  }
+}

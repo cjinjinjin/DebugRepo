@@ -1,0 +1,14 @@
+{
+  "id": "topic3",
+  "split": "train",
+  "title_hint": "TA Decoration Relevance",
+  "source_type": "azure_devops_wiki",
+  "access": "private_auth_required",
+  "language_hint": "en",
+  "target_duration_min": 7.5,
+  "theme_hint": "blueprint",
+  "url": "https://msasg.visualstudio.com/Bing_Ads/_wiki/wikis/Bing_Ads.wiki/286156/TA-Decoration-Relevance",
+  "existing_rollout_path": "decoration-relevance-video",
+  "rollout_model": "gpt-5.3-codex",
+  "planned_evaluator_model": "gpt-5.5"
+}

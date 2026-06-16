@@ -1,0 +1,21 @@
+.hk-scene{color:var(--text)}
+.hk-rule{margin-top:16px}
+.hk-hero-wrap{margin-top:60px;display:grid;gap:24px}
+.hk-num{font-size:160px;color:var(--accent)}
+.hk-title{font-size:72px;max-width:1200px;line-height:1.04;margin:0}
+.hk-sub{font-size:28px;color:var(--text-2);margin:0}
+.hk-contrast{display:grid;grid-template-columns:1fr 140px 1fr;gap:28px;align-items:center;height:100%}
+.hk-panel{padding:38px;min-height:320px;display:grid;align-content:center;gap:20px}
+.hk-panel-title{font-size:22px;color:var(--text-mute);text-transform:uppercase;letter-spacing:.14em;font-family:var(--font-mono)}
+.hk-panel-v{font-size:50px;line-height:1.1}
+.hk-vs{font-family:var(--font-mono);font-size:48px;text-align:center;color:var(--accent)}
+.hk-danger{border-color:color-mix(in srgb,var(--accent),#ff5a5a 50%)}
+.hk-h2{font-size:62px;margin:0 0 30px}
+.hk-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.hk-metric{padding:26px;display:grid;gap:12px}
+.hk-mv{font-size:64px;color:var(--accent);font-family:var(--font-mono)}
+.hk-alert{margin-top:28px;padding:14px 18px;border:2px dashed var(--accent);font-family:var(--font-mono);font-size:24px;color:var(--accent)}
+.hk-quote{margin-top:160px;font-size:58px;max-width:1480px}
+.hk-rail{margin-top:64px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.hk-node{border:2px solid var(--rule);padding:16px 18px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.12em;color:var(--text-2)}
+.hk-node.is-on{border-color:var(--accent);color:var(--accent)}

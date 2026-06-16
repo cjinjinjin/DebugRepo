@@ -1,0 +1,18 @@
+{
+  "topic_id": "topic7",
+  "rollout_model": "gpt-5.3-codex",
+  "planned_evaluator_model": "gpt-5.5",
+  "status": "completed_with_blocked_source",
+  "files": [
+    "article.md",
+    "script.md",
+    "outline.md",
+    "current_skill.md",
+    "source.json",
+    "conversation.json",
+    "target_system_prompt.txt",
+    "target_user_prompt.txt",
+    "evaluator-report.json",
+    "generated-file-manifest.json"
+  ]
+}

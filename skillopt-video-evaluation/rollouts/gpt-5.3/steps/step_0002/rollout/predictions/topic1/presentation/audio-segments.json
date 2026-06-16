@@ -1,0 +1,206 @@
+[
+  {
+    "chapter": "hook",
+    "step": 1,
+    "text": "Prompt caching sounds like infrastructure trivia, but it is not trivia.",
+    "audio": "hook/1.mp3"
+  },
+  {
+    "chapter": "hook",
+    "step": 2,
+    "text": "For long-running agents, cache discipline is the line between a usable product and an expensive demo.",
+    "audio": "hook/2.mp3"
+  },
+  {
+    "chapter": "hook",
+    "step": 3,
+    "text": "At Claude Code, cache hit rate is monitored like uptime, and drops are treated like incidents.",
+    "audio": "hook/3.mp3"
+  },
+  {
+    "chapter": "hook",
+    "step": 4,
+    "text": "So prompt caching is not tuning; it is an architecture constraint.",
+    "audio": "hook/4.mp3"
+  },
+  {
+    "chapter": "prefix-law",
+    "step": 1,
+    "text": "Prompt caching is prefix matching from the first token.",
+    "audio": "prefix-law/1.mp3"
+  },
+  {
+    "chapter": "prefix-law",
+    "step": 2,
+    "text": "The good ordering is static first, dynamic last.",
+    "audio": "prefix-law/2.mp3"
+  },
+  {
+    "chapter": "prefix-law",
+    "step": 3,
+    "text": "That ordering creates a large shared prefix across sessions.",
+    "audio": "prefix-law/3.mp3"
+  },
+  {
+    "chapter": "prefix-law",
+    "step": 4,
+    "text": "Bad ordering pushes volatile fields into the front and destroys reuse.",
+    "audio": "prefix-law/4.mp3"
+  },
+  {
+    "chapter": "prefix-law",
+    "step": 5,
+    "text": "Rule card: put static blocks first and keep dynamic tails at the end.",
+    "audio": "prefix-law/5.mp3"
+  },
+  {
+    "chapter": "fragility",
+    "step": 1,
+    "text": "The scary part is fragility: harmless-looking changes break cache.",
+    "audio": "fragility/1.mp3"
+  },
+  {
+    "chapter": "fragility",
+    "step": 2,
+    "text": "A timestamp in the static prefix can invalidate every request.",
+    "audio": "fragility/2.mp3"
+  },
+  {
+    "chapter": "fragility",
+    "step": 3,
+    "text": "Non-deterministic tool ordering also creates misses.",
+    "audio": "fragility/3.mp3"
+  },
+  {
+    "chapter": "fragility",
+    "step": 4,
+    "text": "Changing tool parameters or schemas mid-session does the same.",
+    "audio": "fragility/4.mp3"
+  },
+  {
+    "chapter": "fragility",
+    "step": 5,
+    "text": "Use guardrails: deterministic ordering, frozen static blocks, explicit change lanes.",
+    "audio": "fragility/5.mp3"
+  },
+  {
+    "chapter": "state-and-tools",
+    "step": 1,
+    "text": "When state changes, avoid rewriting the system prompt.",
+    "audio": "state-and-tools/1.mp3"
+  },
+  {
+    "chapter": "state-and-tools",
+    "step": 2,
+    "text": "Send updates as messages on the next turn instead.",
+    "audio": "state-and-tools/2.mp3"
+  },
+  {
+    "chapter": "state-and-tools",
+    "step": 3,
+    "text": "Tool-set churn mid-session is another cache killer.",
+    "audio": "state-and-tools/3.mp3"
+  },
+  {
+    "chapter": "state-and-tools",
+    "step": 4,
+    "text": "Plan Mode should be behavior toggles, not tool catalog swaps.",
+    "audio": "state-and-tools/4.mp3"
+  },
+  {
+    "chapter": "state-and-tools",
+    "step": 5,
+    "text": "For huge MCP catalogs, defer-load full schemas behind stable stubs.",
+    "audio": "state-and-tools/5.mp3"
+  },
+  {
+    "chapter": "state-and-tools",
+    "step": 6,
+    "text": "Result: stable prefix with dynamic capabilities.",
+    "audio": "state-and-tools/6.mp3"
+  },
+  {
+    "chapter": "model-routing",
+    "step": 1,
+    "text": "Prompt caches are model-specific.",
+    "audio": "model-routing/1.mp3"
+  },
+  {
+    "chapter": "model-routing",
+    "step": 2,
+    "text": "Late Opus-to-Haiku switching can increase total cost.",
+    "audio": "model-routing/2.mp3"
+  },
+  {
+    "chapter": "model-routing",
+    "step": 3,
+    "text": "A subagent handoff is safer because context is compressed before routing.",
+    "audio": "model-routing/3.mp3"
+  },
+  {
+    "chapter": "model-routing",
+    "step": 4,
+    "text": "Rule of thumb: switch models early, or hand off with compact context.",
+    "audio": "model-routing/4.mp3"
+  },
+  {
+    "chapter": "compaction",
+    "step": 1,
+    "text": "Compaction starts when the context window is near full.",
+    "audio": "compaction/1.mp3"
+  },
+  {
+    "chapter": "compaction",
+    "step": 2,
+    "text": "Naive summarization with a separate prompt and tools loses cache immediately.",
+    "audio": "compaction/2.mp3"
+  },
+  {
+    "chapter": "compaction",
+    "step": 3,
+    "text": "That divergence starts at token one and cost spikes.",
+    "audio": "compaction/3.mp3"
+  },
+  {
+    "chapter": "compaction",
+    "step": 4,
+    "text": "Cache-safe forking reuses the exact parent prefix.",
+    "audio": "compaction/4.mp3"
+  },
+  {
+    "chapter": "compaction",
+    "step": 5,
+    "text": "Reserve a compaction buffer for prompt and output tokens.",
+    "audio": "compaction/5.mp3"
+  },
+  {
+    "chapter": "compaction",
+    "step": 6,
+    "text": "Outcome: only the new tail is uncached, so cost and latency stay controlled.",
+    "audio": "compaction/6.mp3"
+  },
+  {
+    "chapter": "operating-model",
+    "step": 1,
+    "text": "Run prompt caching with five operating rules.",
+    "audio": "operating-model/1.mp3"
+  },
+  {
+    "chapter": "operating-model",
+    "step": 2,
+    "text": "Those rules improve both latency and cost in production.",
+    "audio": "operating-model/2.mp3"
+  },
+  {
+    "chapter": "operating-model",
+    "step": 3,
+    "text": "Start implementation with a concrete checklist.",
+    "audio": "operating-model/3.mp3"
+  },
+  {
+    "chapter": "operating-model",
+    "step": 4,
+    "text": "Final line: design around prefix stability from day one.",
+    "audio": "operating-model/4.mp3"
+  }
+]

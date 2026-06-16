@@ -1,0 +1,13 @@
+.st-title{font-size:70px;margin:70px 0 28px;max-width:1300px}
+.st-callout{padding:28px;font-size:38px;font-family:var(--font-mono);color:var(--accent);max-width:1300px}
+.st-h2{font-size:64px;margin:0 0 24px}
+.st-flow{display:grid;grid-template-columns:1fr 80px 1fr 80px 1fr;gap:12px;align-items:center}
+.st-node{padding:24px;font-size:28px}
+.st-arrow{text-align:center;font-size:48px;color:var(--accent);font-family:var(--font-mono)}
+.st-split{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.st-bad{padding:28px;font-size:32px;border-color:#ff8b8b;color:#ffb1b1}
+.st-tools{display:grid;grid-template-columns:2fr 1fr 1fr;gap:16px}
+.st-tool{padding:28px;font-size:30px;font-family:var(--font-mono)}
+.st-tool.is-accent{color:var(--accent);border-color:var(--accent)}
+.st-load{padding:28px;display:grid;gap:14px;font-size:30px;font-family:var(--font-mono);max-width:1200px}
+.st-quote{margin-top:180px;font-size:58px;max-width:1450px}

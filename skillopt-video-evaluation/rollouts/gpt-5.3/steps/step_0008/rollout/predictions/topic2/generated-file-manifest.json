@@ -1,0 +1,16 @@
+{
+  "generated_project_path": null,
+  "copied_artifacts": [
+    "article.md",
+    "current_skill.md",
+    "source.json",
+    "conversation.json",
+    "target_system_prompt.txt",
+    "target_user_prompt.txt",
+    "evaluator-report.json"
+  ],
+  "referenced_artifacts": [
+    "C:\\Users\\jinjinchen\\.agents\\skills\\web-video-presentation\\README.md"
+  ],
+  "note": "Blocked rollout: source materialization failed due to private auth requirement."
+}

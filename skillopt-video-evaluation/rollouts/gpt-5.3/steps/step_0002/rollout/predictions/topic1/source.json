@@ -1,0 +1,14 @@
+{
+  "id": "topic1",
+  "split": "train",
+  "title_hint": "Prompt caching is everything",
+  "source_type": "public_blog",
+  "access": "public",
+  "language_hint": "en",
+  "target_duration_min": 6,
+  "theme_hint": "blueprint",
+  "url": "https://claude.com/blog/lessons-from-building-claude-code-prompt-caching-is-everything",
+  "rollout_model": "gpt-5.3-codex",
+  "planned_evaluator_model": "gpt-5.5",
+  "materialization_status": "article_materialized_from_public_fetch"
+}

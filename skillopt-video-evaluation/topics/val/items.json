@@ -1,0 +1,18 @@
+[
+  {
+    "id": "topic2",
+    "url": "https://microsoftapc-my.sharepoint.com/:w:/g/personal/jinjinchen_microsoft_com/IQBoW7McxF15R5IcVgB9-gy0AbFcwtY_gNM-bTnaGAYrcfA?e=NPTNfg",
+    "source_type": "sharepoint_word",
+    "language_hint": "unknown",
+    "target_duration_min": 6,
+    "theme_hint": null
+  },
+  {
+    "id": "topic4",
+    "url": "https://github.com/cobusgreyling/loop-engineering",
+    "source_type": "github_repository",
+    "language_hint": "en",
+    "target_duration_min": 6,
+    "theme_hint": "terminal-green"
+  }
+]

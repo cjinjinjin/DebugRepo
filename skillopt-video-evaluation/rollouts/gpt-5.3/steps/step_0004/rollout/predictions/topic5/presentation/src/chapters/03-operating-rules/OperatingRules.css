@@ -1,0 +1,17 @@
+.or-scene { display:flex; flex-direction:column; }
+.or-tree { flex:1; display:grid; grid-template-columns: 1fr auto 1fr; row-gap: 24px; align-content:center; padding: 40px; font-size: 50px; }
+.or-arrow { color: var(--accent); font-family: var(--font-mono); text-align:center; }
+.or-yes, .or-no { border:1px solid var(--rule); padding:12px 24px; }
+.or-yes{ border-color: var(--accent); }
+.or-cases { flex:1; display:grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap:18px; }
+.or-cases .card { padding:28px; display:grid; gap:18px; align-content:center; min-height:340px; }
+.or-cases p { margin:0; font-size:42px; line-height:1.12; }
+.or-cases b { font-family:var(--font-mono); color:var(--accent); font-size:24px; letter-spacing:.15em; }
+.or-sum { flex:1; display:grid; align-content:center; gap:20px; padding:40px; font-size:42px; }
+.or-strike { color:var(--text-faint); text-decoration:line-through; }
+.or-keep { color:var(--text-2); }
+.or-quota { flex:1; display:grid; grid-template-columns: 1fr auto 1fr; gap:24px; align-items:center; }
+.or-ring { width: 420px; height:420px; border-radius:50%; border:2px solid var(--accent); display:grid; place-items:center; justify-self:center; box-shadow: 0 0 30px var(--accent-glow); }
+.or-ring span { font-size:56px; font-family:var(--font-mono); letter-spacing:.08em; }
+.or-plus { color:var(--accent); font-size:90px; }
+.or-yes-block { font-size:52px; line-height:1.15; padding:40px; }

@@ -1,0 +1,12 @@
+.pm-scene { color: var(--text); }
+.pm-layout { margin-top: 44px; display: grid; grid-template-columns: 1.3fr 0.9fr; gap: 28px; height: 820px; }
+.pm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.pm-card { padding: 22px; border: 1px dashed var(--rule); }
+.pm-card h3 { margin: 0 0 8px; font-size: 32px; }
+.pm-card p { margin: 0; color: var(--text-2); font-size: 22px; }
+.pm-card.is-on { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); }
+.pm-focus { padding: 30px; display: grid; align-content: center; gap: 18px; }
+.pm-num { font-size: 170px; color: var(--accent); }
+.pm-focus h2 { margin: 0; font-size: 52px; }
+.pm-focus p { margin: 0; font-size: 28px; color: var(--text-2); }
+

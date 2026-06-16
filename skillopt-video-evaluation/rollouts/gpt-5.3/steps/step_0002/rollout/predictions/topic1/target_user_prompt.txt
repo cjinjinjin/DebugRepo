@@ -1,0 +1,1 @@
+Generate a click-driven 16:9 web video presentation for topic1 (Prompt caching is everything), target duration 6 minutes, blueprint theme, then collect script/outline/presentation/audio/review artifacts.

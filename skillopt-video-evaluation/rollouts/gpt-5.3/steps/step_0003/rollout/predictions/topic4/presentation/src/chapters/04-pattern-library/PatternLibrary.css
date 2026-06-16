@@ -1,0 +1,21 @@
+.pl-scene { color: var(--text); }
+.pl-cards { margin-top: 140px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.pl-pattern { min-height: 240px; display: grid; place-items: center; font-size: 36px; text-align: center; padding: 20px; }
+.pl-cadence { margin-top: 120px; padding: 34px; display: grid; gap: 20px; }
+.pl-cadence div { display: grid; grid-template-columns: 320px 1fr; gap: 14px; align-items: center; }
+.pl-cadence span { font-size: 28px; }
+.pl-cadence em { height: 30px; display: block; border: 1px solid var(--accent); background: var(--accent-soft); }
+.pl-map { position: relative; margin-top: 100px; height: 700px; padding: 20px; }
+.pl-axis-x { position: absolute; bottom: 26px; right: 40px; font-family: var(--font-mono); color: var(--text-mute); }
+.pl-axis-y { position: absolute; top: 50px; left: 20px; transform: rotate(-90deg); transform-origin: left top; font-family: var(--font-mono); color: var(--text-mute); }
+.pl-dot { position: absolute; display: grid; place-items: center; width: 140px; height: 140px; border: 2px solid var(--accent); border-radius: 50%; font-family: var(--font-mono); }
+.pl-dot.low { left: 220px; top: 450px; }
+.pl-dot.mid { left: 700px; top: 300px; }
+.pl-dot.high { left: 1180px; top: 130px; }
+.pl-picker { margin-top: 180px; padding: 34px; display: grid; gap: 18px; font-size: 36px; }
+.pl-phases { margin-top: 220px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.pl-phases .card { min-height: 260px; display: grid; place-items: center; font-size: 42px; }
+.pl-table { margin-top: 70px; width: 100%; border-collapse: collapse; font-size: 26px; }
+.pl-table th, .pl-table td { text-align: left; padding: 16px 18px; border-top: 1px dashed var(--rule); }
+.pl-table th { color: var(--accent); font-family: var(--font-mono); font-size: 16px; text-transform: uppercase; letter-spacing: .14em; }
+

@@ -1,0 +1,16 @@
+.ot-scene { color: var(--text); }
+.ot-console { margin-top: 130px; padding: 24px; display: grid; gap: 12px; font-family: var(--font-mono); }
+.ot-row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px; padding: 14px; border: 1px dashed var(--rule); }
+.ot-row.is-on { border-color: var(--accent); background: var(--accent-soft); }
+.ot-row code { font-size: 21px; color: var(--text-2); }
+.ot-row span { font-size: 24px; color: var(--text); }
+.ot-focus { margin-top: 24px; font-size: 40px; color: var(--accent); font-family: var(--font-display-en); }
+.ot-gain { margin-top: 200px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.ot-gain .card { min-height: 320px; padding: 30px; }
+.ot-gain h3 { margin: 0 0 16px; font-size: 50px; color: var(--accent); }
+.ot-gain p { margin: 0; font-size: 34px; line-height: 1.25; }
+.ot-metric { margin-top: 170px; padding: 24px; display: grid; gap: 14px; }
+.ot-metric div { display: grid; grid-template-columns: 1fr 140px; align-items: center; padding: 12px; border-top: 1px dashed var(--rule); }
+.ot-metric span { font-size: 32px; }
+.ot-metric strong { font-size: 64px; color: var(--accent); text-align: right; }
+

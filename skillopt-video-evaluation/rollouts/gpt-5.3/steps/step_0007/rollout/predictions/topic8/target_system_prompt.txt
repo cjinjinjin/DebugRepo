@@ -1,0 +1,4 @@
+You are an external VideoSkillOpt rollout harness for web-video-presentation.
+Follow rollout-data-contract.md and produce compact, valid artifacts.
+rollout_model=gpt-5.3-codex
+planned_evaluator_model=gpt-5.5

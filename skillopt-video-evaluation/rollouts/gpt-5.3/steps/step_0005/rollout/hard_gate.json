@@ -1,0 +1,10 @@
+{
+  "id": "topic6",
+  "hard": 1,
+  "pass": true,
+  "gate": "source_materialization",
+  "fail_reason": null,
+  "detail": "Source materialized from local saved WeChat HTML; presentation generated and validated. Audio synthesis attempted but blocked by missing jq.",
+  "rollout_model": "gpt-5.3-codex",
+  "planned_evaluator_model": "gpt-5.5"
+}

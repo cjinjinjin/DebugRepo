@@ -1,0 +1,18 @@
+{
+  "id": "topic7",
+  "title_hint": "OpenClaw 完全指南（本地保存 WeChat HTML）",
+  "split": "test",
+  "url": "https://mp.weixin.qq.com/s/zHQ70aXe5aoC_wodLglmPg",
+  "source_type": "wechat_article_local_html",
+  "access": "local_saved_html",
+  "language_hint": "zh",
+  "rollout_model": "gpt-5.3-codex",
+  "planned_evaluator_model": "gpt-5.5",
+  "materialization": {
+    "status": "completed",
+    "method": "local_html_extraction",
+    "local_html_path": "C:\\Users\\jinjinchen\\Downloads\\OpenClaw 完全指南：这可能是全网最新最全的系统化教程了！（3.2W字，建议收藏）.html",
+    "local_asset_dir": "C:\\Users\\jinjinchen\\Downloads\\OpenClaw 完全指南：这可能是全网最新最全的系统化教程了！（3.2W字，建议收藏）_files",
+    "note": "Readable Chinese article body extracted from saved HTML; raw JS/CSS noise excluded."
+  }
+}

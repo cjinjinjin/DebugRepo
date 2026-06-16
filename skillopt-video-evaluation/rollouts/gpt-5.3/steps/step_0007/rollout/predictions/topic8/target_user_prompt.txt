@@ -1,0 +1,4 @@
+Topic: topic8 (垂域大模型 SFT/RAG 调优效率翻倍)
+URL: https://mp.weixin.qq.com/s?__biz=Mzk0MDMwMzQyOA==&mid=2247505383&idx=1&sn=6cb669027c22c2a915bf9e5d216530a3&chksm=c3c9fcef60663034aa9577c8f2faa14366088da40879b8b44806790eb10e86fe506c0cfcd2f3&mpshare=1&scene=1&srcid=0616dMFp5iETqMVg32w4hBP5&sharer_shareinfo=4be05ea5a4cbe4b785e4c6363d2246ec&sharer_shareinfo_first=4be05ea5a4cbe4b785e4c6363d2246ec#rd
+Task: Use local saved WeChat HTML to materialize article.md, generate script.md + outline.md, scaffold full web-video presentation, and run extract/typecheck/build.
+Constraints: auto-accept default human checkpoints, use first suitable theme, keep narrations.ts as source of truth, and record TTS blockage if provider step fails.

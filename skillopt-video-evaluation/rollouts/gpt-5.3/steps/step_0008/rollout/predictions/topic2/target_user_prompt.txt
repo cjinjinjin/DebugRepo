@@ -1,0 +1,1 @@
+Generate a click-driven 16:9 web video presentation for topic2 (SharePoint Word document), target duration 6 minutes, and collect script/outline/presentation/audio/review artifacts. If source cannot be materialized due to private auth requirements, emit a blocked rollout with required evidence files.

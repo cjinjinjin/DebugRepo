@@ -1,0 +1,17 @@
+.cd-scene { color: var(--text); }
+.cd-stack { margin-top: 120px; max-width: 860px; display: grid; gap: 14px; }
+.cd-layer { padding: 24px 30px; font-size: 46px; animation: cd-up .7s both; }
+.cd-memory { margin-top: 170px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.cd-box { padding: 30px; min-height: 330px; }
+.cd-box h3 { margin: 0 0 14px; font-size: 50px; }
+.cd-box p { margin: 0; font-size: 31px; line-height: 1.55; }
+.cd-panel { margin-top: 180px; max-width: 1180px; padding: 32px; display: grid; gap: 12px; }
+.cd-kicker { font-family: var(--font-mono); letter-spacing: .2em; color: var(--accent); text-transform: uppercase; }
+.cd-line { font-size: 36px; display: flex; align-items: center; gap: 14px; }
+.cd-line b { width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: var(--surface); display: grid; place-items: center; font-size: 18px; font-family: var(--font-mono); }
+.cd-fallback { margin-top: 250px; max-width: 1240px; padding: 34px; }
+.cd-params { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.cd-params span { border: 1px solid var(--rule); background: var(--surface-2); padding: 12px; text-align: center; font-family: var(--font-mono); font-size: 25px; }
+.cd-chain { display: grid; grid-template-columns: 1fr 80px 1fr 80px 1fr; align-items: center; text-align: center; font-size: 44px; }
+.cd-chain span { color: var(--accent); font-size: 52px; }
+@keyframes cd-up { from { opacity: 0; transform: translateY(22px);} to { opacity: 1; transform: none; } }

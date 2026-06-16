@@ -1,0 +1,49 @@
+{
+  "generated_project_path": "C:\\Users\\jinjinchen\\OneDrive - Microsoft\\code\\ms-image-quality-filters-aether-module-main\\skillopt-video-evaluation\\rollouts\\gpt-5.3\\steps\\step_0003\\rollout\\predictions\\topic4\\presentation",
+  "copied_artifacts": [
+    "article.md",
+    "script.md",
+    "outline.md",
+    "current_skill.md",
+    "source.json",
+    "conversation.json",
+    "target_system_prompt.txt",
+    "target_user_prompt.txt",
+    "evaluator-report.json"
+  ],
+  "generated_artifacts": [
+    "presentation/package.json",
+    "presentation/audio-segments.json",
+    "presentation/src/registry/chapters.ts",
+    "presentation/src/hooks/useStepper.ts",
+    "presentation/src/chapters/01-shift-to-systems/ShiftToSystems.tsx",
+    "presentation/src/chapters/01-shift-to-systems/ShiftToSystems.css",
+    "presentation/src/chapters/01-shift-to-systems/narrations.ts",
+    "presentation/src/chapters/02-why-now/WhyNow.tsx",
+    "presentation/src/chapters/02-why-now/WhyNow.css",
+    "presentation/src/chapters/02-why-now/narrations.ts",
+    "presentation/src/chapters/03-primitives-and-memory/PrimitivesMemory.tsx",
+    "presentation/src/chapters/03-primitives-and-memory/PrimitivesMemory.css",
+    "presentation/src/chapters/03-primitives-and-memory/narrations.ts",
+    "presentation/src/chapters/04-pattern-library/PatternLibrary.tsx",
+    "presentation/src/chapters/04-pattern-library/PatternLibrary.css",
+    "presentation/src/chapters/04-pattern-library/narrations.ts",
+    "presentation/src/chapters/05-operating-toolchain/OperatingToolchain.tsx",
+    "presentation/src/chapters/05-operating-toolchain/OperatingToolchain.css",
+    "presentation/src/chapters/05-operating-toolchain/narrations.ts",
+    "presentation/src/chapters/06-safety-and-governance/SafetyGovernance.tsx",
+    "presentation/src/chapters/06-safety-and-governance/SafetyGovernance.css",
+    "presentation/src/chapters/06-safety-and-governance/narrations.ts",
+    "presentation/src/chapters/07-adoption-playbook/AdoptionPlaybook.tsx",
+    "presentation/src/chapters/07-adoption-playbook/AdoptionPlaybook.css",
+    "presentation/src/chapters/07-adoption-playbook/narrations.ts",
+    "presentation/dist/index.html"
+  ],
+  "referenced_artifacts": [
+    "presentation/scripts/synthesize-audio.sh",
+    "presentation/scripts/tts-providers/minimax.sh",
+    "presentation/scripts/tts-providers/openai.sh"
+  ],
+  "status": "rollout_completed_presentation_generated",
+  "note": "Full Vite React TS presentation generated for topic4; extract/typecheck/build passed; audio synthesis blocked (jq missing)."
+}

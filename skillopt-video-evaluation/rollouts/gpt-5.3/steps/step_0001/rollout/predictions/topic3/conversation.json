@@ -1,0 +1,34 @@
+[
+  {
+    "role": "system",
+    "content": "External VideoSkillOpt rollout harness. Target rollout model: gpt-5.3-codex. Skill under test: web-video-presentation. Persist generated video artifacts and evaluation evidence using the SkillOpt rollout data contract."
+  },
+  {
+    "role": "user",
+    "content": "Generate a click-driven 16:9 web video presentation for topic3 (TA Decoration Relevance), target duration 7.5 minutes, blueprint theme, then collect script/outline/presentation/audio/review artifacts."
+  },
+  {
+    "type": "tool_call",
+    "cmd": "materialize source to article.md",
+    "obs": "success; source material already exists at decoration-relevance-video/article.md"
+  },
+  {
+    "type": "tool_call",
+    "cmd": "generate script.md and outline.md",
+    "obs": "success; 8 chapters, 47 steps; outline and script saved"
+  },
+  {
+    "type": "tool_call",
+    "cmd": "build presentation and synthesize audio",
+    "obs": "47/47 mp3 files present; typecheck_exit=0; build_exit=0"
+  },
+  {
+    "type": "tool_call",
+    "cmd": "run VideoSkillOpt evaluator",
+    "obs": "hard=0 soft=0.62; fail_reason=pacing_gate_failed; actual duration 703.1s exceeds 450s target by 56.2%; 19 segments >=15s; llm-pipeline chapter 181.6s"
+  },
+  {
+    "role": "system",
+    "content": "[EVALUATION RESULT]\nhard=0\nsoft=0.62\nfail_reason=pacing_gate_failed: actual duration exceeds target by more than 20%\nblocking_issue=target_duration\nrollout_model=gpt-5.3-codex\nplanned_evaluator_model=gpt-5.5"
+  }
+]

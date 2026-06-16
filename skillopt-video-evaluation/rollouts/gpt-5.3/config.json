@@ -1,0 +1,11 @@
+{
+  "run_name": "web-video-presentation-gpt-5.3-external",
+  "target_model": "gpt-5.3-codex",
+  "evaluator_model": "gpt-5.5",
+  "split": "train",
+  "topics": [
+    "topic3"
+  ],
+  "artifact_contract": "skillopt-video-evaluation/rollout-data-contract.md",
+  "created_at": "2026-06-16T16:14:10.6918287+08:00"
+}

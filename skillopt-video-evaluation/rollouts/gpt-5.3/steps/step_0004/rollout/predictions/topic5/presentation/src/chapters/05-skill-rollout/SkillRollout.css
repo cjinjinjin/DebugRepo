@@ -1,0 +1,14 @@
+.sr-scene { display:flex; flex-direction:column; }
+.sr-pain { flex:1; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; align-items:center; }
+.sr-pain .card { min-height:260px; display:grid; place-items:center; font-size:52px; text-align:center; padding:24px; }
+.sr-pipe { flex:1; display:grid; grid-template-columns:1fr auto 1fr auto 1fr; place-items:center; align-content:center; font-size:44px; padding:38px; gap:16px; }
+.sr-pipe span { color:var(--accent); font-size:62px; font-family:var(--font-mono); }
+.sr-img { width: 32%; border:1px solid var(--rule); border-radius: var(--r-card); margin-bottom: 18px; }
+.sr-dual { flex:1; display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.sr-dual .card { padding:28px; }
+.sr-dual p { margin:16px 0 0; font-size:50px; line-height:1.15; }
+.sr-end { flex:1; display:grid; grid-template-columns:1.2fr 1fr; gap:24px; align-items:center; }
+.sr-quote { font-size:66px; line-height:1.1; }
+.sr-next { padding:26px; }
+.sr-next ul { margin:14px 0 0; padding-left: 24px; display:grid; gap:10px; }
+.sr-next li { font-size:34px; color:var(--text-2); }

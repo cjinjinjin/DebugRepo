@@ -1,0 +1,24 @@
+{
+  "id": "topic8",
+  "hard_gate": "pass",
+  "hard": 1,
+  "reason": null,
+  "status": "rollout_completed_presentation_generated",
+  "gates": [
+    {
+      "gate": "source_materialized",
+      "status": "pass",
+      "evidence": "article.md materialized from local saved WeChat HTML"
+    },
+    {
+      "gate": "script_outline_generated",
+      "status": "pass",
+      "evidence": "script.md and outline.md generated in Chinese with chapter-step plan"
+    },
+    {
+      "gate": "presentation_generated",
+      "status": "pass",
+      "evidence": "presentation generated with 5 chapters; extract/typecheck/build passed; audio synthesis attempted and blocked by bash pipefail on Windows"
+    }
+  ]
+}

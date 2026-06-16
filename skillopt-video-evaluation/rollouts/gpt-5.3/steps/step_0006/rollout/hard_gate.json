@@ -1,0 +1,10 @@
+{
+  "id": "topic7",
+  "hard": 0,
+  "pass": false,
+  "gate": "source_materialization",
+  "fail_reason": "source_materialization_blocked",
+  "detail": "Automated source materialization blocked; manual capture required.",
+  "rollout_model": "gpt-5.3-codex",
+  "planned_evaluator_model": "gpt-5.5"
+}

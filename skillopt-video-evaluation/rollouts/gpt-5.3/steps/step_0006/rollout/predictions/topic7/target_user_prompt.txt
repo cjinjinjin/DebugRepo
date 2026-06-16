@@ -1,0 +1,10 @@
+Topic: topic7 (OpenClaw long-form WeChat article, local saved source)
+Source URL: https://mp.weixin.qq.com/s/zHQ70aXe5aoC_wodLglmPg
+Local HTML: C:\Users\jinjinchen\Downloads\OpenClaw 完全指南：这可能是全网最新最全的系统化教程了！（3.2W字，建议收藏）.html
+Local assets: C:\Users\jinjinchen\Downloads\OpenClaw 完全指南：这可能是全网最新最全的系统化教程了！（3.2W字，建议收藏）_files
+Task:
+1) materialize article.md from local HTML (readable Chinese body, no JS/CSS noise)
+2) generate script.md and outline.md using web-video-presentation workflow
+3) scaffold full Vite React TS presentation in this prediction directory
+4) run npm install, npm run extract-narrations, npx tsc --noEmit, npm run build
+5) if TTS provider is unavailable, record explicit note and continue without faking success

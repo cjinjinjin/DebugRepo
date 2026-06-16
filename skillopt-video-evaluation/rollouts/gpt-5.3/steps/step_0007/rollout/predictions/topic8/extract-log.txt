@@ -1,0 +1,6 @@
+
+> presentation@0.0.0 extract-narrations
+> tsx scripts/extract-narrations.ts
+
+✓ extracted 20 segments from 5 chapters
+  → C:\Users\jinjinchen\OneDrive - Microsoft\code\ms-image-quality-filters-aether-module-main\skillopt-video-evaluation\rollouts\gpt-5.3\steps\step_0007\rollout\predictions\topic8\presentation\audio-segments.json

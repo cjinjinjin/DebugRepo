@@ -1,0 +1,49 @@
+{
+  "generated_project_path": "C:\\Users\\jinjinchen\\OneDrive - Microsoft\\code\\ms-image-quality-filters-aether-module-main\\skillopt-video-evaluation\\rollouts\\gpt-5.3\\steps\\step_0004\\rollout\\predictions\\topic5\\presentation",
+  "copied_artifacts": [
+    "article.md",
+    "script.md",
+    "outline.md",
+    "current_skill.md",
+    "source.json",
+    "conversation.json",
+    "target_system_prompt.txt",
+    "target_user_prompt.txt",
+    "evaluator-report.json"
+  ],
+  "generated_artifacts": [
+    "presentation/package.json",
+    "presentation/audio-segments.json",
+    "presentation/src/registry/chapters.ts",
+    "presentation/src/hooks/useStepper.ts",
+    "presentation/src/chapters/01-coldopen/Coldopen.tsx",
+    "presentation/src/chapters/01-coldopen/Coldopen.css",
+    "presentation/src/chapters/01-coldopen/narrations.ts",
+    "presentation/src/chapters/02-prompt-core/PromptCore.tsx",
+    "presentation/src/chapters/02-prompt-core/PromptCore.css",
+    "presentation/src/chapters/02-prompt-core/narrations.ts",
+    "presentation/src/chapters/03-operating-rules/OperatingRules.tsx",
+    "presentation/src/chapters/03-operating-rules/OperatingRules.css",
+    "presentation/src/chapters/03-operating-rules/narrations.ts",
+    "presentation/src/chapters/04-anti-ai-design/AntiAiDesign.tsx",
+    "presentation/src/chapters/04-anti-ai-design/AntiAiDesign.css",
+    "presentation/src/chapters/04-anti-ai-design/narrations.ts",
+    "presentation/src/chapters/05-skill-rollout/SkillRollout.tsx",
+    "presentation/src/chapters/05-skill-rollout/SkillRollout.css",
+    "presentation/src/chapters/05-skill-rollout/narrations.ts",
+    "presentation/public/assets/wechat-01.jpg",
+    "presentation/public/assets/wechat-02.jpg",
+    "presentation/public/assets/wechat-03.jpg",
+    "presentation/dist/index.html"
+  ],
+  "referenced_artifacts": [
+    "presentation/scripts/synthesize-audio.sh",
+    "presentation/scripts/tts-providers/minimax.sh",
+    "presentation/scripts/tts-providers/openai.sh",
+    "typecheck-log.txt",
+    "build-log.txt",
+    "audio-log.txt"
+  ],
+  "status": "rollout_completed_presentation_generated",
+  "note": "Topic5 completed using local WeChat source; extract/typecheck/build passed; audio synthesis blocked by missing jq."
+}

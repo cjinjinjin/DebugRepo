@@ -1,0 +1,29 @@
+{
+  "status": "rollout_completed_presentation_generated",
+  "hard_gate": "pass",
+  "hard": 1,
+  "blocking_issues": [],
+  "checkpoints": {
+    "script_outline": "accepted_existing",
+    "theme": "blueprint_from_theme_hint",
+    "assets": "placeholder_assets_used",
+    "development_mode": "A_default_auto_continue",
+    "audio": {
+      "attempted": true,
+      "status": "blocked",
+      "reason": "jq_missing_for_synthesize_audio",
+      "provider": "minimax_default"
+    }
+  },
+  "scores": {
+    "source_materialization": 5.0,
+    "script_quality": 4.1,
+    "outline_quality": 4.0,
+    "artifact_completeness": 4.9,
+    "engineering": 4.8
+  },
+  "weighted_score": 0.93,
+  "fail_reason": null,
+  "rollout_model": "gpt-5.3-codex",
+  "planned_evaluator_model": "gpt-5.5"
+}

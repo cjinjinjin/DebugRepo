@@ -1,0 +1,16 @@
+.fg-scene{display:flex;flex-direction:column;gap:30px}
+.fg-title{margin:0;max-width:1300px;font-size:112px;line-height:1.02}
+.fg-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:18px 24px;font-family:var(--font-mono);font-size:26px;letter-spacing:.08em;text-transform:uppercase}
+.fg-strip span{padding:18px 20px;border:1px solid var(--rule);border-radius:12px;background:var(--surface)}
+.fg-chart{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:70px;min-height:560px}
+.fg-col{display:grid;place-items:center;gap:14px}
+.fg-col .hero-num{font-size:280px}
+.fg-col p{margin:0;font-size:34px;color:var(--text-2)}
+.fg-divider{width:1px;height:340px;background:var(--rule)}
+.fg-goals{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;flex:1;align-content:center}
+.fg-goal{padding:36px;min-height:320px;display:grid;align-content:center;gap:18px}
+.fg-goal b{font-size:64px;line-height:1}
+.fg-goal span{font-size:30px;color:var(--text-2)}
+.fg-loop{display:flex;align-items:center;justify-content:center;gap:20px;min-height:460px;font-size:56px;font-weight:700}
+.fg-loop div:nth-child(odd){padding:26px 34px;border:1px solid var(--rule);border-radius:16px;background:var(--surface-2)}
+.fg-loop div:nth-child(even){color:var(--accent)}

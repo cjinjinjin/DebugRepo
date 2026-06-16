@@ -1,0 +1,12 @@
+.om-title{font-size:74px;margin:70px 0 24px}
+.om-rules{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.om-rule{padding:18px 22px;font-size:28px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;gap:16px}
+.om-n{font-size:44px;color:var(--accent)}
+.om-h2{font-size:64px;margin:0 0 22px}
+.om-impact{display:grid;gap:14px;max-width:1200px}
+.om-impact .card{padding:20px;display:grid;grid-template-columns:220px 1fr;gap:16px;align-items:center}
+.om-impact b{font-size:30px;font-family:var(--font-mono)}
+.om-impact i{display:block;height:42px;background:var(--accent-soft);border:2px solid var(--accent)}
+.om-check{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.om-item{padding:22px;font-size:30px;font-family:var(--font-mono)}
+.om-close{margin-top:180px;font-size:56px;max-width:1500px}

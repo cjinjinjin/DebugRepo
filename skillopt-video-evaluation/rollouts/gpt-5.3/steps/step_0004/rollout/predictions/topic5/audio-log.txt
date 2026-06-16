@@ -1,0 +1,6 @@
+
+> presentation@0.0.0 synthesize-audio
+> bash scripts/synthesize-audio.sh
+
+✗ jq is required to read audio-segments.json
+  Install: brew install jq   (or apt-get install jq, etc.)

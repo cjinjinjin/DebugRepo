@@ -1,0 +1,20 @@
+{
+  "id": "topic8",
+  "title_hint": "垂域大模型 SFT/RAG 调优效率翻倍",
+  "split": "test",
+  "url": "https://mp.weixin.qq.com/s?__biz=Mzk0MDMwMzQyOA==&mid=2247505383&idx=1&sn=6cb669027c22c2a915bf9e5d216530a3&chksm=c3c9fcef60663034aa9577c8f2faa14366088da40879b8b44806790eb10e86fe506c0cfcd2f3&mpshare=1&scene=1&srcid=0616dMFp5iETqMVg32w4hBP5&sharer_shareinfo=4be05ea5a4cbe4b785e4c6363d2246ec&sharer_shareinfo_first=4be05ea5a4cbe4b785e4c6363d2246ec#rd",
+  "source_type": "wechat_article_local_html",
+  "access": "local_saved_html",
+  "language_hint": "zh",
+  "rollout_model": "gpt-5.3-codex",
+  "planned_evaluator_model": "gpt-5.5",
+  "materialization": {
+    "status": "materialized",
+    "method": "local_saved_wechat_html_parse_js_content",
+    "source_file": "C:\\Users\\jinjinchen\\Downloads\\垂域大模型 SFT_RAG 调优效率翻倍！一键生成测试集 + 自动化评估实践指南！.html",
+    "source_assets_dir": "C:\\Users\\jinjinchen\\Downloads\\垂域大模型 SFT_RAG 调优效率翻倍！一键生成测试集 + 自动化评估实践指南！_files",
+    "hard": 1,
+    "soft": 0.93,
+    "note": "Extracted readable Chinese article from js_content and removed raw JS/CSS noise."
+  }
+}

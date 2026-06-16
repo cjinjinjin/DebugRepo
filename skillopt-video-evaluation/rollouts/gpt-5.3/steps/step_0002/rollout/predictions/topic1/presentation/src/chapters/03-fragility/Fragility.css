@@ -1,0 +1,14 @@
+.fg-title{font-size:78px;margin:70px 0 26px}
+.fg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.fg-box{padding:42px;font-size:42px;font-family:var(--font-mono);text-transform:uppercase;color:var(--accent)}
+.fg-h2{font-size:66px;margin:0 0 24px}
+.fg-code{padding:28px;font-family:var(--font-mono);font-size:30px;line-height:1.45;max-width:1100px}
+.fg-code pre{margin:0;white-space:pre-wrap}
+.fg-bad{margin-top:20px;font-size:28px;color:#ffb1b1;font-family:var(--font-mono)}
+.fg-diff{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.fg-col{padding:28px;font-size:30px;display:grid;gap:18px}
+.fg-col b{font-size:52px;color:var(--accent)}
+.fg-col p{margin:0}
+.fg-schema{padding:26px;display:grid;gap:14px;font-family:var(--font-mono);font-size:34px;max-width:1100px}
+.fg-checks{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:16px}
+.fg-check{padding:22px;font-size:28px;font-family:var(--font-mono)}

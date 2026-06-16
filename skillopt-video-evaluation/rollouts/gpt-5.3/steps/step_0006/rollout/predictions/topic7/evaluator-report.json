@@ -1,0 +1,25 @@
+{
+  "hard_gate": "fail",
+  "blocking_issues": [
+    {
+      "gate": "source_materialization",
+      "severity": "blocking",
+      "evidence": "WeChat anti-automation/captcha redirect prevented reliable source extraction"
+    }
+  ],
+  "scores": {
+    "content_fidelity": 0,
+    "pacing": 0,
+    "visual_semantics": 0,
+    "non_ppt_feel": 0,
+    "audio_sync": 0,
+    "theme_fit": 0,
+    "engineering": 0
+  },
+  "weighted_score": 0,
+  "hard": 0,
+  "soft": 0,
+  "fail_reason": "source_materialization_blocked",
+  "rollout_model": "gpt-5.3-codex",
+  "planned_evaluator_model": "gpt-5.5"
+}

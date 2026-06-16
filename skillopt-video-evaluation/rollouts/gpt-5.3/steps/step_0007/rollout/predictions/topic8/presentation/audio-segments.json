@@ -1,0 +1,122 @@
+[
+  {
+    "chapter": "foundation-gap",
+    "step": 1,
+    "text": "大模型做 SFT 或 RAG，真正难的从来不是训练按钮，而是你怎么证明它真的变好了。",
+    "audio": "foundation-gap/1.mp3"
+  },
+  {
+    "chapter": "foundation-gap",
+    "step": 2,
+    "text": "MMLU、ARC 这些通用榜单分再高，一到法律、医疗、设备维修这种垂域场景，参考价值都会急剧下降。",
+    "audio": "foundation-gap/2.mp3"
+  },
+  {
+    "chapter": "foundation-gap",
+    "step": 3,
+    "text": "所以垂域评估必须直面三个工程目标：模型选型、SFT 微调验证、RAG 检索与幻觉甩锅。",
+    "audio": "foundation-gap/3.mp3"
+  },
+  {
+    "chapter": "foundation-gap",
+    "step": 4,
+    "text": "没有评估闭环就没有稳定迭代，测试集、自动化评估和人工盲测必须连成一条证据链。",
+    "audio": "foundation-gap/4.mp3"
+  },
+  {
+    "chapter": "methods-ladder",
+    "step": 1,
+    "text": "第一种方法是确定性评估，判断题、单选题、多选题可以用规则直接判分，成本最低但覆盖面有限。",
+    "audio": "methods-ladder/1.mp3"
+  },
+  {
+    "chapter": "methods-ladder",
+    "step": 2,
+    "text": "第二种是 BLEU、ROUGE 这类文本相似度，在 LLM 时代会误杀大量意思对但表达不同的好答案。",
+    "audio": "methods-ladder/2.mp3"
+  },
+  {
+    "chapter": "methods-ladder",
+    "step": 3,
+    "text": "第三种是 LLM as a Judge，用更强模型做裁判，按明确评分细则评估开放题和简答题。",
+    "audio": "methods-ladder/3.mp3"
+  },
+  {
+    "chapter": "methods-ladder",
+    "step": 4,
+    "text": "评估成败不在名词，而在评分锚点是否可执行、可复用、可解释。",
+    "audio": "methods-ladder/4.mp3"
+  },
+  {
+    "chapter": "dataset-engine",
+    "step": 1,
+    "text": "真正的痛点有三个：测试集难构造、效果难量化、自动化规模和人工精准长期割裂。",
+    "audio": "dataset-engine/1.mp3"
+  },
+  {
+    "chapter": "dataset-engine",
+    "step": 2,
+    "text": "Easy Dataset 1.7 的思路是把评估流程串成一条线：先造测试集，再自动判卷，最后人工盲测收口。",
+    "audio": "dataset-engine/2.mp3"
+  },
+  {
+    "chapter": "dataset-engine",
+    "step": 3,
+    "text": "在测试集构建阶段，它支持从 PDF 或 Docx 文献切块后自动生成题目，也支持从已有训练集转评估变体。",
+    "audio": "dataset-engine/3.mp3"
+  },
+  {
+    "chapter": "dataset-engine",
+    "step": 4,
+    "text": "并且它覆盖判断、单选、多选、简答、开放五类题型，让知识点、推理和表达都能被测到。",
+    "audio": "dataset-engine/4.mp3"
+  },
+  {
+    "chapter": "scoring-pipeline",
+    "step": 1,
+    "text": "评分环节分两路：客观题直接规则比对，主观题交给教师模型按 rubric 打分并解释理由。",
+    "audio": "scoring-pipeline/1.mp3"
+  },
+  {
+    "chapter": "scoring-pipeline",
+    "step": 2,
+    "text": "这里的关键不是跑一次，而是固定教师模型和评分配置，保证多轮迭代可横向比较。",
+    "audio": "scoring-pipeline/2.mp3"
+  },
+  {
+    "chapter": "scoring-pipeline",
+    "step": 3,
+    "text": "工程上推荐先用 20 题小样本跑通，再扩到大规模任务，避免大批量低质量评估浪费成本。",
+    "audio": "scoring-pipeline/3.mp3"
+  },
+  {
+    "chapter": "scoring-pipeline",
+    "step": 4,
+    "text": "最终要看的是分维度 dashboard：准确率、幻觉率和主观质量一起看，才能定位真正瓶颈。",
+    "audio": "scoring-pipeline/4.mp3"
+  },
+  {
+    "chapter": "blindtest-loop",
+    "step": 1,
+    "text": "当两个模型分数咬得很紧，就要进入人工盲测：隐藏模型名，只看回答质量做 Side-by-Side 选择。",
+    "audio": "blindtest-loop/1.mp3"
+  },
+  {
+    "chapter": "blindtest-loop",
+    "step": 2,
+    "text": "盲测界面通常采用左右对照与流式输出，标注者只需判断左好、右好或平局。",
+    "audio": "blindtest-loop/2.mp3"
+  },
+  {
+    "chapter": "blindtest-loop",
+    "step": 3,
+    "text": "如果业务有特殊口径，还可以自定义评估提示词，覆盖题目生成、作答与教师评分全链路。",
+    "audio": "blindtest-loop/3.mp3"
+  },
+  {
+    "chapter": "blindtest-loop",
+    "step": 4,
+    "text": "到这一步，你就拿到了一个可持续的闭环：测试集构建、自动化评估、人工验证、Prompt 回写优化。",
+    "audio": "blindtest-loop/4.mp3"
+  }
+]

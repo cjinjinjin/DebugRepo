@@ -1,0 +1,1 @@
+{"id": "topic6", "hard": 1, "soft": 0.9, "fail_reason": null, "task_type": "web_video_presentation", "task_description": "WeChat article 2247505867 local saved HTML to full web-video presentation", "rollout_model": "gpt-5.3-codex", "planned_evaluator_model": "gpt-5.5", "n_turns": 8}

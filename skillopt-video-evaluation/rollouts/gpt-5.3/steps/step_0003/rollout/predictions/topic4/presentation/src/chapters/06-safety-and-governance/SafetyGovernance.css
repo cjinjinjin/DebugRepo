@@ -1,0 +1,14 @@
+.sg-scene { color: var(--text); }
+.sg-grid { margin-top: 140px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.sg-grid .card { min-height: 220px; display: grid; place-items: center; font-size: 38px; text-align: center; }
+.sg-collision { margin-top: 190px; padding: 22px; display: grid; gap: 12px; }
+.sg-lane { min-height: 130px; display: grid; place-items: center; font-size: 36px; border: 1px dashed var(--rule); }
+.sg-lane.a { background: rgba(77, 210, 255, 0.08); }
+.sg-lane.b { background: rgba(77, 210, 255, 0.12); }
+.sg-lane.c { border-color: var(--accent); color: var(--accent); }
+.sg-lock { margin-top: 200px; padding: 24px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.sg-lock div { min-height: 220px; display: grid; place-items: center; text-align: center; border: 1px dashed var(--rule); font-size: 32px; }
+.sg-branch { margin-top: 230px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.sg-branch .card { min-height: 250px; display: grid; place-items: center; text-align: center; font-size: 36px; padding: 20px; }
+.sg-close { justify-content: center; }
+

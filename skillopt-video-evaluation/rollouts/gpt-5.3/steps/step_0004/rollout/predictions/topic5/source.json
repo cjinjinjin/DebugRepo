@@ -1,0 +1,18 @@
+{
+  "id": "topic5",
+  "title_hint": "WeChat article 2247505820",
+  "split": "train",
+  "url": "https://mp.weixin.qq.com/s?__biz=Mzk0MDMwMzQyOA==&mid=2247505820&idx=1&sn=bab9af17e6dcdfb263f2634c8c211921&chksm=c3f08350fa849d15315e2957da6252472ed4a685759be1a6b2accba7b2b6f96d887990c0367a&mpshare=1&scene=1&srcid=0616Y29G2Vnev8DO7DoawKMf&sharer_shareinfo=7cb84a7f4756fce888246db9bbe5fc47&sharer_shareinfo_first=7cb84a7f4756fce888246db9bbe5fc47#rd",
+  "source_type": "wechat_article",
+  "access": "local_saved_html",
+  "language_hint": "zh",
+  "rollout_model": "gpt-5.3-codex",
+  "planned_evaluator_model": "gpt-5.5",
+  "materialization": {
+    "status": "completed_from_local_html",
+    "fail_reason": null,
+    "hard": 1,
+    "soft": 0.91,
+    "note": "Materialized from local WeChat HTML and local asset folder."
+  }
+}

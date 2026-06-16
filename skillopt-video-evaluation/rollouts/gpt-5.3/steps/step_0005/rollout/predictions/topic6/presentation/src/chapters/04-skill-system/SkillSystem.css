@@ -1,0 +1,19 @@
+.t6s-scene { color: var(--text); }
+.t6s-kicker { font-family: var(--font-mono); letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-mute); margin-bottom: 16px; }
+.t6s-contrast { margin-top: 140px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.t6s-cell { padding: 48px; min-height: 360px; }
+.t6s-cell h3 { margin: 0; font-size: 62px; }
+.t6s-cell p { margin: 16px 0 0; font-size: 34px; color: var(--text-2); }
+.t6s-cell-accent { border-color: var(--accent); }
+.t6s-flow { margin-top: 130px; display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+.t6s-flow span { border: 1px solid var(--rule); padding: 24px 10px; text-align: center; font-size: 24px; background: var(--surface-2); position: relative; }
+.t6s-flow span:not(:last-child)::after { content: '→'; position: absolute; right: -12px; top: 50%; transform: translateY(-50%); color: var(--accent); }
+.t6s-stats { margin-top: 170px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.t6s-stats div { border: 1px solid var(--rule); background: var(--surface-2); text-align: center; padding: 40px 20px; }
+.t6s-stats b { font-size: 128px; display: block; }
+.t6s-stats small { font-size: 30px; color: var(--text-2); }
+.t6s-modes { margin-top: 110px; display: grid; gap: 16px; }
+.t6s-mode { padding: 22px 28px; }
+.t6s-mode h4 { margin: 0; font-size: 36px; color: var(--accent); }
+.t6s-mode p { margin: 8px 0 0; font-size: 29px; }
+

@@ -1,0 +1,1 @@
+Complete topic5 from local saved WeChat HTML and assets. Use web-video-presentation methodology with auto-default checkpoints: accept script/outline, choose first recommended theme, use available local assets/placeholders, generate full Vite React TS presentation, run extract/typecheck/build, and attempt audio synthesis; if blocked, record fail reason without stopping.

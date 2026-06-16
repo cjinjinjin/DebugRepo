@@ -1,0 +1,14 @@
+.t6a-scene { color: var(--text); }
+.t6a-kicker { font-family: var(--font-mono); letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-mute); margin-bottom: 16px; }
+.t6a-matrix { margin-top: 140px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.t6a-item { padding: 32px 24px; min-height: 280px; }
+.t6a-item b { font-size: 42px; display: block; margin-bottom: 10px; }
+.t6a-item p { margin: 0; font-size: 30px; color: var(--text-2); }
+.t6a-terminal { margin-top: 180px; padding: 28px; }
+.t6a-terminal pre { margin: 0; font-size: 38px; line-height: 1.6; color: var(--accent); font-family: var(--font-mono); }
+.t6a-chain { margin-top: 180px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.t6a-chain span { border: 1px solid var(--rule); padding: 34px 12px; text-align: center; font-size: 29px; background: var(--surface-2); position: relative; }
+.t6a-chain span:not(:last-child)::after { content: '→'; position: absolute; right: -12px; top: 50%; transform: translateY(-50%); color: var(--accent); }
+.t6a-title { margin: 96px 0 24px; font-size: 92px; line-height: 1.06; }
+.t6a-list { margin: 0; padding-left: 34px; display: grid; gap: 16px; font-size: 40px; line-height: 1.25; }
+

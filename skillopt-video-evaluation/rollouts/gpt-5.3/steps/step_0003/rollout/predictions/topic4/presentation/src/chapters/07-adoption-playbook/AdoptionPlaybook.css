@@ -1,0 +1,14 @@
+.ap-scene { color: var(--text); }
+.ap-stage { margin-top: 220px; padding: 34px; min-height: 320px; }
+.ap-stage h2 { margin: 0 0 12px; font-size: 64px; }
+.ap-stage p { margin: 0; font-size: 34px; color: var(--text-2); }
+.ap-metrics { margin-top: 180px; padding: 26px; display: grid; gap: 16px; }
+.ap-metrics div { display: grid; grid-template-columns: 1fr 90px; align-items: center; border-top: 1px dashed var(--rule); padding-top: 12px; }
+.ap-metrics span { font-size: 42px; }
+.ap-metrics em { font-style: normal; font-size: 58px; color: var(--accent); text-align: right; }
+.ap-levels { margin-top: 220px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.ap-levels .card { min-height: 270px; display: grid; place-items: center; text-align: center; font-size: 52px; line-height: 1.06; }
+.ap-close { justify-content: center; align-items: center; text-align: center; gap: 20px; }
+.ap-num { font-size: 220px; color: var(--accent); }
+.ap-close h2 { margin: 0; font-size: 54px; max-width: 1200px; }
+

@@ -1,0 +1,51 @@
+{
+  "generated_project_path": "C:\\Users\\jinjinchen\\OneDrive - Microsoft\\code\\ms-image-quality-filters-aether-module-main\\skillopt-video-evaluation\\rollouts\\gpt-5.3\\steps\\step_0005\\rollout\\predictions\\topic6\\presentation",
+  "copied_artifacts": [
+    "article.md",
+    "script.md",
+    "outline.md",
+    "current_skill.md",
+    "source.json",
+    "conversation.json",
+    "target_system_prompt.txt",
+    "target_user_prompt.txt",
+    "evaluator-report.json"
+  ],
+  "generated_artifacts": [
+    "presentation/package.json",
+    "presentation/audio-segments.json",
+    "presentation/src/registry/chapters.ts",
+    "presentation/src/hooks/useStepper.ts",
+    "presentation/src/chapters/01-coldopen-strength/Coldopen.tsx",
+    "presentation/src/chapters/01-coldopen-strength/Coldopen.css",
+    "presentation/src/chapters/01-coldopen-strength/narrations.ts",
+    "presentation/src/chapters/02-access-routes/AccessRoutes.tsx",
+    "presentation/src/chapters/02-access-routes/AccessRoutes.css",
+    "presentation/src/chapters/02-access-routes/narrations.ts",
+    "presentation/src/chapters/03-case-playbook/CasePlaybook.tsx",
+    "presentation/src/chapters/03-case-playbook/CasePlaybook.css",
+    "presentation/src/chapters/03-case-playbook/narrations.ts",
+    "presentation/src/chapters/04-skill-system/SkillSystem.tsx",
+    "presentation/src/chapters/04-skill-system/SkillSystem.css",
+    "presentation/src/chapters/04-skill-system/narrations.ts",
+    "presentation/src/chapters/05-rollout-next/RolloutNext.tsx",
+    "presentation/src/chapters/05-rollout-next/RolloutNext.css",
+    "presentation/src/chapters/05-rollout-next/narrations.ts",
+    "presentation/public/assets/wechat-01.jpg",
+    "presentation/public/assets/wechat-02.png",
+    "presentation/public/assets/wechat-03.webp",
+    "presentation/public/assets/wechat-04.webp",
+    "presentation/public/assets/wechat-05.png",
+    "presentation/dist/index.html"
+  ],
+  "referenced_artifacts": [
+    "typecheck-log.txt",
+    "build-log.txt",
+    "audio-log.txt",
+    "presentation/scripts/synthesize-audio.sh",
+    "presentation/scripts/tts-providers/minimax.sh",
+    "presentation/scripts/tts-providers/openai.sh"
+  ],
+  "status": "rollout_completed_presentation_generated",
+  "note": "Topic6 completed using local WeChat source; install/extract/typecheck/build passed; audio synthesis blocked by missing jq."
+}

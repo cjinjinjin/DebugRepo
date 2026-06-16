@@ -1,0 +1,47 @@
+{
+  "generated_project_path": "C:\\Users\\jinjinchen\\OneDrive - Microsoft\\code\\ms-image-quality-filters-aether-module-main\\skillopt-video-evaluation\\rollouts\\gpt-5.3\\steps\\step_0007\\rollout\\predictions\\topic8\\presentation",
+  "copied_artifacts": [
+    "article.md",
+    "script.md",
+    "outline.md",
+    "current_skill.md",
+    "source.json",
+    "conversation.json",
+    "target_system_prompt.txt",
+    "target_user_prompt.txt",
+    "evaluator-report.json"
+  ],
+  "generated_artifacts": [
+    "presentation/package.json",
+    "presentation/audio-segments.json",
+    "presentation/src/registry/chapters.ts",
+    "presentation/src/hooks/useStepper.ts",
+    "presentation/src/chapters/01-foundation-gap/FoundationGap.tsx",
+    "presentation/src/chapters/01-foundation-gap/FoundationGap.css",
+    "presentation/src/chapters/01-foundation-gap/narrations.ts",
+    "presentation/src/chapters/02-methods-ladder/MethodsLadder.tsx",
+    "presentation/src/chapters/02-methods-ladder/MethodsLadder.css",
+    "presentation/src/chapters/02-methods-ladder/narrations.ts",
+    "presentation/src/chapters/03-dataset-engine/DatasetEngine.tsx",
+    "presentation/src/chapters/03-dataset-engine/DatasetEngine.css",
+    "presentation/src/chapters/03-dataset-engine/narrations.ts",
+    "presentation/src/chapters/04-scoring-pipeline/ScoringPipeline.tsx",
+    "presentation/src/chapters/04-scoring-pipeline/ScoringPipeline.css",
+    "presentation/src/chapters/04-scoring-pipeline/narrations.ts",
+    "presentation/src/chapters/05-blindtest-loop/BlindtestLoop.tsx",
+    "presentation/src/chapters/05-blindtest-loop/BlindtestLoop.css",
+    "presentation/src/chapters/05-blindtest-loop/narrations.ts",
+    "presentation/dist/index.html"
+  ],
+  "referenced_artifacts": [
+    "presentation/scripts/synthesize-audio.sh",
+    "presentation/scripts/tts-providers/minimax.sh",
+    "presentation/scripts/tts-providers/openai.sh",
+    "extract-log.txt",
+    "typecheck-log.txt",
+    "build-log.txt",
+    "audio-log.txt"
+  ],
+  "status": "rollout_completed_presentation_generated",
+  "note": "Topic8 completed using local WeChat source; extract/typecheck/build passed; audio synthesis blocked by bash pipefail incompatibility on Windows."
+}

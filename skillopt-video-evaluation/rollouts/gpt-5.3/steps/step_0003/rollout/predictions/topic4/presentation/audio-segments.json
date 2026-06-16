@@ -1,0 +1,212 @@
+[
+  {
+    "chapter": "shift-to-systems",
+    "step": 1,
+    "text": "Old mode: a human writes every single prompt by hand.",
+    "audio": "shift-to-systems/1.mp3"
+  },
+  {
+    "chapter": "shift-to-systems",
+    "step": 2,
+    "text": "New mode: the human designs a loop architecture that prompts agents repeatedly.",
+    "audio": "shift-to-systems/2.mp3"
+  },
+  {
+    "chapter": "shift-to-systems",
+    "step": 3,
+    "text": "A loop is a recursive goal with cadence, verification, and memory.",
+    "audio": "shift-to-systems/3.mp3"
+  },
+  {
+    "chapter": "shift-to-systems",
+    "step": 4,
+    "text": "Execution cycles through iterate, verify, and handoff when needed.",
+    "audio": "shift-to-systems/4.mp3"
+  },
+  {
+    "chapter": "shift-to-systems",
+    "step": 5,
+    "text": "The core shift is this: design the system that prompts your agents.",
+    "audio": "shift-to-systems/5.mp3"
+  },
+  {
+    "chapter": "why-now",
+    "step": 1,
+    "text": "Voices across the ecosystem now say loops are replacing ad-hoc prompting.",
+    "audio": "why-now/1.mp3"
+  },
+  {
+    "chapter": "why-now",
+    "step": 2,
+    "text": "This operating model is built for Grok, Claude Code, Codex, and Cursor workflows.",
+    "audio": "why-now/2.mp3"
+  },
+  {
+    "chapter": "why-now",
+    "step": 3,
+    "text": "The leverage point shifted from prompt craft to control-system design over time.",
+    "audio": "why-now/3.mp3"
+  },
+  {
+    "chapter": "why-now",
+    "step": 4,
+    "text": "With urgency established, we can now break down the architecture building blocks.",
+    "audio": "why-now/4.mp3"
+  },
+  {
+    "chapter": "primitives-and-memory",
+    "step": 1,
+    "text": "Scheduling sets loop cadence for discovery and triage.",
+    "audio": "primitives-and-memory/1.mp3"
+  },
+  {
+    "chapter": "primitives-and-memory",
+    "step": 2,
+    "text": "Worktrees provide safe parallel execution for concurrent changes.",
+    "audio": "primitives-and-memory/2.mp3"
+  },
+  {
+    "chapter": "primitives-and-memory",
+    "step": 3,
+    "text": "Skills preserve reusable project knowledge across sessions.",
+    "audio": "primitives-and-memory/3.mp3"
+  },
+  {
+    "chapter": "primitives-and-memory",
+    "step": 4,
+    "text": "Connectors and plugins extend loops into real tools and systems.",
+    "audio": "primitives-and-memory/4.mp3"
+  },
+  {
+    "chapter": "primitives-and-memory",
+    "step": 5,
+    "text": "Sub-agents split maker and checker responsibilities.",
+    "audio": "primitives-and-memory/5.mp3"
+  },
+  {
+    "chapter": "primitives-and-memory",
+    "step": 6,
+    "text": "Memory and state are the durable backbone across every run.",
+    "audio": "primitives-and-memory/6.mp3"
+  },
+  {
+    "chapter": "pattern-library",
+    "step": 1,
+    "text": "The pattern catalog turns loop engineering into reusable execution recipes.",
+    "audio": "pattern-library/1.mp3"
+  },
+  {
+    "chapter": "pattern-library",
+    "step": 2,
+    "text": "Cadence differs: some loops run daily, others every few minutes.",
+    "audio": "pattern-library/2.mp3"
+  },
+  {
+    "chapter": "pattern-library",
+    "step": 3,
+    "text": "Risk and cost profiles vary sharply across pattern types.",
+    "audio": "pattern-library/3.mp3"
+  },
+  {
+    "chapter": "pattern-library",
+    "step": 4,
+    "text": "Pattern picker helps teams choose by constraints, not hype.",
+    "audio": "pattern-library/4.mp3"
+  },
+  {
+    "chapter": "pattern-library",
+    "step": 5,
+    "text": "Rollout is phased from report-only toward higher autonomy.",
+    "audio": "pattern-library/5.mp3"
+  },
+  {
+    "chapter": "pattern-library",
+    "step": 6,
+    "text": "Pattern choice is a governance decision with explicit trade-offs.",
+    "audio": "pattern-library/6.mp3"
+  },
+  {
+    "chapter": "operating-toolchain",
+    "step": 1,
+    "text": "Loop-init scaffolds a starter loop from a chosen pattern and tool.",
+    "audio": "operating-toolchain/1.mp3"
+  },
+  {
+    "chapter": "operating-toolchain",
+    "step": 2,
+    "text": "Loop-cost estimates expected token spend before rollout.",
+    "audio": "operating-toolchain/2.mp3"
+  },
+  {
+    "chapter": "operating-toolchain",
+    "step": 3,
+    "text": "Loop-audit scores readiness and flags missing controls.",
+    "audio": "operating-toolchain/3.mp3"
+  },
+  {
+    "chapter": "operating-toolchain",
+    "step": 4,
+    "text": "Before-and-after demo shows maturity from empty state to L1 and L2.",
+    "audio": "operating-toolchain/4.mp3"
+  },
+  {
+    "chapter": "operating-toolchain",
+    "step": 5,
+    "text": "Operational governance becomes measurable, reviewable engineering work.",
+    "audio": "operating-toolchain/5.mp3"
+  },
+  {
+    "chapter": "safety-and-governance",
+    "step": 1,
+    "text": "Failure modes and anti-patterns define what breaks first in unattended loops.",
+    "audio": "safety-and-governance/1.mp3"
+  },
+  {
+    "chapter": "safety-and-governance",
+    "step": 2,
+    "text": "Multiple loops can collide without coordination and shared state discipline.",
+    "audio": "safety-and-governance/2.mp3"
+  },
+  {
+    "chapter": "safety-and-governance",
+    "step": 3,
+    "text": "Security posture must constrain connector scope and unattended execution risk.",
+    "audio": "safety-and-governance/3.mp3"
+  },
+  {
+    "chapter": "safety-and-governance",
+    "step": 4,
+    "text": "Human-gate branches decide whether to execute directly or escalate with context.",
+    "audio": "safety-and-governance/4.mp3"
+  },
+  {
+    "chapter": "safety-and-governance",
+    "step": 5,
+    "text": "Automate execution aggressively, but never automate accountability.",
+    "audio": "safety-and-governance/5.mp3"
+  },
+  {
+    "chapter": "adoption-playbook",
+    "step": 1,
+    "text": "Start narrow with one loop and one bounded objective.",
+    "audio": "adoption-playbook/1.mp3"
+  },
+  {
+    "chapter": "adoption-playbook",
+    "step": 2,
+    "text": "Track outcomes, incidents, and operating cost over time.",
+    "audio": "adoption-playbook/2.mp3"
+  },
+  {
+    "chapter": "adoption-playbook",
+    "step": 3,
+    "text": "Progress from L1 report-only to L2 assisted fixes and then selective L3.",
+    "audio": "adoption-playbook/3.mp3"
+  },
+  {
+    "chapter": "adoption-playbook",
+    "step": 4,
+    "text": "Loop engineering delivers long-term durability through iterative systems design.",
+    "audio": "adoption-playbook/4.mp3"
+  }
+]

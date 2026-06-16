@@ -1,0 +1,15 @@
+.wn-scene { color: var(--text); }
+.wn-quotes { margin-top: 90px; display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.wn-quote { padding: 30px; }
+.wn-quote h3 { margin: 0 0 14px; font-size: 26px; color: var(--accent); font-family: var(--font-mono); }
+.wn-quote p { margin: 0; font-size: 40px; line-height: 1.2; }
+.wn-tool-grid { margin-top: 150px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+.wn-tool-grid .card { min-height: 220px; display: grid; place-items: center; font-size: 42px; font-family: var(--font-display-en); }
+.wn-bars { margin-top: 150px; padding: 34px; display: grid; gap: 22px; }
+.wn-bars div { display: grid; grid-template-columns: 320px 1fr; align-items: center; gap: 14px; }
+.wn-bars span { font-size: 30px; }
+.wn-bars em { height: 34px; background: linear-gradient(90deg, var(--accent-soft), var(--accent)); display: block; border: 1px solid var(--accent); }
+.wn-close { justify-content: center; align-items: center; gap: 20px; text-align: center; }
+.wn-num { font-size: 220px; color: var(--accent); }
+.wn-close p { margin: 0; font-size: 44px; }
+

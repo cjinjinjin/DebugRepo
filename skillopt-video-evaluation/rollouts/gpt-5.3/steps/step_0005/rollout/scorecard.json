@@ -1,0 +1,18 @@
+{
+  "id": "topic6",
+  "hard": 1,
+  "soft": 0.9,
+  "weighted_score": 0.9,
+  "dimensions": {
+    "content_fidelity": 0.9,
+    "pacing": 0.89,
+    "visual_semantics": 0.9,
+    "non_ppt_feel": 0.88,
+    "audio_sync": 0.0,
+    "theme_fit": 0.9,
+    "engineering": 0.93
+  },
+  "fail_reason": null,
+  "rollout_model": "gpt-5.3-codex",
+  "planned_evaluator_model": "gpt-5.5"
+}

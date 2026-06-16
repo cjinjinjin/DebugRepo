@@ -1,0 +1,17 @@
+{
+  "id": "topic4",
+  "hard": 1,
+  "soft": 0.93,
+  "status": "rollout_completed_presentation_generated",
+  "fail_reason": null,
+  "rollout_model": "gpt-5.3-codex",
+  "planned_evaluator_model": "gpt-5.5",
+  "scores": {
+    "source_materialization": 5.0,
+    "script_quality": 4.1,
+    "outline_quality": 4.0,
+    "artifact_completeness": 4.9,
+    "engineering": 4.8
+  },
+  "weighted_score": 0.93
+}

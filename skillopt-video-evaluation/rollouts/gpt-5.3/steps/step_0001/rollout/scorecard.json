@@ -1,0 +1,28 @@
+{
+  "hard_gate": "fail",
+  "blocking_issues": [
+    {
+      "gate": "target_duration",
+      "severity": "blocking",
+      "evidence": "target=450s actual=703.1s deviation=56.2%"
+    }
+  ],
+  "scores": {
+    "content_fidelity": 4.5,
+    "pacing": 2.0,
+    "visual_semantics": 4.0,
+    "non_ppt_feel": 4.0,
+    "audio_sync": 3.0,
+    "theme_fit": 4.2,
+    "engineering": 5.0
+  },
+  "weighted_score": 0.62,
+  "fail_reason": "pacing_gate_failed: actual duration exceeds target by more than 20%",
+  "rollout_model": "gpt-5.3-codex",
+  "planned_evaluator_model": "gpt-5.5",
+  "notes": [
+    "Engineering and visual baseline are strong.",
+    "Review protocol under-penalized pacing.",
+    "The first skill edit should strengthen pacing gate and review blocking rules."
+  ]
+}

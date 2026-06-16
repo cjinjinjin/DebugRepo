@@ -1,0 +1,9 @@
+{
+  "status": "complete",
+  "topic_id": "topic3",
+  "rollout_model": "gpt-5.3-codex",
+  "planned_evaluator_model": "gpt-5.5",
+  "manifest": "generated-file-manifest.json",
+  "source": "source.json",
+  "note": "Existing full rollout is complete; see linked manifest and decoration-relevance-video project reference."
+}

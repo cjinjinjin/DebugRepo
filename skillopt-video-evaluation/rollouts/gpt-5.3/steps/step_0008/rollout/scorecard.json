@@ -1,0 +1,26 @@
+{
+  "hard_gate": "fail",
+  "blocking_issues": [
+    {
+      "gate": "source_materialization",
+      "severity": "blocking",
+      "evidence": "private_auth_required source could not be materialized without authenticated manual capture"
+    }
+  ],
+  "scores": {
+    "content_fidelity": 0,
+    "pacing": 0,
+    "visual_semantics": 0,
+    "non_ppt_feel": 0,
+    "audio_sync": 0,
+    "theme_fit": 0,
+    "engineering": 0
+  },
+  "weighted_score": 0,
+  "fail_reason": "source_materialization_blocked_private_auth_required",
+  "rollout_model": "gpt-5.3-codex",
+  "planned_evaluator_model": "gpt-5.5",
+  "notes": [
+    "Blocked before generation due to private SharePoint auth requirement."
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "generated_project_path": "C:\\Users\\jinjinchen\\OneDrive - Microsoft\\code\\ms-image-quality-filters-aether-module-main\\decoration-relevance-video\\presentation",
+  "copied_artifacts": [
+    "article.md",
+    "script.md",
+    "outline.md",
+    "review-log.md",
+    "audio-segments.json",
+    "current_skill.md",
+    "build-log.txt",
+    "typecheck-log.txt",
+    "source.json",
+    "evaluator-report.json"
+  ],
+  "referenced_artifacts": [
+    "presentation/src",
+    "presentation/public/audio",
+    "presentation/dist"
+  ],
+  "note": "Full presentation directory is referenced, not copied, to avoid duplicating node_modules."
+}

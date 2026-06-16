@@ -1,0 +1,13 @@
+{
+  "step": 1,
+  "epoch": 1,
+  "action": "external_rollout_collected",
+  "current_score": 0.62,
+  "best_score": 0.62,
+  "hard": 0,
+  "soft": 0.62,
+  "rollout_model": "gpt-5.3-codex",
+  "planned_evaluator_model": "gpt-5.5",
+  "artifact_path": "steps/step_0001/rollout",
+  "wall_time_s": null
+}

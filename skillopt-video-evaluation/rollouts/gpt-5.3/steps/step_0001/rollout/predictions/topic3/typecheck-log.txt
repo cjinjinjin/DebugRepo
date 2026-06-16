@@ -1,0 +1,2 @@
+
+TYPECHECK_EXIT=0

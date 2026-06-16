@@ -1,0 +1,19 @@
+.cp-title{font-size:72px;margin:68px 0 22px}
+.cp-meter{display:grid;grid-template-columns:220px 1fr;gap:18px;align-items:center;font-family:var(--font-mono);font-size:28px}
+.cp-meter div{height:54px;border:2px solid var(--rule)}
+.cp-meter i{display:block;height:100%;background:var(--accent-soft);border-right:2px solid var(--accent)}
+.cp-h2{font-size:64px;margin:0 0 22px}
+.cp-trap{padding:28px;font-size:34px;max-width:1400px;color:#ffb1b1;border-color:#ff8b8b}
+.cp-strip{display:grid;grid-template-columns:repeat(10,1fr);gap:8px}
+.cp-strip span{height:70px;border:2px solid var(--rule);display:grid;place-items:center;font-family:var(--font-mono);font-size:24px}
+.cp-strip .is-break{border-color:#ff8b8b;color:#ffb1b1;background:rgba(255,90,90,.08)}
+.cp-caption{font-size:28px;font-family:var(--font-mono);color:#ffb1b1}
+.cp-fork{display:grid;grid-template-columns:1fr 140px 1fr;gap:16px;align-items:center}
+.cp-fork .card{padding:28px;font-size:30px}
+.cp-forkline{height:3px;background:var(--accent)}
+.cp-budget{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.cp-budget .card{padding:24px;font-size:28px}
+.cp-compare{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.cp-compare .card{padding:22px;display:grid;gap:14px}
+.cp-compare b{font-size:30px}
+.cp-compare i{display:block;height:46px;background:var(--accent-soft);border:2px solid var(--accent)}

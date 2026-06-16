@@ -1,0 +1,49 @@
+{
+  "generated_project_path": "C:\\Users\\jinjinchen\\OneDrive - Microsoft\\code\\ms-image-quality-filters-aether-module-main\\skillopt-video-evaluation\\rollouts\\gpt-5.3\\steps\\step_0002\\rollout\\predictions\\topic1\\presentation",
+  "copied_artifacts": [
+    "article.md",
+    "script.md",
+    "outline.md",
+    "current_skill.md",
+    "source.json",
+    "conversation.json",
+    "target_system_prompt.txt",
+    "target_user_prompt.txt",
+    "evaluator-report.json"
+  ],
+  "generated_artifacts": [
+    "presentation/package.json",
+    "presentation/audio-segments.json",
+    "presentation/src/registry/chapters.ts",
+    "presentation/src/hooks/useStepper.ts",
+    "presentation/src/chapters/01-hook/Hook.tsx",
+    "presentation/src/chapters/01-hook/Hook.css",
+    "presentation/src/chapters/01-hook/narrations.ts",
+    "presentation/src/chapters/02-prefix-law/PrefixLaw.tsx",
+    "presentation/src/chapters/02-prefix-law/PrefixLaw.css",
+    "presentation/src/chapters/02-prefix-law/narrations.ts",
+    "presentation/src/chapters/03-fragility/Fragility.tsx",
+    "presentation/src/chapters/03-fragility/Fragility.css",
+    "presentation/src/chapters/03-fragility/narrations.ts",
+    "presentation/src/chapters/04-state-and-tools/StateTools.tsx",
+    "presentation/src/chapters/04-state-and-tools/StateTools.css",
+    "presentation/src/chapters/04-state-and-tools/narrations.ts",
+    "presentation/src/chapters/05-model-routing/ModelRouting.tsx",
+    "presentation/src/chapters/05-model-routing/ModelRouting.css",
+    "presentation/src/chapters/05-model-routing/narrations.ts",
+    "presentation/src/chapters/06-compaction/Compaction.tsx",
+    "presentation/src/chapters/06-compaction/Compaction.css",
+    "presentation/src/chapters/06-compaction/narrations.ts",
+    "presentation/src/chapters/07-operating-model/OperatingModel.tsx",
+    "presentation/src/chapters/07-operating-model/OperatingModel.css",
+    "presentation/src/chapters/07-operating-model/narrations.ts",
+    "presentation/dist/index.html"
+  ],
+  "referenced_artifacts": [
+    "presentation/scripts/synthesize-audio.sh",
+    "presentation/scripts/tts-providers/minimax.sh",
+    "presentation/scripts/tts-providers/openai.sh"
+  ],
+  "status": "rollout_completed_presentation_generated",
+  "note": "Full Vite React TS presentation generated for topic1; extract/typecheck/build passed; audio synthesis blocked (jq missing)."
+}

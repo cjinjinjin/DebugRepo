@@ -1,0 +1,13 @@
+.de-scene{display:flex;flex-direction:column;gap:28px}
+.de-hero{flex:1;display:grid;place-items:center;gap:18px}
+.de-hero .hero-num{font-size:280px;color:var(--accent)}
+.de-hero p{margin:0;font-size:44px;color:var(--text-2)}
+.de-flow{flex:1;display:flex;align-items:center;justify-content:center;gap:20px;font-size:56px;font-weight:700}
+.de-flow span{padding:20px 24px;border:1px solid var(--rule);border-radius:14px;background:var(--surface-2)}
+.de-flow b{color:var(--accent);font-size:66px}
+.de-matrix{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;padding:24px;flex:1;align-content:stretch}
+.de-matrix div{display:grid;place-items:center;font-size:52px;border:1px solid var(--rule);border-radius:14px;background:var(--surface-2)}
+.de-ops{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;flex:1}
+.de-op{padding:34px;display:grid;align-content:center;gap:16px}
+.de-op b{font-size:62px}
+.de-op span{font-size:30px;color:var(--text-2)}

@@ -1,0 +1,14 @@
+.bl-scene{display:flex;flex-direction:column;gap:24px}
+.bl-arena{display:grid;grid-template-columns:1fr 1fr;gap:22px;flex:1}
+.bl-pane{padding:34px;display:grid;align-content:center;gap:18px}
+.bl-pane h3{margin:0;font-size:72px}
+.bl-pane p{margin:0;font-size:32px;color:var(--text-2);line-height:1.35}
+.bl-votes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-items:stretch;flex:1;padding:14px}
+.bl-votes span{display:grid;place-items:center;border:1px solid var(--rule);border-radius:12px;font-size:44px;background:var(--surface-2)}
+.bl-config{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:14px;flex:1}
+.bl-config>div{border:1px solid var(--rule);border-radius:12px;background:var(--surface-2);padding:24px;display:grid;gap:12px}
+.bl-config b{font-size:48px;line-height:1.1}
+.bl-config p{margin:0;color:var(--text-2);font-size:28px;line-height:1.35}
+.bl-loop{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;padding:14px}
+.bl-loop div{display:grid;place-items:center;border:1px solid var(--rule);border-radius:12px;background:var(--surface-2);min-height:130px;font-size:34px;font-weight:700;text-align:center;padding:8px}
+.bl-end{margin:0;font-size:42px;line-height:1.25;max-width:1380px}

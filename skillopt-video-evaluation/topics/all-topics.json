@@ -1,0 +1,131 @@
+[
+  {
+    "id": "topic1",
+    "split": "train",
+    "title_hint": "Prompt caching is everything",
+    "url": "https://claude.com/blog/lessons-from-building-claude-code-prompt-caching-is-everything",
+    "source_type": "public_blog",
+    "access": "public",
+    "language_hint": "en",
+    "target_duration_min": 6,
+    "theme_hint": "blueprint",
+    "expected_challenges": [
+      "technical workflow explanation",
+      "needs concrete diagrams for caching and latency",
+      "avoid turning implementation lessons into bullet-heavy slides"
+    ]
+  },
+  {
+    "id": "topic2",
+    "split": "val",
+    "title_hint": "SharePoint Word document",
+    "url": "https://microsoftapc-my.sharepoint.com/:w:/g/personal/jinjinchen_microsoft_com/IQBoW7McxF15R5IcVgB9-gy0AbFcwtY_gNM-bTnaGAYrcfA?e=NPTNfg",
+    "source_type": "sharepoint_word",
+    "access": "private_auth_required",
+    "language_hint": "unknown",
+    "target_duration_min": 6,
+    "theme_hint": null,
+    "expected_challenges": [
+      "private document access",
+      "Word document structure may include tables or embedded images",
+      "requires manual or authenticated content materialization"
+    ]
+  },
+  {
+    "id": "topic3",
+    "split": "train",
+    "title_hint": "TA Decoration Relevance",
+    "url": "https://msasg.visualstudio.com/Bing_Ads/_wiki/wikis/Bing_Ads.wiki/286156/TA-Decoration-Relevance",
+    "source_type": "azure_devops_wiki",
+    "access": "private_auth_required",
+    "language_hint": "en",
+    "target_duration_min": 7.5,
+    "theme_hint": "blueprint",
+    "existing_rollout_path": "../decoration-relevance-video",
+    "expected_challenges": [
+      "dense internal technical documentation",
+      "many metrics and production pipeline details",
+      "high risk of overlong chapters and long narration segments"
+    ]
+  },
+  {
+    "id": "topic4",
+    "split": "val",
+    "title_hint": "Loop engineering",
+    "url": "https://github.com/cobusgreyling/loop-engineering",
+    "source_type": "github_repository",
+    "access": "public",
+    "language_hint": "en",
+    "target_duration_min": 6,
+    "theme_hint": "terminal-green",
+    "expected_challenges": [
+      "repository-as-source rather than article-as-source",
+      "requires summarizing README plus project structure",
+      "should visualize loops and agent workflow without overfitting to code listings"
+    ]
+  },
+  {
+    "id": "topic5",
+    "split": "train",
+    "title_hint": "WeChat article 2247505820",
+    "url": "https://mp.weixin.qq.com/s?__biz=Mzk0MDMwMzQyOA==&mid=2247505820&idx=1&sn=bab9af17e6dcdfb263f2634c8c211921&chksm=c3f08350fa849d15315e2957da6252472ed4a685759be1a6b2accba7b2b6f96d887990c0367a&mpshare=1&scene=1&srcid=0616Y29G2Vnev8DO7DoawKMf&sharer_shareinfo=7cb84a7f4756fce888246db9bbe5fc47&sharer_shareinfo_first=7cb84a7f4756fce888246db9bbe5fc47#rd",
+    "source_type": "wechat_article",
+    "access": "public_may_block_automation",
+    "language_hint": "zh",
+    "target_duration_min": 6,
+    "theme_hint": null,
+    "expected_challenges": [
+      "WeChat anti-scraping may require manual capture",
+      "Chinese article may include screenshots and social-media formatting",
+      "must preserve original language while avoiding platform-template tone"
+    ]
+  },
+  {
+    "id": "topic6",
+    "split": "train",
+    "title_hint": "WeChat article 2247505867",
+    "url": "https://mp.weixin.qq.com/s?__biz=Mzk0MDMwMzQyOA==&mid=2247505867&idx=1&sn=206a23d0c3de7f0fef4cf217a731f754&chksm=c39f8e2a6faf28ec48acff1cf5338fa0948bc4118494bfe55f359c57af4f098f1ba5dc9f4113&mpshare=1&scene=1&srcid=06161sKKHkm3qjJwcp2c1ryA&sharer_shareinfo=b145cf893e57b32443c1c9f5f27eb1c4&sharer_shareinfo_first=b145cf893e57b32443c1c9f5f27eb1c4#rd",
+    "source_type": "wechat_article",
+    "access": "public_may_block_automation",
+    "language_hint": "zh",
+    "target_duration_min": 6,
+    "theme_hint": null,
+    "expected_challenges": [
+      "WeChat anti-scraping may require manual capture",
+      "may contain dense commentary or embedded media",
+      "needs pacing gate to prevent long narration steps"
+    ]
+  },
+  {
+    "id": "topic7",
+    "split": "test",
+    "title_hint": "WeChat short link zHQ70aXe5aoC_wodLglmPg",
+    "url": "https://mp.weixin.qq.com/s/zHQ70aXe5aoC_wodLglmPg",
+    "source_type": "wechat_article",
+    "access": "public_may_block_automation",
+    "language_hint": "zh",
+    "target_duration_min": 6,
+    "theme_hint": null,
+    "expected_challenges": [
+      "short-link source with unknown structure until materialized",
+      "held-out WeChat formatting robustness",
+      "tests whether skill improvements generalize beyond training WeChat articles"
+    ]
+  },
+  {
+    "id": "topic8",
+    "split": "test",
+    "title_hint": "WeChat article 2247505383",
+    "url": "https://mp.weixin.qq.com/s?__biz=Mzk0MDMwMzQyOA==&mid=2247505383&idx=1&sn=6cb669027c22c2a915bf9e5d216530a3&chksm=c3c9fcef60663034aa9577c8f2faa14366088da40879b8b44806790eb10e86fe506c0cfcd2f3&mpshare=1&scene=1&srcid=0616dMFp5iETqMVg32w4hBP5&sharer_shareinfo=4be05ea5a4cbe4b785e4c6363d2246ec&sharer_shareinfo_first=4be05ea5a4cbe4b785e4c6363d2246ec#rd",
+    "source_type": "wechat_article",
+    "access": "public_may_block_automation",
+    "language_hint": "zh",
+    "target_duration_min": 6,
+    "theme_hint": null,
+    "expected_challenges": [
+      "WeChat anti-scraping may require manual capture",
+      "held-out Chinese social article",
+      "tests style, pacing, and source-material robustness"
+    ]
+  }
+]

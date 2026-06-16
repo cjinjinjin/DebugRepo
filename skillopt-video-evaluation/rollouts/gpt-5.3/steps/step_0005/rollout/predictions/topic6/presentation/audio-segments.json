@@ -1,0 +1,122 @@
+[
+  {
+    "chapter": "coldopen-strength",
+    "step": 1,
+    "text": "你可以先记一个结论。GPT-Image-2 不只是又一个会画图的模型，它把可用性整体往前推了一截。",
+    "audio": "coldopen-strength/1.mp3"
+  },
+  {
+    "chapter": "coldopen-strength",
+    "step": 2,
+    "text": "它在 Arena.AI 拿到 1512 分，比第二名高 242 分，这种断层领先非常少见。",
+    "audio": "coldopen-strength/2.mp3"
+  },
+  {
+    "chapter": "coldopen-strength",
+    "step": 3,
+    "text": "最直观的升级是文字渲染和指令遵循。你可以把主体位置、版式和禁改项都写清楚，结果更接近按 brief 出图。",
+    "audio": "coldopen-strength/3.mp3"
+  },
+  {
+    "chapter": "coldopen-strength",
+    "step": 4,
+    "text": "第三个变化是编辑能力。图像输入、局部替换和风格统一都更稳定，做产品图改版会省下很多返工。",
+    "audio": "coldopen-strength/4.mp3"
+  },
+  {
+    "chapter": "access-routes",
+    "step": 1,
+    "text": "那它在哪用最顺手？可以先记成三条入口：官方入口、协作平台和 API 接入。",
+    "audio": "access-routes/1.mp3"
+  },
+  {
+    "chapter": "access-routes",
+    "step": 2,
+    "text": "官方里最直接的是 ChatGPT，另一个关键入口是 Codex，它把研发和视觉放进同一工作流。",
+    "audio": "access-routes/2.mp3"
+  },
+  {
+    "chapter": "access-routes",
+    "step": 3,
+    "text": "如果你偏设计协作，Lovart 的 ChatCanvas 值得看，它能把多个模型串在一张可反馈画布里。",
+    "audio": "access-routes/3.mp3"
+  },
+  {
+    "chapter": "access-routes",
+    "step": 4,
+    "text": "做产品集成就走 API：官方 Image API 加上 OpenRouter 和 302.AI，接入路径会更灵活。",
+    "audio": "access-routes/4.mp3"
+  },
+  {
+    "chapter": "case-playbook",
+    "step": 1,
+    "text": "玩法部分最有价值的是案例站。它不是看图就结束，而是把 prompt、模板和可改字段都公开出来。",
+    "audio": "case-playbook/1.mp3"
+  },
+  {
+    "chapter": "case-playbook",
+    "step": 2,
+    "text": "第一批高频方向是 UI 样机、品牌海报和信息图，这些场景非常适合快速打样和提案。",
+    "audio": "case-playbook/2.mp3"
+  },
+  {
+    "chapter": "case-playbook",
+    "step": 3,
+    "text": "再往深一点是学术配图、漫画角色、技术图。它们让复杂内容更快进入可沟通状态。",
+    "audio": "case-playbook/3.mp3"
+  },
+  {
+    "chapter": "case-playbook",
+    "step": 4,
+    "text": "但边界也要记住：很多技术图是 PNG 位图，不是可编辑源文件，更适合展示，不适合后续深度改稿。",
+    "audio": "case-playbook/4.mp3"
+  },
+  {
+    "chapter": "skill-system",
+    "step": 1,
+    "text": "为什么同一个模型，有人总能出好图？关键差异通常不在模型，而在 prompt 是否工程化。",
+    "audio": "skill-system/1.mp3"
+  },
+  {
+    "chapter": "skill-system",
+    "step": 2,
+    "text": "这个 Skill 把流程固化成六步：识别模式、分类、选模板、填参数、渲染提示词、执行生图。",
+    "audio": "skill-system/2.mp3"
+  },
+  {
+    "chapter": "skill-system",
+    "step": 3,
+    "text": "规模也足够大：18 个大类、79 个模板，意味着你不是从零猜，而是站在可复用结构上。",
+    "audio": "skill-system/3.mp3"
+  },
+  {
+    "chapter": "skill-system",
+    "step": 4,
+    "text": "它的 Mode A、B、C 对应不同环境能力，不管你在 Codex、Cursor 还是纯文本环境，都有落地路径。",
+    "audio": "skill-system/4.mp3"
+  },
+  {
+    "chapter": "rollout-next",
+    "step": 1,
+    "text": "最后看落地。不同环境对应不同模式：Codex 更像 Mode B，自配 API 的 Agent 适合 Mode A，纯对话界面可以走 Mode C。",
+    "audio": "rollout-next/1.mp3"
+  },
+  {
+    "chapter": "rollout-next",
+    "step": 2,
+    "text": "如果你要全自动流程，先把三个关键环境变量配好，再让 Skill 接管模板到出图这条链路。",
+    "audio": "rollout-next/2.mp3"
+  },
+  {
+    "chapter": "rollout-next",
+    "step": 3,
+    "text": "真正的效率来自闭环：一句话需求进入结构化 prompt，再进入生成结果，然后持续回灌优化。",
+    "audio": "rollout-next/3.mp3"
+  },
+  {
+    "chapter": "rollout-next",
+    "step": 4,
+    "text": "我的建议是先抄近路：先用案例站快速起步，再把 garden-skills 配进日常工作流，让出图变成稳定能力。",
+    "audio": "rollout-next/4.mp3"
+  }
+]

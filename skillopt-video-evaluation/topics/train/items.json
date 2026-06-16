@@ -1,0 +1,35 @@
+[
+  {
+    "id": "topic1",
+    "url": "https://claude.com/blog/lessons-from-building-claude-code-prompt-caching-is-everything",
+    "source_type": "public_blog",
+    "language_hint": "en",
+    "target_duration_min": 6,
+    "theme_hint": "blueprint"
+  },
+  {
+    "id": "topic3",
+    "url": "https://msasg.visualstudio.com/Bing_Ads/_wiki/wikis/Bing_Ads.wiki/286156/TA-Decoration-Relevance",
+    "source_type": "azure_devops_wiki",
+    "language_hint": "en",
+    "target_duration_min": 7.5,
+    "theme_hint": "blueprint",
+    "existing_rollout_path": "../decoration-relevance-video"
+  },
+  {
+    "id": "topic5",
+    "url": "https://mp.weixin.qq.com/s?__biz=Mzk0MDMwMzQyOA==&mid=2247505820&idx=1&sn=bab9af17e6dcdfb263f2634c8c211921&chksm=c3f08350fa849d15315e2957da6252472ed4a685759be1a6b2accba7b2b6f96d887990c0367a&mpshare=1&scene=1&srcid=0616Y29G2Vnev8DO7DoawKMf&sharer_shareinfo=7cb84a7f4756fce888246db9bbe5fc47&sharer_shareinfo_first=7cb84a7f4756fce888246db9bbe5fc47#rd",
+    "source_type": "wechat_article",
+    "language_hint": "zh",
+    "target_duration_min": 6,
+    "theme_hint": null
+  },
+  {
+    "id": "topic6",
+    "url": "https://mp.weixin.qq.com/s?__biz=Mzk0MDMwMzQyOA==&mid=2247505867&idx=1&sn=206a23d0c3de7f0fef4cf217a731f754&chksm=c39f8e2a6faf28ec48acff1cf5338fa0948bc4118494bfe55f359c57af4f098f1ba5dc9f4113&mpshare=1&scene=1&srcid=06161sKKHkm3qjJwcp2c1ryA&sharer_shareinfo=b145cf893e57b32443c1c9f5f27eb1c4&sharer_shareinfo_first=b145cf893e57b32443c1c9f5f27eb1c4#rd",
+    "source_type": "wechat_article",
+    "language_hint": "zh",
+    "target_duration_min": 6,
+    "theme_hint": null
+  }
+]

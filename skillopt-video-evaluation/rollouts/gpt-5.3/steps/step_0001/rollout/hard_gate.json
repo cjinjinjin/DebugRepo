@@ -1,0 +1,40 @@
+{
+  "hard_gate": "fail",
+  "hard": 0,
+  "reason": "pacing_gate_failed",
+  "target_duration_seconds": 450,
+  "actual_duration_seconds": 703.1,
+  "duration_deviation_percent": 56.2,
+  "gates": [
+    {
+      "gate": "engineering",
+      "status": "pass",
+      "evidence": "typecheck_exit=0 build_exit=0"
+    },
+    {
+      "gate": "step_consistency",
+      "status": "pass",
+      "evidence": "47 audio segments; review-log reports 47/47 TTS succeeded and chapter registry total 47 steps"
+    },
+    {
+      "gate": "visual_baseline",
+      "status": "pass",
+      "evidence": "review-log reports visual demos and progressive reveal across all 8 chapters"
+    },
+    {
+      "gate": "target_duration",
+      "status": "fail",
+      "evidence": "target ~7.5min; actual audio 703.1s / 11.7min; exceeds target by >20%"
+    },
+    {
+      "gate": "long_segments",
+      "status": "warning",
+      "evidence": "19 segments >=15s; longest llm-pipeline/2.mp3 = 35.2s"
+    },
+    {
+      "gate": "chapter_balance",
+      "status": "warning",
+      "evidence": "llm-pipeline chapter = 181.6s, above 90s pacing threshold"
+    }
+  ]
+}

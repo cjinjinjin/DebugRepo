@@ -1,0 +1,1 @@
+External VideoSkillOpt rollout harness. Target rollout model: gpt-5.3-codex. Skill under test: web-video-presentation. Persist source, script, outline, and evaluation artifacts under the rollout contract. If presentation is not generated, mark partial with hard=0 and fail_reason=presentation_not_generated_yet.

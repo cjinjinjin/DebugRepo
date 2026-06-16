@@ -1,0 +1,58 @@
+[
+  {
+    "role": "system",
+    "content": "External VideoSkillOpt rollout harness. Target rollout model: gpt-5.3-codex. Skill under test: web-video-presentation. Persist generated video artifacts and evaluation evidence using the SkillOpt rollout data contract."
+  },
+  {
+    "role": "user",
+    "content": "Generate a click-driven 16:9 web video presentation for topic1 (Prompt caching is everything), target duration 6 minutes, blueprint theme, then collect script/outline/presentation/audio/review artifacts."
+  },
+  {
+    "type": "tool_call",
+    "cmd": "materialize source to article.md",
+    "obs": "success; source fetched from public URL and saved to article.md"
+  },
+  {
+    "type": "tool_call",
+    "cmd": "generate script.md and outline.md",
+    "obs": "success; script and outline saved; 7 chapters and 34 planned steps"
+  },
+  {
+    "type": "tool_call",
+    "cmd": "copy current skill reference",
+    "obs": "success; current_skill.md copied from web-video-presentation README.md"
+  },
+  {
+    "type": "tool_call",
+    "cmd": "attempt full presentation generation",
+    "obs": "skipped for this rollout package; status=partial_rollout_source_script_outline"
+  },
+  {
+    "role": "system",
+    "content": "[EVALUATION RESULT]\nhard=0\nsoft=0.41\nfail_reason=presentation_not_generated_yet\nstatus=partial_rollout_source_script_outline\nrollout_model=gpt-5.3-codex\nplanned_evaluator_model=gpt-5.5"
+  },
+  {
+    "type": "tool_call",
+    "cmd": "scaffold presentation with blueprint theme",
+    "obs": "success; Vite React TS project created under predictions/topic1/presentation with skill templates and blueprint tokens"
+  },
+  {
+    "type": "tool_call",
+    "cmd": "implement chapters and registry",
+    "obs": "success; 7 chapters (34 steps) implemented with narrations.ts as source of truth; unique chapter CSS prefixes applied"
+  },
+  {
+    "type": "tool_call",
+    "cmd": "run extract/typecheck/build",
+    "obs": "success; npm run extract-narrations generated 34 segments; npx tsc --noEmit passed; npm run build passed"
+  },
+  {
+    "type": "tool_call",
+    "cmd": "attempt audio synthesis",
+    "obs": "blocked; npm run synthesize-audio failed because jq is not installed in environment"
+  },
+  {
+    "role": "system",
+    "content": "[EVALUATION RESULT]\nhard=1\nsoft=0.92\nfail_reason=null\nstatus=rollout_completed_presentation_generated\nrollout_model=gpt-5.3-codex\nplanned_evaluator_model=gpt-5.5"
+  }
+]

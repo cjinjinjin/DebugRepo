@@ -1,0 +1,28 @@
+.hh-scene { color: var(--text); }
+.hh-grid {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(to right, var(--rule) 1px, transparent 1px), linear-gradient(to bottom, var(--rule) 1px, transparent 1px);
+  background-size: 88px 88px;
+  opacity: .14;
+}
+.hh-hero { margin-top: 130px; width: 1100px; padding: 48px; z-index: 2; }
+.hh-number { font-size: 230px; line-height: .82; color: var(--accent); }
+.hh-hero p { margin: 18px 0 0; font-size: 34px; max-width: 22ch; }
+.hh-metrics { margin-top: 170px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.hh-card { padding: 30px; min-height: 280px; display: flex; flex-direction: column; justify-content: space-between; }
+.hh-card:nth-child(1) { animation: hh-rise .7s both; }
+.hh-card:nth-child(2) { animation: hh-rise .7s .08s both; }
+.hh-card:nth-child(3) { animation: hh-rise .7s .16s both; }
+.hh-value { font-size: 148px; color: var(--accent); }
+.hh-compare { margin-top: 120px; display: grid; grid-template-columns: 1fr 120px 1fr; gap: 20px; }
+.hh-pane { padding: 34px; }
+.hh-pane h3 { margin: 0 0 14px; font-size: 50px; }
+.hh-pane ul { margin: 0; padding-left: 24px; font-size: 31px; line-height: 1.6; }
+.hh-pane-accent { border: 2px solid var(--accent); }
+.hh-vs { display: grid; place-items: center; font-size: 64px; color: var(--text-mute); font-family: var(--font-mono); }
+.hh-flow { margin-top: 280px; display: grid; grid-template-columns: 1fr 120px 1fr 120px 1fr; align-items: center; padding: 34px; }
+.hh-node { text-align: center; font-size: 42px; }
+.hh-core { color: var(--accent); font-weight: 700; }
+.hh-arrow { text-align: center; font-size: 64px; color: var(--text-mute); }
+@keyframes hh-rise { from { opacity: 0; transform: translateY(24px);} to {opacity:1; transform:none;} }

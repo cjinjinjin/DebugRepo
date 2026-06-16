@@ -1,0 +1,13 @@
+{
+  "id": "topic2",
+  "split": "val",
+  "title_hint": "SharePoint Word document",
+  "source_type": "sharepoint_word",
+  "access": "private_auth_required",
+  "language_hint": "unknown",
+  "target_duration_min": 6,
+  "theme_hint": null,
+  "url": "https://microsoftapc-my.sharepoint.com/:w:/g/personal/jinjinchen_microsoft_com/IQBoW7McxF15R5IcVgB9-gy0AbFcwtY_gNM-bTnaGAYrcfA?e=NPTNfg",
+  "rollout_model": "gpt-5.3-codex",
+  "planned_evaluator_model": "gpt-5.5"
+}

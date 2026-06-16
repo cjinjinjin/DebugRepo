@@ -1,0 +1,14 @@
+.fo-scene { display:flex; flex-direction:column; justify-content:center; gap:30px; height:100%; }
+.fo-kicker { letter-spacing:.14em; color:var(--text-2); }
+.fo-title { font-family:var(--font-display-en); font-size:94px; line-height:1.03; max-width:1480px; }
+.fo-head { font-family:var(--font-display-en); font-size:68px; }
+.fo-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:14px; }
+.fo-card { min-height:170px; display:flex; flex-direction:column; justify-content:center; gap:8px; font-size:30px; opacity:.45; }
+.fo-on { opacity:1; }
+.fo-lanes { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+.fo-lane { min-height:260px; display:flex; flex-direction:column; justify-content:center; gap:12px; font-size:34px; }
+.fo-tags { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+.fo-tag { min-height:140px; display:flex; align-items:center; justify-content:center; font-size:30px; }
+.fo-rule { margin:0 auto; width:min(1300px,100%); min-height:300px; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:20px; }
+.fo-rule-text { font-size:80px; line-height:1.05; font-family:var(--font-display-en); }
+.fo-final { margin:0 auto; width:min(1200px,100%); min-height:260px; display:flex; align-items:center; justify-content:center; gap:24px; font-size:48px; }

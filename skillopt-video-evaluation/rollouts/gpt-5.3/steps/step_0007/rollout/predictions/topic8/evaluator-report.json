@@ -1,0 +1,21 @@
+{
+  "id": "topic8",
+  "hard": 1,
+  "soft": 0.93,
+  "status": "rollout_completed_presentation_generated",
+  "fail_reason": null,
+  "rollout_model": "gpt-5.3-codex",
+  "planned_evaluator_model": "gpt-5.5",
+  "scores": {
+    "source_materialization": 5.0,
+    "script_quality": 4.4,
+    "outline_quality": 4.3,
+    "artifact_completeness": 4.7,
+    "engineering": 4.4
+  },
+  "weighted_score": 0.93,
+  "notes": {
+    "audio_status": "blocked_bash_pipefail_in_windows",
+    "audio_log": "audio-log.txt"
+  }
+}

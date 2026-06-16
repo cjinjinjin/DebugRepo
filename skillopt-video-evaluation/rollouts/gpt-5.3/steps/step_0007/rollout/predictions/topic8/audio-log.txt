@@ -1,0 +1,6 @@
+
+> presentation@0.0.0 synthesize-audio
+> bash scripts/synthesize-audio.sh
+
+scripts/synthesize-audio.sh: line 42: set: pipefail
+: invalid option name

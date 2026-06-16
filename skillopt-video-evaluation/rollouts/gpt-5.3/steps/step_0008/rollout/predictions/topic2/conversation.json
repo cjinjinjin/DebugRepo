@@ -1,0 +1,24 @@
+[
+  {
+    "role": "system",
+    "content": "External VideoSkillOpt rollout harness. Target rollout model: gpt-5.3-codex. Skill under test: web-video-presentation. Persist generated video artifacts and evaluation evidence using the SkillOpt rollout data contract."
+  },
+  {
+    "role": "user",
+    "content": "Generate a click-driven 16:9 web video presentation for topic2 (SharePoint Word document), target duration 6 minutes, and collect script/outline/presentation/audio/review artifacts. If source cannot be materialized due to private auth requirements, emit a blocked rollout with required evidence files."
+  },
+  {
+    "type": "tool_call",
+    "cmd": "materialize source to article.md",
+    "obs": "blocked; private SharePoint auth required; no interactive sign-in available in rollout harness"
+  },
+  {
+    "type": "tool_call",
+    "cmd": "produce blocked rollout artifacts",
+    "obs": "success; wrote article.md/current_skill.md/source.json/prompts/evaluator+manifest and step-level result files with hard=0 soft=0"
+  },
+  {
+    "role": "system",
+    "content": "[EVALUATION RESULT]\nhard=0\nsoft=0\nfail_reason=source_materialization_blocked_private_auth_required\nrollout_model=gpt-5.3-codex\nplanned_evaluator_model=gpt-5.5"
+  }
+]
