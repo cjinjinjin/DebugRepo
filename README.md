@@ -1,4 +1,4 @@
-# ms-image-quality-filters-aether-module-main
+# Debug repo
 
 This repository collects image-quality, image-to-landing-page relevance, creative ads, prompt-following, fine-tuning, deployment, and presentation/evaluation experiments. It is organized as a research workspace: most top-level folders are self-contained experiments or artifact bundles, while shared helper scripts live at the root or in `standalone_tools`.
 
